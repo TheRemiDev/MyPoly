@@ -511,7 +511,9 @@ body.in-game:has(.lobby) { overflow: auto; }
 .pcard.out { opacity: .45; filter: grayscale(1); }
 .pcard.hl { outline: 2px dashed #fff; }
 .pcard-main { flex: 1; min-width: 0; }
-.pcard-name { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .95rem; }
+.pcard-name { font-weight: 800; font-size: .95rem; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; }
+.pcard-name > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pcard-name .tag { margin-left: 4px; }
 .pcard-sub { font-size: .75rem; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .pcard-cash { font-weight: 900; font-size: 1.15rem; color: #7ef0ac; font-variant-numeric: tabular-nums; }
 .pcard-timer { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c); border-radius: 3px; transition: width .25s linear; width: 100%; }

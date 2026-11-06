@@ -71,7 +71,7 @@ function updateNav() {
         h('span.' + (nameClass({ ...u, role: u.role }) || 'plain'), u.username),
         ...roleTags(u, { level: false })
       ),
-      h('button.btn.ghost.sm', { onclick: logout, title: 'Déconnexion' }, '⎋')
+      h('button.btn.ghost.sm', { onclick: logout, title: 'Déconnexion' }, '🚪')
     );
   } else {
     nav.append(h('a.btn.ghost.sm', { href: '/login', 'data-link': true }, 'Connexion'), h('a.btn.primary.sm', { href: '/register', 'data-link': true }, 'Inscription'));
