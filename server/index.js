@@ -1,0 +1,107 @@
+'use strict';
+const config = require('./config');
+const path = require('path');
+const http = require('http');
+const express = require('express');
+const helmet = require('helmet');
+const compression = require('compression');
+const cookieParser = require('cookie-parser');
+const { Server } = require('socket.io');
+
+const auth = require('./auth');
+const U = require('./users');
+const rooms = require('./rooms');
+const admin = require('./admin');
+const board = require('./game/board');
+const { CARDS } = require('./game/cards');
+const { DEFAULTS, LIMITS } = require('./game/settings');
+
+const app = express();
+app.set('trust proxy', config.trustProxy);
+app.disable('x-powered-by');
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'script-src': ["'self'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:'],
+        'connect-src': ["'self'", 'ws:', 'wss:'],
+        'upgrade-insecure-requests': config.secureCookies ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+app.use(compression());
+app.use(express.json({ limit: '32kb' }));
+app.use(cookieParser());
+app.use(auth.attachUser);
+
+// ---------------------------------------------------------------- API
+app.get('/api/health', (_req, res) => res.json({ ok: true, ...rooms.counts() }));
+app.use('/api/auth', auth.router);
+app.use('/api/admin', admin);
+
+app.get('/api/meta', (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({
+    cells: board.CELLS,
+    countries: board.COUNTRIES,
+    sides: board.SIDES,
+    resortRent: board.RESORT_RENT,
+    cards: CARDS,
+    badges: U.BADGES,
+    pawns: U.PAWNS,
+    vipPawns: U.VIP_PAWNS,
+    colors: U.COLORS,
+    vipColors: U.VIP_COLORS,
+    defaults: DEFAULTS,
+    limits: LIMITS,
+  });
+});
+
+app.get('/api/profile/:username', (req, res) => {
+  const p = U.profile(String(req.params.username));
+  if (!p) return res.status(404).json({ error: 'Joueur introuvable.' });
+  res.json(p);
+});
+
+app.get('/api/leaderboard', (req, res) => {
+  res.json({ players: U.leaderboard(String(req.query.sort || 'rating')) });
+});
+
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
+// ------------------------------------------------------------ fichiers
+const pub = path.join(__dirname, '..', 'public');
+app.use(express.static(pub, { maxAge: config.production ? '1h' : 0, index: false }));
+app.get('*', (_req, res) => res.sendFile(path.join(pub, 'index.html')));
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Erreur serveur.' });
+});
+
+// ------------------------------------------------------------ serveur
+const server = http.createServer(app);
+const io = new Server(server, {
+  pingInterval: 20000,
+  pingTimeout: 25000,
+  maxHttpBufferSize: 1e5,
+});
+rooms.attach(io);
+
+server.listen(config.port, config.host, () => {
+  console.log(`🎲 MyPoly en ligne sur http://${config.host}:${config.port} ${config.publicUrl ? '(' + config.publicUrl + ')' : ''}`);
+});
+
+function shutdown() {
+  console.log('Arrêt de MyPoly…');
+  io.emit('announce', { text: 'Le serveur redémarre, reconnexion automatique dans quelques secondes…' });
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
