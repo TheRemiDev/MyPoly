@@ -1,5 +1,5 @@
 // Vue d'une salle : salon d'attente + plateau de jeu animé
-import { $, $$, h, fmt, toast, modal, roleTags, nameClass, sleep, confetti, duration } from './util.js';
+import { $, $$, h, fmt, toast, modal, roleTags, nameClass, sleep, confetti, duration, storage } from './util.js';
 import { store, on, emit } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
@@ -84,6 +84,45 @@ function makeDie() {
   return h('div.die', cube);
 }
 
+
+// Maisons et hôtels dessinés en SVG, à la couleur du propriétaire
+function houseSvg(color) {
+  return `<svg viewBox="0 0 20 20"><path d="M2 10.5 10 3l8 7.5V18H2z" fill="${color}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M1 11 10 2.5 19 11" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="1.6"/><rect x="8" y="12" width="4" height="6" rx=".6" fill="#fff" opacity=".9"/></svg>`;
+}
+function hotelSvg(color) {
+  return `<svg viewBox="0 0 22 26"><rect x="3" y="7" width="16" height="18" rx="2" fill="${color}" stroke="#fff" stroke-width="1.6"/><g stroke="#fff" stroke-width="1.8" stroke-linecap="round"><path d="M7 11h2M13 11h2M7 15h2M13 15h2M7 19h2M13 19h2"/></g><path d="M11 .8l1.4 2.8 3 .45-2.2 2.1.5 3-2.7-1.4-2.7 1.4.5-3-2.2-2.1 3-.45z" fill="#ffd166" stroke="#a87b00" stroke-width=".6"/></svg>`;
+}
+function buildings(level, color, pop) {
+  const html = level >= 4 ? hotelSvg(color) : houseSvg(color).repeat(level);
+  return h('span.bld' + (level >= 4 ? '.hotel' : '') + (pop ? '.pop' : ''), { html });
+}
+
+const GLOBE_SVG = `<svg viewBox="0 0 200 200" aria-hidden="true">
+  <defs><radialGradient id="gg" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#7fe3f5" stop-opacity=".35"/><stop offset=".7" stop-color="#1b7da0" stop-opacity=".18"/><stop offset="1" stop-color="#062c3d" stop-opacity=".1"/></radialGradient></defs>
+  <circle cx="100" cy="100" r="94" fill="url(#gg)" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/>
+  <g fill="rgba(255,255,255,.09)" stroke="rgba(255,255,255,.14)" stroke-width=".8">
+    <path d="M40 62c10-12 28-16 40-10 6 3 4 10 12 12s14-4 18 4-6 14-14 16-10 10-20 8-8-10-18-10-20 2-22-6 0-8 4-14z"/>
+    <path d="M118 46c12-6 30-2 40 8 8 8 4 16-4 18s-8 8-16 6-12-8-20-6-12-4-10-12 4-10 10-14z"/>
+    <path d="M70 108c8-4 18 0 22 8s0 18-6 26-6 22-14 22-8-12-10-20-8-12-6-20 6-12 14-16z"/>
+    <path d="M122 98c10-6 26-4 34 6s6 22-2 30-20 10-28 4-10-14-10-22 0-14 6-18z"/>
+    <path d="M150 150c6-2 14 0 16 6s-4 10-10 10-12-4-10-10z"/>
+  </g>
+  <g fill="none" stroke="rgba(255,255,255,.1)" stroke-width=".8">
+    <ellipse cx="100" cy="100" rx="94" ry="30"/><ellipse cx="100" cy="100" rx="94" ry="64"/>
+    <ellipse cx="100" cy="100" rx="30" ry="94"/><ellipse cx="100" cy="100" rx="64" ry="94"/>
+    <path d="M6 100h188M100 6v188"/>
+  </g>
+</svg>`;
+
+const COMPASS_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true">
+  <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,215,120,.35)" stroke-width="1.5"/>
+  <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,215,120,.2)" stroke-width="1" stroke-dasharray="2 3"/>
+  <path d="M50 6 56 50 50 94 44 50z" fill="rgba(255,215,120,.45)"/>
+  <path d="M6 50 50 44 94 50 50 56z" fill="rgba(255,255,255,.25)"/>
+  <path d="M50 6 56 50H44z" fill="rgba(255,90,95,.7)"/>
+  <text x="50" y="5" font-size="7" text-anchor="middle" fill="rgba(255,215,120,.8)" font-weight="700">N</text>
+</svg>`;
+
 class RoomView {
   constructor(app, code) {
     this.app = app;
@@ -152,7 +191,10 @@ class RoomView {
       }
     };
     document.addEventListener('keydown', this.onKey);
-    this.onResize = () => this.placePawns(false);
+    this.onResize = () => {
+      this.placePawns(false);
+      if (this.tip) this.hideTip();
+    };
     window.addEventListener('resize', this.onResize);
     this.tick = setInterval(() => this.updateTimer(), 250);
     if (store.socket && store.socket.connected) this.join();
@@ -171,6 +213,7 @@ class RoomView {
     document.removeEventListener('keydown', this.onKey);
     window.removeEventListener('resize', this.onResize);
     clearInterval(this.tick);
+    if (this.resizeObs) this.resizeObs.disconnect();
     emit('room:leave');
     document.body.classList.remove('in-game');
   }
@@ -380,26 +423,41 @@ class RoomView {
     this.board = h('div.board');
     this.cellEls = cells.map((c, i) => {
       const [r, col] = gridPos(i);
-      const el = h('div.cell.' + c.type + '.side-' + sideOf(i), { style: { gridRow: r, gridColumn: col }, 'data-i': i, onclick: () => this.onCellClick(i) });
+      const el = h('div.cell.' + c.type + '.side-' + sideOf(i), {
+        style: { gridRow: r, gridColumn: col },
+        'data-i': i,
+        onclick: () => this.onCellClick(i),
+        onmouseenter: () => this.showTip(i),
+        onmouseleave: () => this.hideTip(),
+      });
       this.board.append(el);
       return el;
     });
-    // Centre du plateau
+    // Centre du plateau : océan, globe, dés (dans le plan du plateau)
     this.diceEls = [makeDie(), makeDie()];
-    this.actionPanel = h('div.action-panel');
-    this.cardSlot = h('div.card-slot');
-    this.centerInfo = h('div.center-info');
     this.center = h('div.board-center',
+      h('div.ocean'),
+      h('div.globe', { html: GLOBE_SVG }),
+      h('div.compass', { html: COMPASS_SVG }),
+      h('div.cloud.c1'), h('div.cloud.c2'), h('div.cloud.c3'),
+      h('div.plane', h('span', '✈️')),
       h('div.center-logo', 'My', h('span', 'Poly')),
-      this.centerInfo,
-      h('div.dice', this.diceEls),
-      this.actionPanel,
-      this.cardSlot
+      h('div.dice', this.diceEls)
     );
     this.board.append(this.center);
     this.pawnLayer = h('div.pawn-layer');
     this.board.append(this.pawnLayer);
     this.pawnEls = {};
+    this.prevLevels = {};
+
+    // Interface superposée (non inclinée en vue 3D, pour rester lisible)
+    this.actionPanel = h('div.action-panel');
+    this.cardSlot = h('div.card-slot');
+    this.centerInfo = h('div.center-info');
+    this.hud = h('div.board-hud', this.centerInfo, this.actionPanel, this.cardSlot);
+    this.tip = h('div.tile-tip', { hidden: true });
+    this.boardScale = h('div.board-scale', this.board, this.hud);
+    this.boardWrap = h('div.board-wrap', this.boardScale, this.tip);
 
     this.toolbar = h('div.toolbar');
     this.playersEl = h('div.players');
@@ -410,15 +468,25 @@ class RoomView {
     this.sidePanel = h('div.side-panel', this.logEl, this.chatBox);
     this.endOverlay = h('div.end-overlay', { hidden: true });
 
-    this.root.append(
-      h('div.game',
-        h('div.board-wrap', h('div.board-scale', this.board)),
-        h('div.side', this.toolbar, this.playersEl, this.tabsEl, this.sidePanel, this.emoteBar)
-      ),
-      this.endOverlay
-    );
+    this.gameEl = h('div.game' + (this.view3d ? '.view-3d' : ''), this.boardWrap, h('div.side', this.toolbar, this.playersEl, this.tabsEl, this.sidePanel, this.emoteBar));
+    this.root.append(this.gameEl, this.endOverlay);
+    // Replace les pions dès que la taille du plateau change (vue 2D/3D, redimensionnement)
+    this.resizeObs = new ResizeObserver(() => this.placePawns(false));
+    this.resizeObs.observe(this.board);
     this.renderTabs();
     this.renderChat();
+    this.renderToolbar();
+  }
+
+  get view3d() {
+    const v = storage('view3d');
+    if (v === null || v === undefined) return window.innerWidth > 900 && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return v === '1';
+  }
+  toggleView() {
+    const next = !this.gameEl.classList.contains('view-3d');
+    storage('view3d', next ? '1' : '0');
+    this.gameEl.classList.toggle('view-3d', next);
     this.renderToolbar();
   }
 
@@ -443,6 +511,7 @@ class RoomView {
     this.toolbar.append(
       h('div.tb-code', { title: 'Copier le lien', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') }, '🔗 ', this.code),
       h('div.tb-info', this.state ? `Tour ${this.state.round}` : ''),
+      h('button.icon-btn.view-btn', { title: 'Vue 3D / 2D', onclick: () => this.toggleView() }, this.gameEl && this.gameEl.classList.contains('view-3d') ? '2D' : '3D'),
       h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
       h('button.icon-btn', { title: 'Son', onclick: (e) => (e.target.textContent = Sound.toggle() ? '🔊' : '🔇') }, Sound.isEnabled() ? '🔊' : '🔇'),
       h('button.icon-btn', { title: 'Plein écran (F)', onclick: toggleFullscreen }, '⛶'),
@@ -559,29 +628,41 @@ class RoomView {
         this.disp.cash[ev.pid] = (this.disp.cash[ev.pid] ?? 0) + ev.delta;
         this.floatMoney(ev.pid, ev.delta);
         if (ev.pid === this.me) Sound.play(ev.delta > 0 ? 'cash' : 'pay');
+        if (ev.reason === 'salary' || ev.reason === 'card' || ev.reason === 'sell') {
+          const from = this.boardCenter();
+          const to = this.pawnPos(ev.pid);
+          if (ev.delta > 0) this.flyCoins(from, to, 5);
+          else this.flyCoins(to, from, 4);
+        }
         this.renderPlayers();
         await sleep(120);
         return;
       case 'buy':
-        Sound.play('buy');
+      case 'build': {
+        Sound.play(ev.t === 'buy' ? 'buy' : 'build');
+        const from = this.pawnPos(ev.pid);
+        const c = this.cellCenter(ev.cell);
+        await this.flyCoins(from, c, 5);
+        this.patchProps(ev);
         this.pulseCell(ev.cell, p);
-        await sleep(400);
+        await sleep(350);
         return;
-      case 'build':
-        Sound.play('build');
-        this.pulseCell(ev.cell, p);
-        await sleep(400);
-        return;
-      case 'takeover':
+      }
+      case 'takeover': {
         Sound.play('takeover');
-        this.pulseCell(ev.cell, p);
+        await this.flyCoins(this.pawnPos(ev.pid), this.pawnPos(ev.from), 8);
+        this.patchProps(ev);
+        this.pulseCell(ev.cell, p, 'takeover');
         await sleep(600);
         return;
+      }
       case 'rent':
         this.pulseCell(ev.cell, this.player(ev.to), 'rent');
-        await sleep(250);
+        Sound.play('pay');
+        await this.flyCoins(this.pawnPos(ev.pid), this.pawnPos(ev.to) || this.cellCenter(ev.cell), Math.min(10, 3 + Math.round(ev.amount / 150)));
         return;
       case 'sell':
+        this.patchProps(ev);
         this.pulseCell(ev.cell, null);
         return;
       case 'card':
@@ -593,6 +674,7 @@ class RoomView {
         return;
       case 'festival':
         Sound.play('festival');
+        this.patchProps(ev);
         this.pulseCell(ev.cell, p, 'festival');
         await sleep(700);
         return;
@@ -603,6 +685,7 @@ class RoomView {
         Sound.play('quake');
         this.board.classList.add('shake');
         setTimeout(() => this.board.classList.remove('shake'), 900);
+        this.patchProps(ev);
         this.pulseCell(ev.cell, null, 'quake');
         await sleep(800);
         return;
@@ -626,6 +709,7 @@ class RoomView {
     const cells = this.meta.cells;
     const countries = Object.fromEntries(this.meta.countries.map((c) => [c.id, c]));
     const myTurn = this.canAct();
+    const s = this.room.settings;
     for (const c of cells) {
       const i = c.index;
       const el = this.cellEls[i];
@@ -636,40 +720,109 @@ class RoomView {
       el.classList.toggle('owned', !!owner);
       el.classList.toggle('dim', !!this.highlightOwner && (!owner || owner.id !== this.highlightOwner));
       if (owner) el.style.setProperty('--owner', owner.color);
-      el.classList.toggle('festival-on', st.festival && st.festival.cell === i);
-      // Cases sélectionnables selon la phase
+      const fest = st.festival && st.festival.cell === i;
+      el.classList.toggle('festival-on', fest);
       let selectable = false;
       if (myTurn) {
         if (st.phase === 'travel') selectable = i !== 24;
         if ((st.phase === 'festival' || st.phase === 'debt') && owner && owner.id === this.me) selectable = true;
       }
       el.classList.toggle('selectable', selectable);
+      const priceTxt = owner && pr.rent ? fmt(pr.rent) : c.price ? fmt(c.price) : '';
       if (c.type === 'city') {
         const ct = countries[c.country];
+        const mono = owner && this.ownsCountry(owner.id, c.country);
+        const prev = this.prevLevels[i] ?? pr.level;
+        el.style.setProperty('--band', ct.color);
         el.append(
-          h('div.band', { style: { background: ct.color } }, h('span.flag', ct.flag), pr.level ? h('span.buildings', pr.level === 4 ? '🏨' : '🏠'.repeat(pr.level)) : null),
-          h('div.cname', c.name),
-          h('div.cprice', owner ? fmt(pr.rent) : fmt(c.price))
+          h('div.tile-band' + (mono ? '.mono' : ''),
+            h('span.flag', ct.flag),
+            pr.level ? buildings(pr.level, owner ? owner.color : '#888', pr.level > prev) : null,
+            mono ? h('span.mono-chip', { title: 'Pays complet : loyer ×2' }, '×2') : null
+          ),
+          h('div.tile-body', h('div.tile-icon', c.icon || '🏙️'), h('div.tile-name', c.name), h('div.tile-price', priceTxt))
         );
+        this.prevLevels[i] = pr.level;
       } else if (c.type === 'resort') {
-        el.append(h('div.cicon', c.emoji), h('div.cname', c.name), h('div.cprice', owner ? fmt(pr.rent) : fmt(c.price)));
+        el.append(h('div.sea'), h('div.tile-body', h('div.tile-icon', c.emoji), h('div.tile-name', c.name), h('div.tile-price', priceTxt)));
       } else if (c.type === 'chance') {
-        el.append(h('div.cicon.big', '❓'), h('div.cname', 'Chance'));
+        el.append(h('div.tile-body', h('div.chance-mini', h('span', '?')), h('div.tile-name', 'Chance')));
       } else if (c.type === 'tax') {
-        el.append(h('div.cicon.big', '💸'), h('div.cname', 'Impôts'), h('div.cprice', this.room.settings.taxPercent + ' %'));
+        el.append(h('div.tile-body', h('div.tile-icon', '💸'), h('div.tile-name', 'Impôts'), h('div.tile-price', s.taxPercent + ' %')));
       } else {
-        const icons = { start: '🏁', jail: '🏝️', festival: '🎉', travel: '✈️' };
-        const sub = { start: `+${fmt(this.room.settings.salary)}`, jail: 'Prison', festival: st.festival && st.festival.cell != null ? `×${st.festival.mult} à ${cells[st.festival.cell].name}` : 'Loyer ×2', travel: 'Voyage' };
-        el.append(h('div.corner-icon', icons[c.type]), h('div.corner-name', c.name), h('div.corner-sub', sub[c.type]));
+        const icons = { start: '🏁', jail: '🏝️', festival: '🎪', travel: '✈️' };
+        const sub = {
+          start: `+${fmt(s.salary)}`,
+          jail: `Amende ${fmt(s.jailFine)}`,
+          festival: st.festival && st.festival.cell != null ? `×${st.festival.mult} · ${cells[st.festival.cell].name}` : 'Loyer ×2',
+          travel: `Billet ${fmt(s.travelFee)}`,
+        };
+        el.append(
+          h('div.corner-art', h('div.corner-glow'), h('div.corner-icon', icons[c.type])),
+          h('div.corner-ribbon', c.type === 'start' ? '◀ DÉPART' : c.name.toUpperCase()),
+          h('div.corner-sub', sub[c.type])
+        );
       }
-      if (st.festival && st.festival.cell === i) el.append(h('div.festival-badge', `🎉×${st.festival.mult}`));
-      if (owner) el.append(h('div.owner-dot', { style: { background: owner.color }, title: owner.name }, owner.pawn));
+      if (fest) el.append(h('div.festival-badge', `🎉 ×${st.festival.mult}`));
+      if (owner) el.append(h('div.owner-flag', { style: { '--c': owner.color }, title: owner.name }, owner.pawn));
     }
+  }
+
+  ownsCountry(pid, country) {
+    return this.meta.cells.filter((c) => c.type === 'city' && c.country === country).every((c) => this.state.props[c.index].owner === pid);
+  }
+
+  /** Applique tout de suite un évènement au plateau (avant l'état final) pour un rendu vivant. */
+  patchProps(ev) {
+    const st = this.state;
+    const pr = st.props[ev.cell];
+    if (!pr) return;
+    if (ev.t === 'buy') Object.assign(pr, { owner: ev.pid, level: ev.level, rent: 0 });
+    if (ev.t === 'build') pr.level = ev.level;
+    if (ev.t === 'takeover') pr.owner = ev.pid;
+    if (ev.t === 'sell') Object.assign(pr, { owner: null, level: 0, rent: 0 });
+    if (ev.t === 'quake') pr.level = Math.max(0, pr.level - 1);
+    if (ev.t === 'festival') st.festival = { cell: ev.cell, mult: ev.mult };
+    this.renderCells();
+  }
+
+  // Infobulle au survol d'une case
+  showTip(i) {
+    if (!this.state || matchMedia('(hover: none)').matches) return;
+    const c = this.meta.cells[i];
+    const pr = this.state.props[i];
+    const owner = pr && pr.owner ? this.player(pr.owner) : null;
+    const lines = [h('div.tip-title', c.icon || c.emoji || '', ' ', c.name)];
+    if (c.type === 'city' || c.type === 'resort') {
+      if (owner) {
+        lines.push(h('div', 'Propriétaire : ', h('b', { style: { color: owner.color } }, owner.name)));
+        lines.push(h('div', `${c.type === 'city' ? LEVEL_LABEL[pr.level] + ' · ' : ''}Loyer : `, h('b', fmt(pr.rent))));
+        if (c.type === 'city' && this.room.settings.takeover && pr.level < 4) lines.push(h('div.muted', `Rachat : ${fmt(pr.takeover)}`));
+      } else lines.push(h('div', 'À vendre : ', h('b', fmt(c.price))));
+    } else lines.push(h('div.muted', 'Cliquez pour plus d\'infos'));
+    this.tip.innerHTML = '';
+    this.tip.append(...lines);
+    const r = this.cellEls[i].getBoundingClientRect();
+    const w = this.boardWrap.getBoundingClientRect();
+    this.tip.hidden = false;
+    const tw = this.tip.offsetWidth;
+    const th = this.tip.offsetHeight;
+    let x = r.left - w.left + r.width / 2 - tw / 2;
+    let y = r.top - w.top - th - 8;
+    if (y < 4) y = r.bottom - w.top + 8;
+    x = Math.max(4, Math.min(w.width - tw - 4, x));
+    this.tip.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  hideTip() {
+    this.tip.hidden = true;
   }
 
   cellCenter(i) {
     const el = this.cellEls[i];
     return { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2, w: el.offsetWidth, hgt: el.offsetHeight };
+  }
+  boardCenter() {
+    return { x: this.board.clientWidth / 2, y: this.board.clientHeight / 2 };
   }
 
   placePawns(animate) {
@@ -687,35 +840,49 @@ class RoomView {
         this.setPawn(p, Number(pos), k, list.length, animate);
       });
     }
-    for (const [id, el] of Object.entries(this.pawnEls)) {
-      if (!seen.has(id)) {
-        el.classList.add('gone');
-      }
-    }
+    for (const [id, el] of Object.entries(this.pawnEls)) el.classList.toggle('gone', !seen.has(id));
   }
 
   pawnEl(p) {
     let el = this.pawnEls[p.id];
     if (!el) {
-      el = h('div.pawn' + (p.vip ? '.vip' : ''), { style: { '--c': p.color }, title: p.name }, h('span', p.pawn));
+      el = h('div.pawn' + (p.vip ? '.vip' : ''), { style: { '--c': p.color }, title: p.name },
+        h('div.pawn-ring'),
+        h('div.pawn-pin',
+          p.vip ? h('div.pawn-crown', '👑') : null,
+          h('div.pawn-head', h('span', p.pawn)),
+          h('div.pawn-tip')
+        )
+      );
       this.pawnLayer.append(el);
       this.pawnEls[p.id] = el;
     }
-    el.classList.toggle('current', this.state && this.state.current === p.id);
+    el.classList.toggle('current', !!this.state && this.state.current === p.id);
     return el;
+  }
+
+  pawnPoint(pos, k = 0, n = 1) {
+    const c = this.cellCenter(pos);
+    const r = n > 1 ? Math.min(c.w, c.hgt) * 0.24 : 0;
+    const ang = (k / n) * Math.PI * 2 + Math.PI / 4;
+    return { x: c.x + Math.cos(ang) * r, y: c.y + Math.sin(ang) * r * 0.8 };
   }
 
   setPawn(p, pos, k, n, animate) {
     const el = this.pawnEl(p);
-    const c = this.cellCenter(pos);
-    const r = n > 1 ? Math.min(c.w, c.hgt) * 0.22 : 0;
-    const ang = (k / n) * Math.PI * 2 - Math.PI / 2;
-    const x = c.x + Math.cos(ang) * r;
-    const y = c.y + Math.sin(ang) * r;
+    const { x, y } = this.pawnPoint(pos, k, n);
     el.style.transition = animate ? '' : 'none';
-    el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+    el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    el.style.zIndex = Math.round(y);
     if (!animate) void el.offsetWidth;
     el.style.transition = '';
+  }
+
+  pawnPos(pid) {
+    const el = this.pawnEls[pid];
+    if (!el) return null;
+    const m = el.style.transform.match(/translate3d\(([-\d.]+)px, ([-\d.]+)px/);
+    return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
   }
 
   async animateMove(ev) {
@@ -724,21 +891,26 @@ class RoomView {
     if (!el) return;
     if (ev.teleport) {
       el.classList.add('teleport');
-      await sleep(250);
+      await sleep(280);
       this.disp.pos[ev.pid] = ev.to;
       this.placePawns(false);
       el.classList.remove('teleport');
+      el.classList.add('appear');
+      setTimeout(() => el.classList.remove('appear'), 500);
       await sleep(300);
       return;
     }
     const dir = ev.steps > 0 ? 1 : -1;
     let pos = ev.from;
     el.classList.add('moving');
+    el.style.zIndex = 9999;
     for (let s = 0; s < Math.abs(ev.steps); s++) {
       pos = (pos + dir + 32) % 32;
       this.disp.pos[ev.pid] = pos;
       const c = this.cellCenter(pos);
-      el.style.transform = `translate(${c.x}px, ${c.y}px) translate(-50%, -50%)`;
+      el.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;
+      this.cellEls[pos].classList.add('step');
+      setTimeout(((e) => () => e.classList.remove('step'))(this.cellEls[pos]), 260);
       Sound.play('step');
       await sleep(170);
     }
@@ -758,15 +930,31 @@ class RoomView {
     setTimeout(() => el.classList.remove('fx-' + kind), 1200);
   }
 
+  /** Pluie de pièces d'un point à un autre (paiements, salaires, achats). */
+  async flyCoins(from, to, count = 6) {
+    if (!from || !to) return;
+    for (let k = 0; k < count; k++) {
+      const coin = h('div.coin-fly', h('div.coin', '$'));
+      const jx = (Math.random() - 0.5) * 20;
+      const jy = (Math.random() - 0.5) * 20;
+      coin.style.transform = `translate3d(${from.x + jx}px, ${from.y + jy}px, 0)`;
+      this.pawnLayer.append(coin);
+      setTimeout(() => {
+        coin.classList.add('go');
+        coin.style.transform = `translate3d(${to.x + jx / 2}px, ${to.y + jy / 2}px, 0)`;
+      }, 30 + k * 70);
+      setTimeout(() => coin.remove(), 900 + k * 70);
+    }
+    await sleep(500 + count * 70);
+  }
+
   async showDice(d, instant) {
     for (let k = 0; k < 2; k++) {
       const cube = this.diceEls[k].firstChild;
       const [bx, by] = DIE_ROT[d[k]];
       if (!instant) this.spins[k] += 2 + k;
-      const sx = this.spins[k] * 360 + bx;
-      const sy = this.spins[k] * 360 + by;
       cube.style.transition = instant ? 'none' : '';
-      cube.style.transform = `rotateX(${sx}deg) rotateY(${sy}deg)`;
+      cube.style.transform = `rotateX(${this.spins[k] * 360 + bx}deg) rotateY(${this.spins[k] * 360 + by}deg)`;
     }
     this.diceEls.forEach((el) => el.classList.toggle('double', d[0] === d[1]));
     if (!instant) {
@@ -778,7 +966,7 @@ class RoomView {
 
   async showCard(card, p) {
     this.cardSlot.innerHTML = '';
-    const el = h('div.chance-card', h('div.chance-inner', h('div.chance-back', '❓'), h('div.chance-front', h('div.chance-icon', card.icon), h('div.chance-title', card.title), h('div.chance-text', card.text), p ? h('div.chance-who', p.name) : null)));
+    const el = h('div.chance-card', h('div.chance-inner', h('div.chance-back', h('span', '?')), h('div.chance-front', h('div.chance-icon', card.icon), h('div.chance-title', card.title), h('div.chance-text', card.text), p ? h('div.chance-who', p.name) : null)));
     this.cardSlot.append(el);
     requestAnimationFrame(() => el.classList.add('flip'));
     await sleep(2100);
@@ -793,10 +981,10 @@ class RoomView {
       card.append(f);
       setTimeout(() => f.remove(), 1600);
     }
-    const pawn = this.pawnEls[pid];
-    if (pawn) {
-      const f = h('div.float-money.board.' + (delta >= 0 ? 'pos' : 'neg'), (delta >= 0 ? '+' : '') + fmt(delta));
-      f.style.transform = pawn.style.transform;
+    const pos = this.pawnPos(pid);
+    if (pos) {
+      const f = h('div.board-float', h('span.float-money.board.' + (delta >= 0 ? 'pos' : 'neg'), (delta >= 0 ? '+' : '') + fmt(delta)));
+      f.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
       this.pawnLayer.append(f);
       setTimeout(() => f.remove(), 1600);
     }
@@ -804,15 +992,15 @@ class RoomView {
 
   flashBanner(text) {
     const b = h('div.flash-banner', text);
-    this.board.append(b);
+    this.hud.append(b);
     setTimeout(() => b.remove(), 1800);
   }
 
   onEmote({ key, emoji }) {
-    const pawn = this.pawnEls[key];
-    if (pawn) {
-      const b = h('div.emote-bubble', emoji);
-      b.style.transform = pawn.style.transform;
+    const pos = this.pawnPos(key);
+    if (pos) {
+      const b = h('div.board-float', h('span.emote-bubble', emoji));
+      b.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
       this.pawnLayer.append(b);
       setTimeout(() => b.remove(), 2200);
     }
@@ -865,8 +1053,7 @@ class RoomView {
     const st = this.state;
     const s = this.room.settings;
     this.centerInfo.innerHTML = '';
-    const bits = [`Tour ${st.round}${s.maxRounds ? '/' + s.maxRounds : ''}`];
-    this.centerInfo.append(h('span', bits.join(' · ')));
+    if (s.maxRounds) this.centerInfo.append(h('span', `Tour ${st.round}/${s.maxRounds}`));
     if (st.endsAt) {
       this.gameClock = h('span.game-clock');
       this.centerInfo.append(this.gameClock);

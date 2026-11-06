@@ -18,6 +18,29 @@ const COUNTRIES = [
   { id: 'fr', name: 'France', flag: '🇫🇷', color: '#3f51b5' },
 ];
 
+// Monument / symbole affiché sur chaque ville
+const ICONS = {
+  'Salvador': '🥁',
+  'Rio de Janeiro': '🎭',
+  'Fès': '🏺',
+  'Marrakech': '🐪',
+  'Casablanca': '🕌',
+  'Guadalajara': '🌵',
+  'Mexico': '🌮',
+  'Séville': '💃',
+  'Madrid': '👑',
+  'Barcelone': '⛪',
+  'Milan': '👗',
+  'Rome': '🏛️',
+  'Manchester': '🏟️',
+  'Édimbourg': '🏰',
+  'Londres': '💂',
+  'Osaka': '🏯',
+  'Tokyo': '🍣',
+  'Lyon': '🦁',
+  'Paris': '🗼',
+};
+
 // Multiplicateurs de loyer par niveau : 0 = terrain, 1-3 = maisons, 4 = hôtel
 const RENT_MULT = [0.2, 0.7, 1.6, 2.6, 4.0];
 
@@ -25,6 +48,7 @@ function city(name, country, price) {
   return {
     type: 'city',
     name,
+    icon: ICONS[name] || '🏙️',
     country,
     price,
     houseCost: Math.round(price * 0.5),

@@ -9,7 +9,7 @@
 - 🎖️ **21 badges** à débloquer : première victoire, séries, triple monopole, roi des plages, requin, multimillionnaire, remontada…
 - 👑 **VIP** et 🛡️ **STAFF / ⚡ ADMIN** : badges visibles partout, en jeu compris (cartes joueurs, pions dorés, chat, salon). Les VIP ont des pions, des couleurs exclusives et un pseudo doré.
 - 🛡️ **Panneau d'administration** : statistiques globales, recherche de joueurs, attribution du VIP (30 jours ou à vie), rôles, bannissements, réinitialisation des stats, salles en direct (observer, fermer), annonces globales, journal d'audit.
-- 🎮 **Expérience soignée** : plein écran (touche **F**), dés 3D, déplacements animés case par case, cartes Chance qui se retournent, effets sonores synthétisés, émotes, chat, confettis, interface adaptée au mobile.
+- 🎮 **Expérience soignée** : plateau en **vue 3D inclinée** (ou 2D) avec cases illustrées (monuments, drapeaux, maisons et hôtels dessinés à la couleur du propriétaire), océan animé au centre, pions debout, pièces qui volent lors des paiements, plein écran (touche **F**), dés 3D, déplacements animés case par case, cartes Chance qui se retournent, effets sonores synthétisés, émotes, chat, confettis, interface adaptée au mobile.
 - 🎲 **100 % aléatoire** : les dés, le mélange des cartes et les tirages sont faits **uniquement côté serveur** avec `crypto.randomInt` (générateur cryptographique du système, voir `server/game/random.js`). Rien n'est scripté et le client ne fait qu'afficher le résultat.
 
 ---
