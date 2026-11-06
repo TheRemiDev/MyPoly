@@ -1,0 +1,11 @@
+{
+  "name": "MyPoly",
+  "short_name": "MyPoly",
+  "description": "Le jeu de magnats en ligne entre amis",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0f1225",
+  "theme_color": "#0f1225",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

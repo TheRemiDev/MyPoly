@@ -921,6 +921,7 @@ class Game {
       endsAt: this.endsAt,
       log: this.log.slice(-40),
       over: this.over,
+      serverNow: Date.now(),
     };
   }
 

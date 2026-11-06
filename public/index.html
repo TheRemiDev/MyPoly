@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>MyPoly — Le jeu de magnats en ligne entre amis</title>
+  <meta name="description" content="MyPoly : jeu de plateau multijoueur gratuit. Créez une salle privée, invitez vos amis, configurez vos règles et devenez le plus grand magnat !" />
+  <meta name="theme-color" content="#0f1225" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta property="og:title" content="MyPoly" />
+  <meta property="og:description" content="Le jeu de magnats en ligne, gratuit et entre amis." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <a href="/" data-link class="logo">My<span>Poly</span></a>
+    <nav class="nav-links">
+      <a href="/" data-link>Jouer</a>
+      <a href="/leaderboard" data-link>Classement</a>
+      <a href="/rules" data-link>Règles</a>
+      <a href="/admin" data-link id="nav-admin" hidden>Admin</a>
+    </nav>
+    <div class="nav-right">
+      <button id="btn-sound" class="icon-btn" title="Activer / couper le son">🔊</button>
+      <button id="btn-fullscreen" class="icon-btn" title="Plein écran (F)">⛶</button>
+      <div id="nav-user"></div>
+    </div>
+  </header>
+  <div id="conn-banner" hidden>⚡ Connexion perdue, reconnexion en cours…</div>
+  <main id="app"></main>
+  <div id="toasts"></div>
+  <div id="modals"></div>
+  <noscript>MyPoly nécessite JavaScript.</noscript>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

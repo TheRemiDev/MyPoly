@@ -90,7 +90,6 @@ const io = new Server(server, {
   pingInterval: 20000,
   pingTimeout: 25000,
   maxHttpBufferSize: 1e5,
-  cors: config.publicUrl ? { origin: config.publicUrl, credentials: true } : undefined,
 });
 rooms.attach(io);
 
