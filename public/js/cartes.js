@@ -357,7 +357,16 @@ export class CardTable {
     // Joueur qui a oublié de crier « Carton ! » : tout le monde peut le prendre
     const me = this.player(this.me);
     if (p.exposed && me && !me.out && !this.state.over) {
-      seat.append(h('button.ct-catch', { title: 'Ce joueur a oublié de crier « Carton ! »', onclick: () => this.act('catch', { target: p.id }) }, '🚨 ', h('span.ct-catch-long', 'Carton oublié ! '), h('b', 'Prendre')));
+      const left = p.exposedUntil ? p.exposedUntil - (Date.now() + this.v.clockOffset) : 5000;
+      if (left > 0) {
+        const btn = h('button.ct-catch', { title: 'Ce joueur a oublié de crier « Carton ! »', onclick: () => {
+          btn.disabled = true;
+          this.act('catch', { target: p.id });
+        } }, '🚨 ', h('span.ct-catch-long', 'Carton oublié ! '), h('b', 'Prendre'), h('i.ct-catch-bar', { style: { animationDuration: Math.round(left) + 'ms' } }));
+        seat.append(btn);
+        // Le bouton disparaît de lui-même à la fin de la fenêtre
+        setTimeout(() => btn.remove(), left);
+      }
     }
     return seat;
   }
@@ -466,6 +475,16 @@ export class CardTable {
   // ============================================================= actions
   async act(type, data = {}) {
     const res = await emit('game:action', { type, ...data });
+    if (res && res.resync) {
+      // Lien avec la salle perdu (reconnexion) : on rejoint et on réessaie une fois
+      await this.v.join();
+      const again = await emit('game:action', { type, ...data });
+      if (again && again.error) {
+        Sound.play('error');
+        toast(again.error, 'error');
+      }
+      return again;
+    }
     if (res && res.error) {
       Sound.play('error');
       toast(res.error, 'error');

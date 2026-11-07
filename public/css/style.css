@@ -1768,3 +1768,6 @@ body:not(.in-game) {
   .ct-seat .ct-carton-tag { font-size: .58rem; right: 4px; }
 }
 @media (max-width: 700px) { .ct-catch-long { display: none; } }
+.ct-catch { position: relative; overflow: hidden; }
+.ct-catch-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: #ffd166; transform-origin: left; animation: ctCatchBar linear forwards; }
+@keyframes ctCatchBar { from { transform: scaleX(1); } to { transform: scaleX(0); } }

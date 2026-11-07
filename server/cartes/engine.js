@@ -9,6 +9,8 @@ const R = require('../game/random');
 const COLORS = ['r', 'b', 'g', 'y'];
 const COLOR_NAMES = { r: 'rouge', b: 'bleu', g: 'vert', y: 'jaune' };
 const ACTIONS = ['skip', 'rev', '+2'];
+/** Temps laissé aux adversaires pour prendre un joueur qui a oublié de crier (après les animations). */
+const CATCH_WINDOW = 5000;
 
 /** Paquet de 108 cartes. */
 function buildDeck() {
@@ -146,6 +148,7 @@ class CardGame {
       p.hand = [];
       p.carton = false;
       p.exposed = false;
+      p.exposedUntil = null;
     }
     for (let k = 0; k < this.settings.startCards; k++) for (const p of this.active) p.hand.push(this.deck.pop());
     // La première carte retournée est toujours une carte numéro
@@ -190,6 +193,7 @@ class CardGame {
     if (p.hand.length > 1) {
       p.carton = false;
       p.exposed = false;
+      p.exposedUntil = null;
     }
     return got;
   }
@@ -234,9 +238,18 @@ class CardGame {
     }
   }
 
-  /** Les joueurs exposés ne peuvent plus être pris dès que le jeu avance. */
-  closeExposure(except) {
-    for (const q of this.players) if (q !== except) q.exposed = false;
+  /** Fin de la fenêtre pendant laquelle un oubli de « Carton ! » peut être sanctionné. */
+  expireExposure() {
+    const now = Date.now();
+    let changed = false;
+    for (const q of this.players) {
+      if (q.exposed && q.exposedUntil && now >= q.exposedUntil) {
+        q.exposed = false;
+        q.exposedUntil = null;
+        changed = true;
+      }
+    }
+    if (changed && !this.over) this.flush();
   }
 
   doPlay(p, { card: cardId, color, target, carton }) {
@@ -251,7 +264,6 @@ class CardGame {
       swapWith = this.player(target);
       if (!swapWith || swapWith === p || swapWith.out) return { error: 'Choisissez avec qui échanger votre main.' };
     }
-    this.closeExposure(p);
     p.hand.splice(idx, 1);
     this.discard.push(card);
     this.color = card.c === 'w' ? color : card.c;
@@ -264,7 +276,10 @@ class CardGame {
         p.stats.cartons++;
         this.emit({ t: 'carton', pid: p.id }, 900);
         this.say(`📣 ${p.name} crie « CARTON ! »`, p.id);
-      } else p.exposed = true;
+      } else {
+        p.exposed = true;
+        p.exposedUntil = null; // fixé à l'envoi, une fois les animations connues
+      }
     }
     this.emit({ t: 'play', pid: p.id, card, color: this.color, left: p.hand.length }, 650);
     this.say(`${p.name} pose ${label(card)}${card.c === 'w' ? ` et choisit le ${COLOR_NAMES[this.color]}` : ''}.`, p.id);
@@ -346,7 +361,6 @@ class CardGame {
 
   doDraw(p) {
     if (this.phase === 'drawn') return { error: 'Vous avez déjà pioché : jouez la carte ou passez.' };
-    this.closeExposure(p);
     if (this.pendingDraw) {
       this.forceDraw(p, this.pendingBy);
       this.endTurn();
@@ -381,6 +395,7 @@ class CardGame {
     p.carton = true;
     if (n === 1) {
       p.exposed = false;
+      p.exposedUntil = null;
       p.stats.cartons++;
       this.emit({ t: 'carton', pid: p.id }, 900);
       this.say(`📣 ${p.name} crie « CARTON ! »`, p.id);
@@ -391,8 +406,10 @@ class CardGame {
 
   doCatch(p, targetId) {
     const t = this.player(targetId);
-    if (!t || t === p || !t.exposed || t.hand.length !== 1) return { error: 'Trop tard !' };
+    if (!t || t === p) return { error: 'Joueur introuvable.' };
+    if (!t.exposed || t.hand.length !== 1) return { error: t.carton ? `${t.name} a bien crié « Carton ! ».` : `Trop tard : ${t.name} ne peut plus être pris.` };
     t.exposed = false;
+    t.exposedUntil = null;
     const pen = this.settings.cartonPenalty;
     const got = this.drawCards(t, pen);
     t.stats.caught++;
@@ -602,7 +619,14 @@ class CardGame {
 
   flush() {
     this.flushedAt = Date.now();
-    if (!this.over) this.watchExposed();
+    if (!this.over) {
+      for (const q of this.players) {
+        if (!q.exposed || q.exposedUntil) continue;
+        q.exposedUntil = Date.now() + this.anim + CATCH_WINDOW;
+        this.botTimers.push(setTimeout(() => this.expireExposure(), q.exposedUntil - Date.now() + 30));
+      }
+      this.watchExposed();
+    }
     const events = this.events;
     this.events = [];
     this.schedule();
@@ -657,6 +681,7 @@ class CardGame {
         score: p.score,
         carton: p.carton,
         exposed: p.exposed,
+        exposedUntil: p.exposed ? p.exposedUntil : null,
         out: p.out,
         bankrupt: p.out,
         rank: p.rank,
