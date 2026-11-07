@@ -101,12 +101,9 @@ export class CardTable {
     this.deckEl = h('div.ct-deck', { title: 'Piocher (D)', onclick: () => this.draw() });
     this.discardEl = h('div.ct-discard');
     this.colorEl = h('div.ct-color');
-    const ringText = '★ CARTON ! ★ VIDE TA MAIN ★ CRIE « CARTON ! » ★ CARTON ! ★ VIDE TA MAIN ★ CRIE « CARTON ! » ';
-    this.dirEl = h('div.ct-dir', { html: `<svg viewBox="0 0 200 200" aria-hidden="true"><defs><path id="ctRingPath" d="M100 100 m-84 0 a84 84 0 1 1 168 0 a84 84 0 1 1 -168 0"/></defs>
-      <circle cx="100" cy="100" r="95" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 5" opacity=".6"/>
-      <circle cx="100" cy="100" r="74" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/>
-      <text font-size="9.5" font-weight="900" letter-spacing="2.2" fill="currentColor"><textPath href="#ctRingPath">${ringText}</textPath></text>
-      ${[0, 90, 180, 270].map((a) => `<path transform="rotate(${a} 100 100)" d="M100 3 l7 5 -7 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}
+    this.dirEl = h('div.ct-dir', { html: `<svg viewBox="0 0 200 200" aria-hidden="true">
+      <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="1 9" stroke-linecap="round"/>
+      ${[0, 120, 240].map((a) => `<g transform="rotate(${a} 100 100)"><path d="M58 21 A92 92 0 0 1 100 8" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M96 1 l9 7 -9 8" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g>`).join('')}
     </svg>` });
     this.pendingEl = h('div.ct-pending', { hidden: true });
     this.deckCount = h('div.ct-deck-count');
@@ -307,11 +304,12 @@ export class CardTable {
         const second = k >= row1;
         const m = second ? n - row1 : row1;
         const j = second ? k - row1 : k;
-        return [((j + 0.5) / m) * 100, second ? 33 : 15, 't'];
+        return [((j + 0.5) / m) * 100, second ? 30 : 10, 't'];
       });
     }
-    const L = { l: [7, 50, 'l'], tl: [25, 19, 't'], t: [50, 15, 't'], tr: [75, 19, 't'], r: [93, 50, 'r'], t1: [38, 15, 't'], t2: [62, 15, 't'] };
-    const map = { 1: ['t'], 2: ['tl', 'tr'], 3: ['l', 't', 'r'], 4: ['l', 'tl', 'tr', 'r'], 5: ['l', 'tl', 't', 'tr', 'r'], 6: ['l', 'tl', 't1', 't2', 'tr', 'r'] };
+    // Plaques posées sur le rebord de la table (en pourcentage du tapis)
+    const L = { l: [0, 46, 'l'], r: [100, 46, 'r'], t: [50, 0, 't'], tl: [24, 2, 't'], tr: [76, 2, 't'], tl2: [33, 0, 't'], tr2: [67, 0, 't'], t1: [40, 0, 't'], t2: [60, 0, 't'] };
+    const map = { 1: ['t'], 2: ['tl2', 'tr2'], 3: ['l', 't', 'r'], 4: ['l', 'tl2', 'tr2', 'r'], 5: ['l', 'tl', 't', 'tr', 'r'], 6: ['l', 'tl', 't1', 't2', 'tr', 'r'] };
     return (map[n] || map[5]).map((k) => L[k]);
   }
 
@@ -337,11 +335,11 @@ export class CardTable {
     const turn = st.current === p.id && !st.over && st.phase !== 'roundEnd';
     const count = this.disp ? this.disp.counts[p.id] ?? p.count : p.count;
     return h('div.ct-badge' + (turn ? '.turn' : '') + (p.out ? '.out' : '') + (isMe ? '.me' : ''), { style: { '--c': p.color } },
-      h('div.ct-avatar', p.out ? '💀' : p.pawn),
+      h('div.ct-avatar', p.out ? '💀' : p.pawn, p.out ? null : h('span.ct-count' + (count === 1 ? '.one' : ''), { title: 'Cartes en main' }, String(count))),
       h('div.ct-binfo',
         h('div.ct-name', h('span.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
         h('div.ct-chips',
-          p.out ? h('span.pc-chip.off', 'Abandon') : h('span.pc-chip', { title: 'Cartes en main' }, `🃏 ${count}`),
+          p.out ? h('span.pc-chip.off', 'Abandon') : h('span.pc-chip', { title: 'Cartes en main' }, `${count} carte${count > 1 ? 's' : ''}`),
           st.settings.targetScore ? h('span.pc-chip', { title: 'Points' }, `🏆 ${p.score}`) : null,
           !p.isBot && !p.connected ? h('span.pc-chip.off', { title: 'Déconnecté' }, '📡') : p.afk ? h('span.pc-chip.off', { title: 'Absent' }, '💤') : null
         )
@@ -433,10 +431,13 @@ export class CardTable {
     const playable = new Set(this.myTurn() ? st.playable : []);
     const n = hand.length;
     // Chevauchement selon la place disponible
-    const width = Math.min(window.innerWidth - 32, 1100);
-    const cw = Math.min(118, Math.max(70, window.innerHeight * 0.13));
+    // Même taille que la variable CSS --hw ; sur grand écran, ma plaque occupe le coin gauche
+    const W = window.innerWidth;
+    const cw = W <= 700 ? Math.min(96, Math.max(70, window.innerHeight * 0.11)) : Math.min(132, Math.max(84, window.innerHeight * 0.125));
+    const width = Math.min(W > 1100 ? W - 2 * 290 : W <= 700 ? W - 64 : W - 40, 1100);
     const overlap = n > 1 ? Math.min(cw * 0.15, (width - cw) / (n - 1) - cw) : 0;
     this.handEl.style.setProperty('--cw', cw + 'px');
+    this.v.gameEl.style.setProperty('--hw', cw + 'px');
     hand.forEach((c, k) => {
       const el = cardEl(c, (playable.has(c.id) ? '.playable' : this.myTurn() ? '.dim' : '') + (st.drawnCard === c.id ? '.drawn' : ''));
       const t = n > 1 ? k / (n - 1) - 0.5 : 0;
