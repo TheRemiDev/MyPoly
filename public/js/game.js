@@ -6,6 +6,7 @@ import { navigate, toggleFullscreen, winLabel } from './app.js';
 import { Board3D, webglAvailable } from './board3d.js';
 import { melenchonURL } from './melenchon.js';
 import { drawLogo } from './logo.js';
+import { CardTable, CARD_SETTINGS_UI, CARD_PRESETS } from './cartes.js';
 import { MusicPlayer } from './music.js';
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
@@ -255,6 +256,7 @@ class RoomView {
     clearInterval(this.tick);
     if (this.resizeObs) this.resizeObs.disconnect();
     if (this.b3) this.b3.destroy();
+    if (this.cards) this.cards.destroy();
     emit('room:leave');
     document.body.classList.remove('in-game');
   }
@@ -268,6 +270,10 @@ class RoomView {
     if (mode !== this.mode) {
       this.mode = mode;
       this.root.innerHTML = '';
+      if (this.cards) {
+        this.cards.destroy();
+        this.cards = null;
+      }
       if (mode === 'lobby') {
         this.state = null;
         this.queue = [];
@@ -301,7 +307,7 @@ class RoomView {
           h('div.invite',
             h('div.invite-label', 'Code de la salle'),
             h('div.invite-code', { title: 'Copier le code', onclick: () => copy(this.code, 'Code copié !') }, this.code),
-            h('button.btn.accent', { onclick: () => (navigator.share ? navigator.share({ title: 'MyPoly', text: 'Rejoins ma partie de MyPoly !', url: link }).catch(() => {}) : copy(link, 'Lien d\'invitation copié !')) }, '🔗 Inviter des amis')
+            h('button.btn.accent', { onclick: () => (navigator.share ? navigator.share({ title: 'MyPoly', text: this.isCards ? 'Rejoins ma partie de Carton ! sur MyPoly' : 'Rejoins ma partie de MyPoly !', url: link }).catch(() => {}) : copy(link, 'Lien d\'invitation copié !')) }, '🔗 Inviter des amis')
           )
         ),
         h('div.lobby-grid',
@@ -325,6 +331,7 @@ class RoomView {
       const input = h('input.input.room-name', { value: r.name, maxlength: 40, onchange: (e) => this.saveSettings({}, e.target.value) });
       els.title.append(input);
     } else els.title.append(h('h1', r.name));
+    els.title.prepend(h('div.game-kind-tag.' + (this.isCards ? 'k-cartes' : 'k-poly'), this.isCards ? '🃏 Carton !' : '🎲 MyPoly'));
     els.title.append(h('div.muted', `${r.seats.length}/${r.settings.maxPlayers} joueurs${r.spectators ? ` · ${r.spectators} spectateur(s)` : ''}`));
 
     // Sièges
@@ -384,6 +391,7 @@ class RoomView {
   }
   /** Vrai si les règles de la salle diffèrent à la fois des règles par défaut et des règles enregistrées. */
   rulesUnsaved() {
+    if (this.isCards) return false;
     const cur = this.rulesKey(this.room.settings);
     return cur !== this.rulesKey(this.meta.defaults) && cur !== this.rulesKey(savedSettings());
   }
@@ -439,10 +447,10 @@ class RoomView {
         ));
       }
     }
-    if (editable) box.append(h('div.presets', Object.entries(PRESETS).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
+    if (editable) box.append(h('div.presets', Object.entries(this.isCards ? CARD_PRESETS : PRESETS).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
-    const groups = SETTINGS_UI.slice();
-    if (isAdmin || s.melenchon || s.politicalBoard) {
+    const groups = (this.isCards ? CARD_SETTINGS_UI : SETTINGS_UI).slice();
+    if (!this.isCards && (isAdmin || s.melenchon || s.politicalBoard)) {
       groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' },
         { key: 'politicalBoard', label: 'Plateau politique', type: 'toggle', admin: true, hint: 'Plateau satirique : ZAD, Syndicat, Ministère des Taxes, Exil fiscal… et cartes Chance assorties' }] });
     }
@@ -454,7 +462,7 @@ class RoomView {
           ctrl = h('label.switch', h('input', { type: 'checkbox', checked: !!s[it.key], disabled: !editable || (it.admin && !isAdmin), onchange: (e) => this.saveSettings({ [it.key]: e.target.checked }) }), h('span.slider'));
         } else {
           const opts = it.options.slice();
-          if (!opts.some(([v]) => v === s[it.key])) opts.push([s[it.key], it.key === 'startMoney' || it.key === 'salary' ? fmt(s[it.key]) : String(s[it.key])]);
+          if (!opts.some(([v]) => v === s[it.key])) opts.push([s[it.key], !this.isCards && (it.key === 'startMoney' || it.key === 'salary') ? fmt(s[it.key]) : String(s[it.key])]);
           ctrl = h('select.input.sm', { disabled: !editable, onchange: (e) => this.saveSettings({ [it.key]: Number(e.target.value) }) }, opts.map(([v, l]) => h('option', { value: v, selected: v === s[it.key] }, l)));
         }
         grp.append(h('div.set-row', h('div.set-label', it.label, it.hint ? h('small', it.hint) : null), ctrl));
@@ -530,7 +538,16 @@ class RoomView {
   }
 
   // ================================================================= jeu
+  get isCards() {
+    return this.room && this.room.kind === 'cartes';
+  }
+
   buildGame() {
+    if (this.isCards) {
+      this.cards = new CardTable(this);
+      this.cards.build();
+      return;
+    }
     const cells = this.meta.cells;
     this.board = h('div.board');
     this.cellEls = cells.map((c, i) => {
@@ -939,6 +956,7 @@ class RoomView {
   }
 
   renderToolbar() {
+    if (this.cards) return this.cards.renderToolbar();
     if (!this.toolbar) return;
     const me = this.player(this.me);
     this.toolbar.innerHTML = '';
@@ -962,6 +980,7 @@ class RoomView {
   }
 
   showRules() {
+    if (this.cards) return this.cards.showRules();
     const s = this.room.settings;
     const yes = (b) => (b ? '✅' : '❌');
     modal({
@@ -979,12 +998,14 @@ class RoomView {
   }
 
   async forfeit() {
+    if (this.cards) return this.cards.forfeit();
     const ok = await modal({ title: '🏳️ Abandonner ?', body: h('p', 'Vous serez déclaré(e) en faillite et vos propriétés retourneront à la banque.'), buttons: [{ label: 'Annuler', value: false }, { label: 'Abandonner', value: true, class: 'danger' }] });
     if (ok) this.cmd('game:forfeit');
   }
 
   // ----------------------------------------------------- flux de mises à jour
   onUpdate(payload) {
+    if (this.cards) return this.cards.onUpdate(payload);
     const st = payload.state;
     this.clockOffset = st.serverNow - Date.now();
     if (payload.sync || !this.state) {
@@ -1458,6 +1479,7 @@ class RoomView {
   }
 
   placePawns(animate) {
+    if (this.cards || !this.board) return;
     if (!this.state) return;
     if (this.b3) {
       return this.b3.placePawns(
@@ -1663,6 +1685,7 @@ class RoomView {
   }
 
   onEmote({ key, emoji }) {
+    if (this.cards) return this.cards.onEmote({ key, emoji });
     const sp = this.fxPoint(key);
     if (sp) {
       const b = h('div.fx-float.fx-emote', emoji);
@@ -2161,6 +2184,7 @@ class RoomView {
   }
 
   updateTimer() {
+    if (this.cards) return this.cards.updateTimer();
     if (!document.hidden && document.title.startsWith('🎲')) document.title = 'MyPoly';
     const st = this.state;
     if (!st || st.over) return;
@@ -2192,6 +2216,7 @@ class RoomView {
 
   // ------------------------------------------------------------ fin de partie
   renderEnd() {
+    if (this.cards) return this.cards.renderEnd();
     if (!this.endOverlay || !this.room || this.room.state !== 'ended' || this.busy) return;
     const res = this.room.result;
     if (!res || !this.state) return;

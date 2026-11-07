@@ -63,6 +63,7 @@ app.get('/api/meta', (_req, res) => {
     vipColors: U.VIP_COLORS,
     defaults: DEFAULTS,
     limits: LIMITS,
+    cardDefaults: require('./cartes/settings').DEFAULTS,
   });
 });
 

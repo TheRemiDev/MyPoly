@@ -3,6 +3,7 @@ import { $, h, api, toast, modal, roleTags, nameClass, fmt, timeAgo, duration, s
 import { store, connectSocket, on, emit, guestName, savedSettings } from './store.js';
 import * as Sound from './sound.js';
 import { renderRoom } from './game.js';
+import { cardEl } from './cartes.js';
 
 const app = $('#app');
 let cleanup = null;
@@ -124,6 +125,19 @@ function heroBoard() {
   );
 }
 
+/** Petit éventail de cartes pour le choix du jeu. */
+function miniCards() {
+  const wrap = h('span', { style: { position: 'relative', width: '54px', height: '54px', display: 'block' } });
+  [['r', '7', -16, 6], ['b', '+2', 0, 12], ['y', '5', 16, 18]].forEach(([c, v, rot, x]) => {
+    const el = cardEl({ id: 0, c, v });
+    el.style.transform = `rotate(${rot}deg)`;
+    el.style.left = x + 'px';
+    el.style.top = '4px';
+    wrap.append(el);
+  });
+  return wrap;
+}
+
 async function homePage() {
   const guestsOk = !store.site || store.site.guestsAllowed !== false;
   const needAccount = !store.user && !guestsOk;
@@ -152,11 +166,12 @@ async function homePage() {
     }
     return true;
   }
+  let kind = storage('game') === 'cartes' ? 'cartes' : 'poly';
   async function create(bots) {
     if (!saveGuest()) return;
     await new Promise((r) => (store.socket.connected ? r() : store.socket.once('connect', r)));
-    // Les règles enregistrées par le joueur sont appliquées à chaque nouvelle salle
-    const res = await emit('room:create', { settings: savedSettings() || {}, bots });
+    // Les règles enregistrées par le joueur sont appliquées à chaque nouvelle salle (MyPoly)
+    const res = await emit('room:create', { kind, settings: kind === 'cartes' ? {} : savedSettings() || {}, bots });
     if (res.needAccount) return navigate('/register');
     if (res.error) return toast(res.error, 'error');
     navigate('/r/' + res.code);
@@ -188,14 +203,20 @@ async function homePage() {
       roomsBox.append(
         h('div.room-card' + (r.state !== 'lobby' ? '.live' : ''),
           h('div.room-card-top',
-            h('div.room-card-name', r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
+            h('div.room-card-name', h('span.room-card-kind', r.kind === 'cartes' ? '🃏 Carton !' : '🎲 MyPoly'), r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
             h('span.room-card-state', r.state === 'lobby' ? '🟢 En attente' : '🔴 En jeu')
           ),
-          h('div.room-card-meta',
-            h('span', '💰 ' + fmt(r.settings.startMoney)),
-            h('span', '⏱️ ' + (r.settings.turnTime ? r.settings.turnTime + ' s' : '∞')),
-            h('span', r.settings.takeover ? '🤝 Rachat' : '🚫 Sans rachat')
-          ),
+          r.kind === 'cartes'
+            ? h('div.room-card-meta',
+                h('span', '🃏 ' + r.settings.startCards + ' cartes'),
+                h('span', '⏱️ ' + (r.settings.turnTime ? r.settings.turnTime + ' s' : '∞')),
+                h('span', r.settings.targetScore ? '🏆 ' + r.settings.targetScore + ' pts' : '🏁 1 manche')
+              )
+            : h('div.room-card-meta',
+                h('span', '💰 ' + fmt(r.settings.startMoney)),
+                h('span', '⏱️ ' + (r.settings.turnTime ? r.settings.turnTime + ' s' : '∞')),
+                h('span', r.settings.takeover ? '🤝 Rachat' : '🚫 Sans rachat')
+              ),
           h('div.room-card-bottom',
             h('div.room-dots', dots, h('small', `${r.players}/${r.max}`)),
             r.state === 'lobby'
@@ -233,14 +254,32 @@ async function homePage() {
           h('small.muted', 'Tu joues en invité. ', h('a', { href: '/register', 'data-link': true }, 'Crée un compte'), ' pour garder tes victoires, badges et statistiques.')
         );
 
+  const pickBox = h('div.game-pick');
+  const botsLabel = h('small');
+  function renderPick() {
+    pickBox.innerHTML = '';
+    const opt = (k, art, title, sub) => h('button.game-pick-btn' + (kind === k ? '.on' : ''), { onclick: () => {
+      kind = k;
+      storage('game', k);
+      renderPick();
+    } }, h('span.gp-art', art), h('span', h('b', title), h('small', sub)));
+    pickBox.append(
+      opt('poly', '🎲', 'MyPoly', 'Le jeu de plateau : achète le monde'),
+      opt('cartes', miniCards(), 'Carton !', 'Le jeu de cartes : vide ta main en premier')
+    );
+    botsLabel.textContent = kind === 'cartes' ? 'Carton ! contre 3 bots' : 'Contre 3 bots, tout de suite';
+  }
+  renderPick();
   const playSection = h('section.play2#jouer',
     h('div.play-main.card',
       who,
+      h('div.set-group-title', 'Choisis ton jeu'),
+      pickBox,
       h('div.play-tiles',
         h('button.play-tile.t-create', { onclick: () => create(0), disabled: needAccount },
           h('span.play-tile-icon', '✨'), h('b', 'Salle privée'), h('small', 'Invite tes amis avec un code ou un lien')),
         h('button.play-tile.t-bots', { onclick: () => create(3), disabled: needAccount },
-          h('span.play-tile-icon', '🤖'), h('b', 'Partie rapide'), h('small', 'Contre 3 bots, tout de suite')),
+          h('span.play-tile-icon', '🤖'), h('b', 'Partie rapide'), botsLabel),
         h('div.play-tile.t-join',
           h('span.play-tile-icon', '🔑'), h('b', 'Rejoindre une salle'),
           h('div.join-inline', codeInput, h('button.btn.accent', { onclick: () => join(), disabled: needAccount }, 'Go'))
@@ -257,7 +296,7 @@ async function homePage() {
     h('div.page.home2',
       h('section.hero2',
         h('div.hero2-text',
-          h('span.eyebrow', '🎲 Jeu de plateau multijoueur · 100 % gratuit'),
+          h('span.eyebrow', '🎲 Plateau + 🃏 cartes multijoueur · 100 % gratuit'),
           h('h1.hero2-title', 'Achète le monde.', h('br'), h('span', 'Ruine tes amis.')),
           h('p.hero2-sub', 'Villes du monde entier, maisons qui poussent en 3D, rachats sans pitié et monopoles explosifs. Crée une salle, envoie le code à tes potes, c\'est parti !'),
           h('div.hero2-cta',
@@ -267,7 +306,7 @@ async function homePage() {
           h('div.hero2-live',
             h('span.live-chip', h('i.live-dot'), onlineEl, ' en ligne'),
             h('span.live-chip', '🎲 ', playingEl, ' partie(s) publique(s) en cours'),
-            h('span.live-chip', '👥 2 à 4 joueurs')
+            h('span.live-chip', '👥 2 à 6 joueurs')
           )
         ),
         heroBoard()
@@ -289,6 +328,7 @@ async function homePage() {
           feature('👑', '4 façons de gagner', 'Faillite, triple monopole, monopole de ligne ou balnéaire.', '#ffd166'),
           feature('✈️', 'Voyage en avion', 'Depuis l\'Aéroport, saute en parachute sur la case de ton choix.', '#3fa7ff'),
           feature('⚙️', 'Tes règles', 'Argent, chrono, rachat, monopoles… et enregistre tes réglages préférés.', '#2ecc71'),
+          feature('🃏', 'Carton ! inclus', 'Envie d\'une partie rapide ? Le jeu de cartes où il faut vider sa main… et crier « Carton ! ».', '#ff7ac6'),
           feature('🎲', '100 % aléatoire', 'Dés et cartes tirés côté serveur. Rien n\'est truqué, rien n\'est scripté.', '#ff5a5f')
         )
       ),
@@ -369,7 +409,7 @@ function authPage(mode) {
 
 // --------------------------------------------------------------- classement
 async function leaderboardPage() {
-  const tabs = [['rating', 'Classement'], ['wins', 'Victoires'], ['winrate', '% victoires'], ['games', 'Parties'], ['best', 'Record fortune'], ['xp', 'Expérience']];
+  const tabs = [['rating', 'Classement'], ['wins', 'Victoires'], ['winrate', '% victoires'], ['games', 'Parties'], ['best', 'Record fortune'], ['xp', 'Expérience'], ['cartes', '🃏 Carton !']];
   let sort = 'rating';
   const table = h('div.lb-table');
   const tabBox = h('div.tabs');
@@ -381,7 +421,7 @@ async function leaderboardPage() {
     table.innerHTML = '';
     if (!players.length) return table.append(h('div.empty', 'Aucun joueur classé pour le moment. Soyez le premier !'));
     players.forEach((p, i) => {
-      const val = { rating: p.rating + ' pts', wins: p.wins + ' victoires', winrate: p.winrate + ' %', games: p.games + ' parties', best: fmt(p.best_networth), xp: p.xp + ' XP' }[sort];
+      const val = { rating: p.rating + ' pts', wins: p.wins + ' victoires', winrate: p.winrate + ' %', games: p.games + ' parties', best: fmt(p.best_networth), xp: p.xp + ' XP', cartes: p.wins + ' victoire' + (p.wins > 1 ? 's' : '') }[sort];
       table.append(
         h('a.lb-row' + (i < 3 ? '.top' + (i + 1) : ''), { href: '/joueur/' + p.id, 'data-link': true },
           h('div.lb-rank', i < 3 ? ['🥇', '🥈', '🥉'][i] : '#' + (i + 1)),
@@ -409,7 +449,7 @@ async function profilePage(key) {
     box.append(h('div.empty', '😕 ' + e.message));
     return;
   }
-  const { user: u, stats: s, badges, history } = data;
+  const { user: u, stats: s, cards: cs, badges, history } = data;
   const mine = store.user && store.user.id === u.id;
   const owned = new Map(badges.map((b) => [b.badge, b.earned_at]));
   const xpCur = (u.level - 1) ** 2 * 100;
@@ -442,6 +482,19 @@ async function profilePage(key) {
       stat('💰', fmt(s.rent_earned || 0), 'Loyers encaissés'),
       stat('⏱️', duration(s.play_seconds || 0), 'Temps de jeu')
     ),
+    cs && cs.games ? h('div.card', h('h2', '🃏 Carton !'),
+      h('div.stat-grid',
+        stat('🎴', cs.games, 'Parties jouées'),
+        stat('🏆', cs.wins, 'Victoires'),
+        stat('📈', Math.round((100 * cs.wins) / cs.games) + ' %', 'Taux de victoire'),
+        stat('🔥', cs.best_streak, 'Meilleure série'),
+        stat('🃏', cs.cards_played, 'Cartes posées'),
+        stat('😈', cs.plus4, 'Super Jokers +4'),
+        stat('📣', cs.cartons, '« Carton ! » criés'),
+        stat('🐆', cs.catches, 'Oublis attrapés'),
+        stat('🌋', cs.best_hit, 'Plus grosse pioche infligée'),
+        stat('⏱️', duration(cs.play_seconds || 0), 'Temps de jeu')
+      )) : null,
     h('div.card', h('h2', `🎖️ Badges (${badges.length}/${store.meta.badges.length})`),
       h('div.badge-grid', store.meta.badges.map((b) => {
         const at = owned.get(b.id);
@@ -453,8 +506,8 @@ async function profilePage(key) {
         ? h('div.history', history.map((g) =>
             h('div.history-row.' + (g.rank === 1 ? 'won' : 'lost'),
               h('div.history-rank', g.rank === 1 ? '🏆' : '#' + g.rank),
-              h('div.history-main', h('div', g.players.map((p) => p.name).join(' · ')), h('small.muted', `${timeAgo(g.ended_at)} · ${duration(g.duration)} · ${g.rounds} tours · ${winLabel(g.win_type)}`)),
-              h('div.history-delta.' + (g.rating_delta >= 0 ? 'pos' : 'neg'), (g.rating_delta >= 0 ? '+' : '') + g.rating_delta)
+              h('div.history-main', h('div', g.players.map((p) => p.name).join(' · ')), h('small.muted', `${timeAgo(g.ended_at)} · ${duration(g.duration)} · ${g.rounds} ${g.win_type === 'cartes' ? 'manche(s)' : 'tours'} · ${winLabel(g.win_type)}`)),
+              g.win_type === 'cartes' ? h('div.history-delta', '🃏') : h('div.history-delta.' + (g.rating_delta >= 0 ? 'pos' : 'neg'), (g.rating_delta >= 0 ? '+' : '') + g.rating_delta)
             )))
         : h('div.empty', 'Aucune partie jouée pour l\'instant.')
     )
@@ -464,7 +517,7 @@ function stat(icon, value, label) {
   return h('div.stat', h('div.stat-icon', icon), h('div.stat-value', String(value)), h('div.stat-label', label));
 }
 export function winLabel(t) {
-  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés' }[t] || t || '—';
+  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés', cartes: '🃏 Carton !', forfeit: 'Abandon des adversaires' }[t] || t || '—';
 }
 
 // --------------------------------------------------------------- paramètres
@@ -567,7 +620,7 @@ function rulesPage() {
         h('span.eyebrow', '📖 Règles du jeu'),
         h('h1', 'Deviens le magnat le plus riche'),
         h('p.muted', 'Tout ce qu\'il faut savoir en 2 minutes. Les règles marquées « réglables » se modifient dans le salon de la partie.'),
-        h('nav.chips', ...sections.map((x) => h('a.chip', { href: '#' + x.id, onclick: (e) => { e.preventDefault(); document.getElementById(x.id).scrollIntoView({ behavior: 'smooth' }); } }, x.icon + ' ' + x.title)))
+        h('nav.chips', ...[...sections, { id: 'carton', icon: '🃏', title: 'Carton !' }].map((x) => h('a.chip', { href: '#' + x.id, onclick: (e) => { e.preventDefault(); document.getElementById(x.id).scrollIntoView({ behavior: 'smooth' }); } }, x.icon + ' ' + x.title)))
       ),
       h('section.win-grid',
         h('h2.section-title', '🏆 4 façons de gagner'),
@@ -578,6 +631,19 @@ function rulesPage() {
         h('div.rule-body', { html: x.body }),
         x.tip ? h('div.rule-tip', '💡 ' + x.tip) : null
       )),
+      h('section.rule-card.carton-rules#carton', { style: { '--rc': '#ff7ac6' } },
+        h('div.rule-head', h('span.rule-icon', '🃏'), h('h2', 'Carton ! — le jeu de cartes')),
+        h('div.rule-body',
+          h('p', 'Choisis « Carton ! » sur l\'accueil pour une partie rapide de 2 à 6 joueurs. Pose une carte de la même ', h('b', 'couleur'), ' ou du même ', h('b', 'symbole'), ' que celle du dessus. Le premier qui vide sa main gagne !'),
+          h('div.ct-rules-cards',
+            ...[[{ c: 'r', v: 'skip' }, 'Stop', 'Le joueur suivant passe son tour'], [{ c: 'b', v: 'rev' }, 'Demi-tour', 'Le sens du jeu s\'inverse'], [{ c: 'g', v: '+2' }, '+2', 'Le suivant pioche 2 cartes et passe'], [{ c: 'w', v: 'wild' }, 'Joker', 'Tu choisis la couleur'], [{ c: 'w', v: '+4' }, 'Super Joker +4', 'Tu choisis la couleur, le suivant pioche 4']]
+              .map(([c, t, d]) => h('div.ct-rule', cardEl({ id: 0, ...c }, '.tiny'), h('div', h('b', t), h('small', d))))
+          ),
+          h('p', '📣 Avec ta dernière carte en main, crie ', h('b', '« CARTON ! »'), ' (bouton ou touche C). Si tu oublies, n\'importe quel adversaire peut te prendre : tu pioches 2 cartes.'),
+          h('p.muted', 'Réglables : cartes au départ, chrono, cumul des +2/+4, pioche jusqu\'à pouvoir jouer, règle du 7 (échange de main) et du 0 (les mains tournent), partie en une manche ou en points.')
+        ),
+        h('div.rule-tip', '💡 Garde tes Jokers pour la fin : ils se posent sur n\'importe quoi.')
+      ),
       h('section.cta-band',
         h('div', h('h2', 'C\'est parti ?'), h('p', 'Crée une salle et invite tes amis en un clic.')),
         h('a.btn.primary.xl', { href: '/', 'data-link': true }, '🎲 Jouer maintenant')
