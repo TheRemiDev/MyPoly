@@ -150,12 +150,20 @@ router.patch('/me', requireAuth, async (req, res) => {
 
 // Règles de partie enregistrées pour les prochaines salles
 router.put('/me/settings', requireAuth, (req, res) => {
-  const { sanitize } = require('./game/settings');
   const body = req.body || {};
+  const cards = body.kind === 'cartes';
+  // Chaque jeu a ses propres règles enregistrées
+  const col = cards ? 'saved_card_settings' : 'saved_settings';
   if (body.settings === null) {
-    db.prepare('UPDATE users SET saved_settings = NULL WHERE id = ?').run(req.user.id);
+    db.prepare(`UPDATE users SET ${col} = NULL WHERE id = ?`).run(req.user.id);
     return res.json({ user: me(U.getUser(req.user.id)) });
   }
+  if (cards) {
+    const c = require('./cartes/settings').sanitize(body.settings);
+    db.prepare('UPDATE users SET saved_card_settings = ? WHERE id = ?').run(JSON.stringify(c), req.user.id);
+    return res.json({ user: me(U.getUser(req.user.id)) });
+  }
+  const { sanitize } = require('./game/settings');
   const s = sanitize(body.settings);
   if (req.user.role !== 'admin') {
     delete s.melenchon;
@@ -165,16 +173,16 @@ router.put('/me/settings', requireAuth, (req, res) => {
   res.json({ user: me(U.getUser(req.user.id)) });
 });
 
-function savedOf(u) {
+function savedOf(u, col = 'saved_settings') {
   try {
-    return u.saved_settings ? JSON.parse(u.saved_settings) : null;
+    return u[col] ? JSON.parse(u[col]) : null;
   } catch {
     return null;
   }
 }
 
 function me(u) {
-  return { ...U.publicUser(u), username: u.username, displayName: u.display_name || null, email: u.email, staff: U.isStaff(u), savedSettings: savedOf(u) };
+  return { ...U.publicUser(u), username: u.username, displayName: u.display_name || null, email: u.email, staff: U.isStaff(u), savedSettings: savedOf(u), savedCardSettings: savedOf(u, 'saved_card_settings') };
 }
 
 module.exports = { router, attachUser, requireAuth, requireStaff, userFromToken, parseCookie, createUser, COOKIE, me };

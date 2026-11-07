@@ -52,7 +52,9 @@ const q = {
   stats: db.prepare('SELECT * FROM stats WHERE user_id = ?'),
   badges: db.prepare('SELECT badge, earned_at FROM user_badges WHERE user_id = ? ORDER BY earned_at'),
   history: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
-    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? ORDER BY g.id DESC LIMIT 20`),
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') != 'cartes' ORDER BY g.id DESC LIMIT 20`),
+  historyCards: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'cartes' ORDER BY g.id DESC LIMIT 20`),
 };
 
 function getUser(id) {
@@ -85,8 +87,10 @@ function profile(key) {
   const stats = q.stats.get(u.id) || {};
   const cards = cardStats.get(u.id) || null;
   const badges = q.badges.all(u.id);
-  const history = q.history.all(u.id).map((h) => ({ ...h, players: JSON.parse(h.players) }));
-  return { user: publicUser(u), stats, cards, badges, history };
+  const parse = (h) => ({ ...h, players: JSON.parse(h.players) });
+  const history = q.history.all(u.id).map(parse);
+  const historyCards = q.historyCards.all(u.id).map(parse);
+  return { user: publicUser(u), stats, cards, badges, history, historyCards };
 }
 
 const insertGame = db.prepare(`INSERT INTO games (room_code, started_at, ended_at, duration, rounds, win_type, winner_name, winner_user_id, settings, players)
@@ -216,11 +220,15 @@ const recordCardGame = db.transaction((room, result, settings) => {
 });
 
 function leaderboard(sort = 'rating', limit = 50) {
-  if (sort === 'cartes') {
+  // Classements de « Carton ! » (tables séparées de MyPoly)
+  if (sort === 'cartes' || sort.startsWith('c_')) {
+    const ccols = { cartes: 'c.wins', c_wins: 'c.wins', c_winrate: 'winrate', c_games: 'c.games', c_streak: 'c.best_streak', c_cards: 'c.cards_played' };
+    const ccol = ccols[sort] || 'c.wins';
     return db
-      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, c.games, c.wins, c.best_streak,
+      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, c.games, c.wins, c.best_streak, c.cards_played,
         CASE WHEN c.games > 0 THEN ROUND(100.0 * c.wins / c.games, 1) ELSE 0 END AS winrate
-        FROM card_stats c JOIN users u ON u.id = c.user_id WHERE u.banned = 0 AND c.games > 0 ORDER BY c.wins DESC, winrate DESC LIMIT ?`)
+        FROM card_stats c JOIN users u ON u.id = c.user_id WHERE u.banned = 0 AND c.games > 0 ${sort === 'c_winrate' ? 'AND c.games >= 5' : ''}
+        ORDER BY ${ccol} DESC, c.wins DESC LIMIT ?`)
       .all(limit)
       .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
   }

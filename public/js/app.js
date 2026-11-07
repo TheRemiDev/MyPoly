@@ -171,7 +171,7 @@ async function homePage() {
     if (!saveGuest()) return;
     await new Promise((r) => (store.socket.connected ? r() : store.socket.once('connect', r)));
     // Les règles enregistrées par le joueur sont appliquées à chaque nouvelle salle (MyPoly)
-    const res = await emit('room:create', { kind, settings: kind === 'cartes' ? {} : savedSettings() || {}, bots });
+    const res = await emit('room:create', { kind, settings: savedSettings(kind) || {}, bots });
     if (res.needAccount) return navigate('/register');
     if (res.error) return toast(res.error, 'error');
     navigate('/r/' + res.code);
@@ -409,19 +409,34 @@ function authPage(mode) {
 
 // --------------------------------------------------------------- classement
 async function leaderboardPage() {
-  const tabs = [['rating', 'Classement'], ['wins', 'Victoires'], ['winrate', '% victoires'], ['games', 'Parties'], ['best', 'Record fortune'], ['xp', 'Expérience'], ['cartes', '🃏 Carton !']];
-  let sort = 'rating';
+  // Un classement par jeu
+  const TABS = {
+    poly: [['rating', 'Classement'], ['wins', 'Victoires'], ['winrate', '% victoires'], ['games', 'Parties'], ['best', 'Record fortune'], ['xp', 'Expérience']],
+    cartes: [['c_wins', 'Victoires'], ['c_winrate', '% victoires'], ['c_games', 'Parties'], ['c_streak', 'Meilleure série'], ['c_cards', 'Cartes posées']],
+  };
+  let game = storage('game') === 'cartes' ? 'cartes' : 'poly';
+  let sort = TABS[game][0][0];
   const table = h('div.lb-table');
   const tabBox = h('div.tabs');
+  const gameTabs = h('div.game-switch');
   async function load() {
+    gameTabs.innerHTML = '';
+    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !']]) {
+      gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => {
+        game = k;
+        sort = TABS[k][0][0];
+        load();
+      } }, h('span.gs-icon', icon), h('b', label), h('small', k === 'poly' ? 'Jeu de plateau' : 'Jeu de cartes')));
+    }
     tabBox.innerHTML = '';
-    for (const [k, l] of tabs) tabBox.append(h('button.tab' + (k === sort ? '.active' : ''), { onclick: () => ((sort = k), load()) }, l));
+    for (const [k, l] of TABS[game]) tabBox.append(h('button.tab' + (k === sort ? '.active' : ''), { onclick: () => ((sort = k), load()) }, l));
     table.innerHTML = '<div class="muted">Chargement…</div>';
     const { players } = await api('/leaderboard?sort=' + sort);
     table.innerHTML = '';
     if (!players.length) return table.append(h('div.empty', 'Aucun joueur classé pour le moment. Soyez le premier !'));
     players.forEach((p, i) => {
-      const val = { rating: p.rating + ' pts', wins: p.wins + ' victoires', winrate: p.winrate + ' %', games: p.games + ' parties', best: fmt(p.best_networth), xp: p.xp + ' XP', cartes: p.wins + ' victoire' + (p.wins > 1 ? 's' : '') }[sort];
+      const val = { rating: p.rating + ' pts', wins: p.wins + ' victoires', winrate: p.winrate + ' %', games: p.games + ' parties', best: fmt(p.best_networth), xp: p.xp + ' XP',
+        c_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), c_winrate: p.winrate + ' %', c_games: p.games + ' parties', c_streak: p.best_streak + ' d\'affilée', c_cards: p.cards_played + ' cartes' }[sort];
       table.append(
         h('a.lb-row' + (i < 3 ? '.top' + (i + 1) : ''), { href: '/joueur/' + p.id, 'data-link': true },
           h('div.lb-rank', i < 3 ? ['🥇', '🥈', '🥉'][i] : '#' + (i + 1)),
@@ -433,7 +448,7 @@ async function leaderboardPage() {
       );
     });
   }
-  app.append(h('div.page', h('h1.page-title', '🏆 Classement'), tabBox, table));
+  app.append(h('div.page', h('h1.page-title', '🏆 Classement'), gameTabs, tabBox, table));
   load();
 }
 
@@ -455,7 +470,19 @@ async function profilePage(key) {
   const xpCur = (u.level - 1) ** 2 * 100;
   const xpNext = u.level ** 2 * 100;
   const pct = Math.min(100, ((u.xp - xpCur) / (xpNext - xpCur)) * 100);
-  const winrate = s.games ? Math.round((100 * s.wins) / s.games) : 0;
+  // Un onglet par jeu : statistiques, badges et historique bien séparés
+  let game = (cs && cs.games > (s.games || 0)) ? 'cartes' : 'poly';
+  const gameTabs = h('div.game-switch');
+  const gameBox = h('div.profile-game');
+  const ctx = { s, cs, owned, history, historyCards: data.historyCards || [] };
+  const render = () => {
+    gameTabs.innerHTML = '';
+    for (const [k, icon, label, n] of [['poly', '🎲', 'MyPoly', s.games || 0], ['cartes', '🃏', 'Carton !', (cs && cs.games) || 0]]) {
+      gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => ((game = k), render()) }, h('span.gs-icon', icon), h('b', label), h('small', `${n} partie${n > 1 ? 's' : ''}`)));
+    }
+    gameBox.innerHTML = '';
+    gameBox.append(...profileGame(game, ctx));
+  };
   box.innerHTML = '';
   box.append(
     h('div.card.profile-head' + (u.vip ? '.vip' : ''),
@@ -468,50 +495,71 @@ async function profilePage(key) {
       ),
       mine ? h('a.btn.ghost', { href: '/settings', 'data-link': true }, '⚙️ Personnaliser') : null
     ),
-    h('div.stat-grid',
-      stat('🏅', s.rating ?? 1000, 'Points de classement'),
-      stat('🎮', s.games || 0, 'Parties jouées'),
-      stat('🏆', s.wins || 0, 'Victoires'),
-      stat('📈', winrate + ' %', 'Taux de victoire'),
-      stat('🔥', s.best_streak || 0, 'Meilleure série'),
-      stat('💎', fmt(s.best_networth || 0), 'Record de fortune'),
-      stat('🥊', s.knockouts || 0, 'Faillites provoquées'),
-      stat('🏠', s.properties_bought || 0, 'Propriétés achetées'),
-      stat('🏗️', s.houses_built || 0, 'Bâtiments construits'),
-      stat('🦈', s.takeovers || 0, 'Rachats'),
-      stat('💰', fmt(s.rent_earned || 0), 'Loyers encaissés'),
-      stat('⏱️', duration(s.play_seconds || 0), 'Temps de jeu')
-    ),
-    cs && cs.games ? h('div.card', h('h2', '🃏 Carton !'),
-      h('div.stat-grid',
-        stat('🎴', cs.games, 'Parties jouées'),
-        stat('🏆', cs.wins, 'Victoires'),
-        stat('📈', Math.round((100 * cs.wins) / cs.games) + ' %', 'Taux de victoire'),
-        stat('🔥', cs.best_streak, 'Meilleure série'),
-        stat('🃏', cs.cards_played, 'Cartes posées'),
-        stat('😈', cs.plus4, 'Super Jokers +4'),
-        stat('📣', cs.cartons, '« Carton ! » criés'),
-        stat('🐆', cs.catches, 'Oublis attrapés'),
-        stat('🌋', cs.best_hit, 'Plus grosse pioche infligée'),
-        stat('⏱️', duration(cs.play_seconds || 0), 'Temps de jeu')
-      )) : null,
-    h('div.card', h('h2', `🎖️ Badges (${badges.length}/${store.meta.badges.length})`),
-      h('div.badge-grid', store.meta.badges.map((b) => {
+    gameTabs,
+    gameBox
+  );
+  render();
+}
+
+/** Contenu du profil propre à un jeu : statistiques, badges et dernières parties. */
+function profileGame(game, { s, cs, owned, history, historyCards }) {
+  const cards = game === 'cartes';
+  const c = cs || {};
+  const pct = (w, g) => (g ? Math.round((100 * w) / g) : 0) + ' %';
+  const grid = cards
+    ? h('div.stat-grid',
+        stat('🎴', c.games || 0, 'Parties jouées'),
+        stat('🏆', c.wins || 0, 'Victoires'),
+        stat('📈', pct(c.wins, c.games), 'Taux de victoire'),
+        stat('🔥', c.best_streak || 0, 'Meilleure série'),
+        stat('🏁', c.rounds_won || 0, 'Manches gagnées'),
+        stat('🃏', c.cards_played || 0, 'Cartes posées'),
+        stat('😈', c.plus4 || 0, 'Super Jokers +4'),
+        stat('📣', c.cartons || 0, '« Carton ! » criés'),
+        stat('🐆', c.catches || 0, 'Oublis attrapés'),
+        stat('🙈', c.caught || 0, 'Fois pris sans crier'),
+        stat('🌋', c.best_hit || 0, 'Plus grosse pioche infligée'),
+        stat('⏱️', duration(c.play_seconds || 0), 'Temps de jeu')
+      )
+    : h('div.stat-grid',
+        stat('🏅', s.rating ?? 1000, 'Points de classement'),
+        stat('🎮', s.games || 0, 'Parties jouées'),
+        stat('🏆', s.wins || 0, 'Victoires'),
+        stat('📈', pct(s.wins, s.games), 'Taux de victoire'),
+        stat('🔥', s.best_streak || 0, 'Meilleure série'),
+        stat('💎', fmt(s.best_networth || 0), 'Record de fortune'),
+        stat('🥊', s.knockouts || 0, 'Faillites provoquées'),
+        stat('🏠', s.properties_bought || 0, 'Propriétés achetées'),
+        stat('🏗️', s.houses_built || 0, 'Bâtiments construits'),
+        stat('🦈', s.takeovers || 0, 'Rachats'),
+        stat('💰', fmt(s.rent_earned || 0), 'Loyers encaissés'),
+        stat('⏱️', duration(s.play_seconds || 0), 'Temps de jeu')
+      );
+  const list = store.meta.badges.filter((b) => (b.game === 'cartes') === cards);
+  const got = list.filter((b) => owned.has(b.id)).length;
+  const hist = cards ? historyCards : history;
+  return [
+    grid,
+    h('div.card', h('h2', `🎖️ Badges ${cards ? 'Carton !' : 'MyPoly'} (${got}/${list.length})`),
+      h('div.badge-grid', list.map((b) => {
         const at = owned.get(b.id);
         return h('div.badge.tier-' + b.tier + (at ? '' : '.locked'), { title: b.desc + (at ? ` — obtenu ${timeAgo(at)}` : '') }, h('div.badge-icon', b.icon), h('div.badge-name', b.name), h('div.badge-desc', b.desc));
       }))
     ),
-    h('div.card', h('h2', '📜 Dernières parties'),
-      history.length
-        ? h('div.history', history.map((g) =>
+    h('div.card', h('h2', `📜 Dernières parties de ${cards ? 'Carton !' : 'MyPoly'}`),
+      hist.length
+        ? h('div.history', hist.map((g) =>
             h('div.history-row.' + (g.rank === 1 ? 'won' : 'lost'),
               h('div.history-rank', g.rank === 1 ? '🏆' : '#' + g.rank),
-              h('div.history-main', h('div', g.players.map((p) => p.name).join(' · ')), h('small.muted', `${timeAgo(g.ended_at)} · ${duration(g.duration)} · ${g.rounds} ${g.win_type === 'cartes' ? 'manche(s)' : 'tours'} · ${winLabel(g.win_type)}`)),
-              g.win_type === 'cartes' ? h('div.history-delta', '🃏') : h('div.history-delta.' + (g.rating_delta >= 0 ? 'pos' : 'neg'), (g.rating_delta >= 0 ? '+' : '') + g.rating_delta)
+              h('div.history-main', h('div', g.players.map((p) => p.name).join(' · ')),
+                h('small.muted', cards
+                  ? `${timeAgo(g.ended_at)} · ${duration(g.duration)} · ${g.rounds} manche${g.rounds > 1 ? 's' : ''}`
+                  : `${timeAgo(g.ended_at)} · ${duration(g.duration)} · ${g.rounds} tours · ${winLabel(g.win_type)}`)),
+              cards ? h('div.history-delta', g.rank === 1 ? '🃏' : '') : h('div.history-delta.' + (g.rating_delta >= 0 ? 'pos' : 'neg'), (g.rating_delta >= 0 ? '+' : '') + g.rating_delta)
             )))
-        : h('div.empty', 'Aucune partie jouée pour l\'instant.')
-    )
-  );
+        : h('div.empty', cards ? 'Aucune partie de Carton ! pour l\'instant.' : 'Aucune partie de MyPoly pour l\'instant.')
+    ),
+  ];
 }
 function stat(icon, value, label) {
   return h('div.stat', h('div.stat-icon', icon), h('div.stat-value', String(value)), h('div.stat-label', label));

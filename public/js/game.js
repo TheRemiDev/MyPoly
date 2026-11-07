@@ -385,28 +385,34 @@ class RoomView {
   }
 
   /** Règles à comparer : sans les options propres à la salle elle-même. */
+  get ruleDefaults() {
+    return this.isCards ? this.meta.cardDefaults : this.meta.defaults;
+  }
+  get kind() {
+    return this.isCards ? 'cartes' : 'poly';
+  }
   rulesKey(s) {
-    const d = { ...this.meta.defaults, ...(s || {}) };
-    return JSON.stringify(Object.keys(this.meta.defaults).sort().map((k) => [k, d[k]]));
+    const def = this.ruleDefaults;
+    const d = { ...def, ...(s || {}) };
+    return JSON.stringify(Object.keys(def).sort().map((k) => [k, d[k]]));
   }
   /** Vrai si les règles de la salle diffèrent à la fois des règles par défaut et des règles enregistrées. */
   rulesUnsaved() {
-    if (this.isCards) return false;
     const cur = this.rulesKey(this.room.settings);
-    return cur !== this.rulesKey(this.meta.defaults) && cur !== this.rulesKey(savedSettings());
+    return cur !== this.rulesKey(this.ruleDefaults) && cur !== this.rulesKey(savedSettings(this.kind));
   }
   async saveRules(settings) {
     const clean = settings ? { ...settings } : null;
     if (store.user) {
       try {
-        const res = await api('/auth/me/settings', { method: 'PUT', body: { settings: clean } });
+        const res = await api('/auth/me/settings', { method: 'PUT', body: { settings: clean, kind: this.kind } });
         store.user = res.user;
       } catch (e) {
         toast(e.message, 'error');
         return false;
       }
-    } else storage('savedSettings', clean ? JSON.stringify(clean) : null);
-    toast(clean ? '💾 Règles enregistrées pour vos prochaines parties' : 'Règles par défaut rétablies pour vos prochaines parties', 'success');
+    } else storage(this.isCards ? 'savedCardSettings' : 'savedSettings', clean ? JSON.stringify(clean) : null);
+    toast(clean ? `💾 Règles enregistrées pour vos prochaines parties de ${this.isCards ? 'Carton !' : 'MyPoly'}` : `Règles par défaut rétablies pour vos prochaines parties de ${this.isCards ? 'Carton !' : 'MyPoly'}`, 'success');
     this.rulesDismissed = false;
     this.renderSettings();
     return true;
@@ -415,7 +421,7 @@ class RoomView {
     if (this.isHost && this.rulesUnsaved() && !this.rulesDismissed) {
       const v = await modal({
         title: '💾 Enregistrer ces règles ?',
-        body: h('p', 'Vous avez personnalisé les règles de cette partie. Voulez-vous les réutiliser automatiquement pour vos prochaines salles ?'),
+        body: h('p', `Vous avez personnalisé les règles de cette partie. Voulez-vous les réutiliser automatiquement pour vos prochaines salles de ${this.isCards ? 'Carton !' : 'MyPoly'} ?`),
         buttons: [{ label: 'Non merci', value: 'no' }, { label: 'Enregistrer', value: 'yes', class: 'primary' }],
       });
       if (v === null) return;
@@ -431,7 +437,7 @@ class RoomView {
     const editable = this.isHost;
     box.innerHTML = '';
     if (editable) {
-      const saved = savedSettings();
+      const saved = savedSettings(this.kind);
       if (this.rulesUnsaved() && !this.rulesDismissed) {
         box.append(h('div.rules-save',
           h('span', '💾 Règles personnalisées'),

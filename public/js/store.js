@@ -9,10 +9,11 @@ export const store = {
 };
 
 /** Règles enregistrées : sur le compte si connecté, sinon dans ce navigateur. */
-export function savedSettings() {
-  if (store.user) return store.user.savedSettings || null;
+/** Règles enregistrées par le joueur, propres à chaque jeu ('poly' ou 'cartes'). */
+export function savedSettings(kind = 'poly') {
+  if (store.user) return (kind === 'cartes' ? store.user.savedCardSettings : store.user.savedSettings) || null;
   try {
-    return JSON.parse(storage('savedSettings') || 'null');
+    return JSON.parse(storage(kind === 'cartes' ? 'savedCardSettings' : 'savedSettings') || 'null');
   } catch {
     return null;
   }
