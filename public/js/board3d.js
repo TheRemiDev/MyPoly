@@ -173,6 +173,8 @@ export class Board3D {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.1, 300);
     this.target = new THREE.Vector3(0, 0, 0.25);
+    this.homeTarget = this.target.clone();
+    this.focusTok = 0;
 
     this.buildLights();
     this.buildTable();
@@ -842,52 +844,109 @@ export class Board3D {
     return g;
   }
 
+  housePositions(level) {
+    return level === 4 || level === 1 ? [0.55] : level === 2 ? [0.35, 0.75] : [0.2, 0.55, 0.9];
+  }
+  placeBuilding(i, level, color, f) {
+    const a = this.bandAnchor(i);
+    const obj = level === 4 ? this.makeHotel(color) : this.makeHouse(color);
+    obj.userData.base = level === 4 ? 1.2 : 1.15;
+    obj.scale.setScalar(obj.userData.base);
+    const p = a.a.clone().lerp(a.b, f);
+    obj.position.set(p.x, TOP, p.z);
+    if (!a.horiz) obj.rotation.y = Math.PI / 2;
+    this.scene.add(obj);
+    return obj;
+  }
+
   syncBuildings(i, owner, level) {
     const c = this.meta.cells[i];
     if (c.type !== 'city' && c.type !== 'resort') return;
+    const anim = this.animateBuilds;
     const cur = this.buildings[i] || { level: 0, color: null, objs: [] };
     const color = owner ? owner.color : null;
     const wantLevel = owner && c.type === 'city' ? level : 0;
-    // Drapeau de propriété (terrain sans bâtiment ou station)
+
+    // Drapeau de propriété (terrain nu ou station balnéaire)
     const wantFlag = owner && wantLevel === 0;
     const fl = this.flags[i];
-    if (wantFlag && (!fl || fl.color !== color)) {
-      if (fl) this.removeObj(fl.obj);
-      const obj = this.makeFlag(color);
-      const b = cellBox(i);
-      const anchor = c.type === 'city' ? this.bandAnchor(i) : null;
-      const p = anchor ? anchor.a.clone().lerp(anchor.b, 0.55) : new THREE.Vector3(b.cx + b.w * 0.28, 0, b.cz - b.d * 0.25);
-      obj.position.set(p.x, TOP, p.z);
-      this.scene.add(obj);
-      if (this.animateBuilds) {
-        obj.scale.setScalar(0.01);
-        this.tween(500, (t) => obj.scale.setScalar(Math.max(0.01, ease.back(t))));
-      }
-      this.flags[i] = { obj, color };
-    } else if (!wantFlag && fl) {
-      this.removeObj(fl.obj);
+    if (fl && (!wantFlag || fl.color !== color)) {
+      if (anim) this.toppleFlag(fl.obj);
+      else this.scene.remove(fl.obj);
       delete this.flags[i];
     }
+    if (wantFlag && !this.flags[i]) {
+      const obj = this.makeFlag(color);
+      const bx = cellBox(i);
+      const anchor = c.type === 'city' ? this.bandAnchor(i) : null;
+      const p = anchor ? anchor.a.clone().lerp(anchor.b, 0.55) : new THREE.Vector3(bx.cx + bx.w * 0.28, 0, bx.cz - bx.d * 0.25);
+      obj.position.set(p.x, TOP, p.z);
+      this.scene.add(obj);
+      if (anim) {
+        // Le drapeau est planté : il tombe du ciel et se fiche dans la case
+        obj.position.y = TOP + 1.2;
+        this.tween(450, (t) => (obj.position.y = TOP + 1.2 * (1 - ease.bounce(t))), fl ? 350 : 0).then(() => this.dust(obj.position, new THREE.Color(color).getHex()));
+      }
+      this.flags[i] = { obj, color };
+    }
+
     if (cur.level === wantLevel && cur.color === color) return;
-    // Couleur changée (rachat) : on reconstruit sans animation de chute
-    const recolor = cur.color && color && cur.color !== color && cur.level === wantLevel;
-    for (const o of cur.objs) recolor ? this.scene.remove(o) : this.removeObj(o);
     const objs = [];
-    if (wantLevel > 0) {
-      const a = this.bandAnchor(i);
-      const positions = wantLevel === 4 ? [0.55] : wantLevel === 1 ? [0.55] : wantLevel === 2 ? [0.35, 0.75] : [0.2, 0.55, 0.9];
-      positions.forEach((f, k) => {
-        const obj = wantLevel === 4 ? this.makeHotel(color) : this.makeHouse(color);
-        obj.userData.base = wantLevel === 4 ? 1.2 : 1.15;
-        obj.scale.setScalar(obj.userData.base);
-        const p = a.a.clone().lerp(a.b, f);
-        obj.position.set(p.x, TOP, p.z);
-        if (!a.horiz) obj.rotation.y = Math.PI / 2;
-        this.scene.add(obj);
+    const positions = this.housePositions(wantLevel);
+
+    if (cur.objs.length && !color) {
+      // Propriété perdue (vente, faillite) : tout est démoli
+      cur.objs.forEach((o, k) => (anim ? this.explode(o, cur.color, k * 160) : this.scene.remove(o)));
+    } else if (cur.color && color && cur.color !== color) {
+      // Rachat : les bâtiments sont repeints aux couleurs du nouveau propriétaire
+      cur.objs.forEach((o) => this.scene.remove(o));
+      positions.slice(0, wantLevel ? positions.length : 0).forEach((f, k) => {
+        const obj = this.placeBuilding(i, wantLevel, color, f);
         objs.push(obj);
-        const isNew = !recolor && (wantLevel === 4 || k >= cur.level || cur.color !== color);
-        if (isNew && this.animateBuilds) this.animateBuild(obj, k * 140, wantLevel === 4);
+        if (anim) {
+          const base = obj.userData.base;
+          this.tween(600, (t) => {
+            obj.rotation.y = (1 - ease.out(t)) * Math.PI * 2 + (this.bandAnchor(i).horiz ? 0 : Math.PI / 2);
+            obj.scale.setScalar(base * (0.6 + 0.4 * ease.back(t)));
+          }, k * 120).then(() => this.sparkle(obj.position, new THREE.Color(color).getHex(), 10));
+        }
       });
+    } else if (color && wantLevel < cur.level) {
+      // Perte de niveau (séisme) : les bâtiments en trop s'effondrent
+      if (cur.level === 4) {
+        cur.objs.forEach((o) => (anim ? this.explode(o, color, 0) : this.scene.remove(o)));
+        positions.slice(0, wantLevel).forEach((f, k) => {
+          const obj = this.placeBuilding(i, wantLevel, color, f);
+          objs.push(obj);
+          if (anim) this.animateBuild(obj, 700 + k * 120, false);
+        });
+      } else {
+        cur.objs.slice(wantLevel).forEach((o) => (anim ? this.explode(o, color, 0) : this.scene.remove(o)));
+        const keep = cur.objs.slice(0, wantLevel);
+        const a = this.bandAnchor(i);
+        keep.forEach((o, k) => {
+          const to = a.a.clone().lerp(a.b, positions[k]);
+          const from = o.position.clone();
+          if (anim) this.tween(400, (t) => {
+            o.position.x = from.x + (to.x - from.x) * ease.inOut(t);
+            o.position.z = from.z + (to.z - from.z) * ease.inOut(t);
+          }, 500);
+          else o.position.set(to.x, TOP, to.z);
+          objs.push(o);
+        });
+      }
+    } else {
+      // Construction : les nouveaux bâtiments tombent du ciel
+      const upgradeToHotel = wantLevel === 4 && cur.level > 0 && cur.level < 4;
+      cur.objs.forEach((o) => (upgradeToHotel && anim ? this.removeObj(o) : this.scene.remove(o)));
+      if (wantLevel > 0) {
+        positions.forEach((f, k) => {
+          const obj = this.placeBuilding(i, wantLevel, color, f);
+          objs.push(obj);
+          const isNew = wantLevel === 4 || k >= cur.level || cur.color !== color;
+          if (isNew && anim) this.animateBuild(obj, (upgradeToHotel ? 350 : 0) + Math.max(0, k - cur.level) * 160, wantLevel === 4);
+        });
+      }
     }
     this.buildings[i] = { level: wantLevel, color, objs };
   }
@@ -914,6 +973,124 @@ export class Board3D {
       });
       this.wait(delay + 260).then(() => this.dust(obj.position));
     }
+  }
+
+  /** Démolition : le bâtiment tremble, puis éclate en débris et fumée. */
+  explode(obj, color, delay = 0) {
+    const pos = obj.position.clone();
+    const k = obj.scale.x;
+    return this.tween(320, (t) => {
+      obj.position.x = pos.x + Math.sin(t * 70) * 0.035 * (1 - t * 0.3);
+      obj.position.z = pos.z + Math.cos(t * 63) * 0.035 * (1 - t * 0.3);
+      obj.rotation.z = Math.sin(t * 40) * 0.08;
+    }, delay).then(() => {
+      this.scene.remove(obj);
+      this.debris(pos, color || '#999999', k);
+      this.smoke(pos);
+      this.shockwave(pos, 0xff4757);
+      if (this.cb.onDemolish) this.cb.onDemolish();
+    });
+  }
+  debris(pos, color, k = 1) {
+    const geo = new THREE.BoxGeometry(0.07, 0.07, 0.07);
+    const mats = [color, shade(color, -0.25), '#f4f4f4', '#7a6a58'].map((c) => new THREE.MeshStandardMaterial({ color: new THREE.Color(c), roughness: 0.6, transparent: true }));
+    for (let n = 0; n < 18; n++) {
+      const m = new THREE.Mesh(geo, mats[n % mats.length]);
+      m.castShadow = true;
+      m.scale.setScalar((0.6 + Math.random() * 0.9) * k);
+      const start = new THREE.Vector3(pos.x + (Math.random() - 0.5) * 0.2, TOP + 0.1 + Math.random() * 0.3, pos.z + (Math.random() - 0.5) * 0.2);
+      const v = new THREE.Vector3((Math.random() - 0.5) * 2.2, 1.4 + Math.random() * 1.6, (Math.random() - 0.5) * 2.2);
+      const spin = new THREE.Vector3(Math.random() * 12, Math.random() * 12, Math.random() * 12);
+      m.position.copy(start);
+      this.scene.add(m);
+      this.tween(1200, (t) => {
+        const tt = t * 1.1;
+        m.position.x = start.x + v.x * tt * 0.6;
+        m.position.z = start.z + v.z * tt * 0.6;
+        m.position.y = Math.max(TOP + 0.03, start.y + v.y * tt - 4.5 * tt * tt);
+        m.rotation.set(spin.x * t, spin.y * t, spin.z * t);
+        m.material.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+      }).then(() => this.scene.remove(m));
+    }
+  }
+  smoke(pos) {
+    const geo = new THREE.SphereGeometry(0.12, 10, 8);
+    for (let n = 0; n < 9; n++) {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xb8b2a8, transparent: true, opacity: 0.55, depthWrite: false }));
+      const a = (n / 9) * Math.PI * 2;
+      m.position.set(pos.x, TOP + 0.1, pos.z);
+      this.scene.add(m);
+      this.tween(1100, (t) => {
+        m.position.set(pos.x + Math.cos(a) * 0.3 * ease.out(t), TOP + 0.1 + t * 0.6, pos.z + Math.sin(a) * 0.3 * ease.out(t));
+        m.scale.setScalar(1 + t * 2.2);
+        m.material.opacity = 0.55 * (1 - t);
+      }, n * 25).then(() => this.scene.remove(m));
+    }
+  }
+  shockwave(pos, color) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.16, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(pos.x, TOP + 0.02, pos.z);
+    this.scene.add(m);
+    return this.tween(700, (t) => {
+      m.scale.setScalar(1 + ease.out(t) * 6);
+      m.material.opacity = 0.9 * (1 - t);
+    }).then(() => this.scene.remove(m));
+  }
+  toppleFlag(obj) {
+    this.tween(550, (t) => {
+      obj.rotation.z = -ease.bounce(t) * Math.PI * 0.5;
+    }).then(() => this.tween(300, (t) => obj.scale.setScalar(Math.max(0.01, 1 - t)))).then(() => this.scene.remove(obj));
+  }
+
+  /** Étiquette 3D qui jaillit au-dessus d'une case (VENDU, HÔTEL !, RACHETÉ…). */
+  label(i, text, bg = '#ff4757', fg = '#fff') {
+    const b = cellBox(i);
+    const sp = this.textSprite(text, { bg, fg, size: 58, scale: 0.55 });
+    sp.material.depthTest = false;
+    sp.renderOrder = 20;
+    sp.position.set(b.cx, TOP + 0.7, b.cz);
+    this.scene.add(sp);
+    const w = sp.scale.x;
+    const h = sp.scale.y;
+    return this.tween(1900, (t) => {
+      const pop = t < 0.18 ? ease.back(t / 0.18) : 1;
+      sp.scale.set(w * pop, h * pop, 1);
+      sp.position.y = TOP + 0.7 + (t > 0.55 ? (t - 0.55) * 1.6 : 0);
+      sp.material.opacity = t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1;
+    }).then(() => this.scene.remove(sp));
+  }
+
+  /** Recadre brièvement la caméra sur une case pour montrer l'action. */
+  async focus(i, hold = 700, zoom = 1.55) {
+    if (this.dragging) return;
+    const tok = ++this.focusTok;
+    if (!this.focusHome) this.focusHome = { target: this.target.clone(), zoom: this.view.zoom };
+    const b = cellBox(i);
+    const fromT = this.target.clone();
+    const fromZ = this.view.zoom;
+    const toT = new THREE.Vector3(b.cx * 0.7, 0, b.cz * 0.7 + 0.15);
+    const toZ = Math.max(this.focusHome.zoom, zoom);
+    await this.tween(450, (t) => {
+      if (tok !== this.focusTok) return;
+      const e = ease.inOut(t);
+      this.target.lerpVectors(fromT, toT, e);
+      this.view.zoom = fromZ + (toZ - fromZ) * e;
+      this.fitCamera();
+    });
+    await this.wait(hold);
+    if (tok !== this.focusTok) return;
+    const home = this.focusHome;
+    const t1 = this.target.clone();
+    const z1 = this.view.zoom;
+    await this.tween(550, (t) => {
+      if (tok !== this.focusTok) return;
+      const e = ease.inOut(t);
+      this.target.lerpVectors(t1, home.target, e);
+      this.view.zoom = z1 + (home.zoom - z1) * e;
+      this.fitCamera();
+    });
+    if (tok === this.focusTok) this.focusHome = null;
   }
 
   removeObj(obj) {
@@ -1121,7 +1298,7 @@ export class Board3D {
       this.shake(0.8);
       this.dust(new THREE.Vector3(t.box.cx, 0, t.box.cz), 0x8d6e63);
     }
-    t.flash = new THREE.Color(kind === 'rent' ? '#ff4757' : kind === 'festival' ? '#ff2fb3' : color || '#ffffff');
+    t.flash = new THREE.Color(kind === 'rent' || kind === 'destroy' ? '#ff4757' : kind === 'festival' ? '#ff2fb3' : color || '#ffffff');
     t.flashT = 1;
     t.lift = 0.12;
     if (kind === 'takeover') this.sparkle(new THREE.Vector3(t.box.cx, 0, t.box.cz), new THREE.Color(color || '#fff').getHex(), 16);
@@ -1216,8 +1393,8 @@ export class Board3D {
     let hi = 60;
     for (let it = 0; it < 22; it++) {
       const d = (lo + hi) / 2;
-      this.camera.position.copy(this.target).addScaledVector(dir, d);
-      this.camera.lookAt(this.target);
+      this.camera.position.copy(this.homeTarget).addScaledVector(dir, d);
+      this.camera.lookAt(this.homeTarget);
       this.camera.updateMatrixWorld();
       this.camera.updateProjectionMatrix();
       let m = 0;
@@ -1234,11 +1411,15 @@ export class Board3D {
     this.camera.updateProjectionMatrix();
   }
   resetView() {
+    this.focusTok++;
+    this.focusHome = null;
+    const fromT = this.target.clone();
     const from = { ...this.view };
     const to = { yaw: 0, pitch: this.basePitch || 1.02, zoom: 1 };
     this.tween(500, (t) => {
       const e = ease.inOut(t);
       this.view = { yaw: from.yaw + (to.yaw - from.yaw) * e, pitch: from.pitch + (to.pitch - from.pitch) * e, zoom: from.zoom + (to.zoom - from.zoom) * e };
+      this.target.lerpVectors(fromT, this.homeTarget, e);
       this.fitCamera();
     });
   }
@@ -1265,6 +1446,7 @@ export class Board3D {
       el.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, yaw: this.view.yaw, pitch: this.view.pitch, moved: 0 };
+      this.dragging = true;
       if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: this.view.zoom };
@@ -1297,6 +1479,7 @@ export class Board3D {
     const up = (e) => {
       pointers.delete(e.pointerId);
       if (pointers.size < 2) pinch = null;
+      if (!pointers.size) this.dragging = false;
       if (drag && drag.moved <= 6 && e.type === 'pointerup') {
         const i = pick(e);
         if (i >= 0 && this.cb.onClick) this.cb.onClick(i);
