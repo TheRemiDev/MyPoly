@@ -650,6 +650,10 @@ class RoomView {
    */
   announce({ icon, title, text, color = '#3fa7ff', kind = 'info', ms = 2800, pid = this.evPid }) {
     if (!this.notifStacks || document.hidden) return;
+    // Temps de lecture : au moins 6 s, plus long selon la quantité de texte (pique comprise)
+    const quip = this.quipFor(this.evType);
+    const chars = (title || '').length + (text || '').length + (quip || '').length;
+    ms = Math.min(14000, Math.max(ms * 2, 6000, 2500 + chars * 70));
     const narrow = matchMedia('(max-aspect-ratio: 5/4)').matches;
     const cardEl = pid && this.playersEl ? this.playersEl.querySelector(`[data-pid="${CSS.escape(pid)}"]`) : null;
     const corner = cardEl ? ['tl', 'tr', 'bl', 'br'].find((k) => cardEl.classList.contains('c-' + k)) : null;
