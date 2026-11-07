@@ -7,6 +7,14 @@ import { Board3D, webglAvailable } from './board3d.js';
 import { melenchonURL } from './melenchon.js';
 import { drawLogo } from './logo.js';
 import { CardTable, CARD_SETTINGS_UI, CARD_PRESETS } from './cartes.js';
+import { HorseTable, HORSE_SETTINGS_UI, HORSE_PRESETS } from './chevaux.js';
+
+/** Les jeux du site : nom, étiquette, réglages et préréglages. */
+const GAMES = {
+  poly: { name: 'MyPoly', tag: '🎲 MyPoly', store: 'savedSettings', share: 'Rejoins ma partie de MyPoly !' },
+  cartes: { name: 'Carton !', tag: '🃏 Carton !', store: 'savedCardSettings', share: 'Rejoins ma partie de Carton ! sur MyPoly' },
+  chevaux: { name: 'Petits chevaux', tag: '🐴 Petits chevaux', store: 'savedHorseSettings', share: 'Rejoins ma course de Petits chevaux sur MyPoly' },
+};
 import { MusicPlayer } from './music.js';
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
@@ -307,7 +315,7 @@ class RoomView {
           h('div.invite',
             h('div.invite-label', 'Code de la salle'),
             h('div.invite-code', { title: 'Copier le code', onclick: () => copy(this.code, 'Code copié !') }, this.code),
-            h('button.btn.accent', { onclick: () => (navigator.share ? navigator.share({ title: 'MyPoly', text: this.isCards ? 'Rejoins ma partie de Carton ! sur MyPoly' : 'Rejoins ma partie de MyPoly !', url: link }).catch(() => {}) : copy(link, 'Lien d\'invitation copié !')) }, '🔗 Inviter des amis')
+            h('button.btn.accent', { onclick: () => (navigator.share ? navigator.share({ title: 'MyPoly', text: GAMES[this.kind].share, url: link }).catch(() => {}) : copy(link, 'Lien d\'invitation copié !')) }, '🔗 Inviter des amis')
           )
         ),
         h('div.lobby-grid',
@@ -331,7 +339,7 @@ class RoomView {
       const input = h('input.input.room-name', { value: r.name, maxlength: 40, onchange: (e) => this.saveSettings({}, e.target.value) });
       els.title.append(input);
     } else els.title.append(h('h1', r.name));
-    els.title.prepend(h('div.game-kind-tag.' + (this.isCards ? 'k-cartes' : 'k-poly'), this.isCards ? '🃏 Carton !' : '🎲 MyPoly'));
+    els.title.prepend(h('div.game-kind-tag.k-' + this.kind, GAMES[this.kind].tag));
     els.title.append(h('div.muted', `${r.seats.length}/${r.settings.maxPlayers} joueurs${r.spectators ? ` · ${r.spectators} spectateur(s)` : ''}`));
 
     // Sièges
@@ -385,28 +393,36 @@ class RoomView {
   }
 
   /** Règles à comparer : sans les options propres à la salle elle-même. */
+  get ruleDefaults() {
+    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults }[this.kind];
+  }
+  get kind() {
+    const k = this.room && this.room.kind;
+    return GAMES[k] ? k : 'poly';
+  }
   rulesKey(s) {
-    const d = { ...this.meta.defaults, ...(s || {}) };
-    return JSON.stringify(Object.keys(this.meta.defaults).sort().map((k) => [k, d[k]]));
+    const def = this.ruleDefaults;
+    const d = { ...def, ...(s || {}) };
+    return JSON.stringify(Object.keys(def).sort().map((k) => [k, d[k]]));
   }
   /** Vrai si les règles de la salle diffèrent à la fois des règles par défaut et des règles enregistrées. */
   rulesUnsaved() {
-    if (this.isCards) return false;
     const cur = this.rulesKey(this.room.settings);
-    return cur !== this.rulesKey(this.meta.defaults) && cur !== this.rulesKey(savedSettings());
+    return cur !== this.rulesKey(this.ruleDefaults) && cur !== this.rulesKey(savedSettings(this.kind));
   }
   async saveRules(settings) {
     const clean = settings ? { ...settings } : null;
     if (store.user) {
       try {
-        const res = await api('/auth/me/settings', { method: 'PUT', body: { settings: clean } });
+        const res = await api('/auth/me/settings', { method: 'PUT', body: { settings: clean, kind: this.kind } });
         store.user = res.user;
       } catch (e) {
         toast(e.message, 'error');
         return false;
       }
-    } else storage('savedSettings', clean ? JSON.stringify(clean) : null);
-    toast(clean ? '💾 Règles enregistrées pour vos prochaines parties' : 'Règles par défaut rétablies pour vos prochaines parties', 'success');
+    } else storage(GAMES[this.kind].store, clean ? JSON.stringify(clean) : null);
+    const gname = GAMES[this.kind].name;
+    toast(clean ? `💾 Règles enregistrées pour vos prochaines parties de ${gname}` : `Règles par défaut rétablies pour vos prochaines parties de ${gname}`, 'success');
     this.rulesDismissed = false;
     this.renderSettings();
     return true;
@@ -415,7 +431,7 @@ class RoomView {
     if (this.isHost && this.rulesUnsaved() && !this.rulesDismissed) {
       const v = await modal({
         title: '💾 Enregistrer ces règles ?',
-        body: h('p', 'Vous avez personnalisé les règles de cette partie. Voulez-vous les réutiliser automatiquement pour vos prochaines salles ?'),
+        body: h('p', `Vous avez personnalisé les règles de cette partie. Voulez-vous les réutiliser automatiquement pour vos prochaines salles de ${GAMES[this.kind].name} ?`),
         buttons: [{ label: 'Non merci', value: 'no' }, { label: 'Enregistrer', value: 'yes', class: 'primary' }],
       });
       if (v === null) return;
@@ -431,7 +447,7 @@ class RoomView {
     const editable = this.isHost;
     box.innerHTML = '';
     if (editable) {
-      const saved = savedSettings();
+      const saved = savedSettings(this.kind);
       if (this.rulesUnsaved() && !this.rulesDismissed) {
         box.append(h('div.rules-save',
           h('span', '💾 Règles personnalisées'),
@@ -447,10 +463,10 @@ class RoomView {
         ));
       }
     }
-    if (editable) box.append(h('div.presets', Object.entries(this.isCards ? CARD_PRESETS : PRESETS).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
+    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
-    const groups = (this.isCards ? CARD_SETTINGS_UI : SETTINGS_UI).slice();
-    if (!this.isCards && (isAdmin || s.melenchon || s.politicalBoard)) {
+    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI }[this.kind]).slice();
+    if (this.kind === 'poly' && (isAdmin || s.melenchon || s.politicalBoard)) {
       groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' },
         { key: 'politicalBoard', label: 'Plateau politique', type: 'toggle', admin: true, hint: 'Plateau satirique : ZAD, Syndicat, Ministère des Taxes, Exil fiscal… et cartes Chance assorties' }] });
     }
@@ -462,7 +478,7 @@ class RoomView {
           ctrl = h('label.switch', h('input', { type: 'checkbox', checked: !!s[it.key], disabled: !editable || (it.admin && !isAdmin), onchange: (e) => this.saveSettings({ [it.key]: e.target.checked }) }), h('span.slider'));
         } else {
           const opts = it.options.slice();
-          if (!opts.some(([v]) => v === s[it.key])) opts.push([s[it.key], !this.isCards && (it.key === 'startMoney' || it.key === 'salary') ? fmt(s[it.key]) : String(s[it.key])]);
+          if (!opts.some(([v]) => v === s[it.key])) opts.push([s[it.key], this.kind === 'poly' && (it.key === 'startMoney' || it.key === 'salary') ? fmt(s[it.key]) : String(s[it.key])]);
           ctrl = h('select.input.sm', { disabled: !editable, onchange: (e) => this.saveSettings({ [it.key]: Number(e.target.value) }) }, opts.map(([v, l]) => h('option', { value: v, selected: v === s[it.key] }, l)));
         }
         grp.append(h('div.set-row', h('div.set-label', it.label, it.hint ? h('small', it.hint) : null), ctrl));
@@ -543,8 +559,9 @@ class RoomView {
   }
 
   buildGame() {
-    if (this.isCards) {
-      this.cards = new CardTable(this);
+    // Jeux de table (cartes, chevaux) : la vue dédiée remplace le plateau MyPoly
+    if (this.kind !== 'poly') {
+      this.cards = new (this.kind === 'chevaux' ? HorseTable : CardTable)(this);
       this.cards.build();
       return;
     }

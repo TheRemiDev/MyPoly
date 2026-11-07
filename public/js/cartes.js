@@ -107,7 +107,10 @@ export class CardTable {
     </svg>` });
     this.pendingEl = h('div.ct-pending', { hidden: true });
     this.deckCount = h('div.ct-deck-count');
-    this.center = h('div.ct-center', this.dirEl, this.colorEl, h('div.ct-piles', h('div.ct-deck-wrap', this.deckEl, this.deckCount), this.discardEl), this.pendingEl);
+    // Arène centrale : anneau lumineux (tourne dans le sens du jeu) et pointeur vers le joueur actif
+    this.arena = h('div.ct-arena', h('div.ct-arena-ring'), h('div.ct-arena-disc'));
+    this.pointer = h('div.ct-pointer', h('i'));
+    this.center = h('div.ct-center', this.arena, this.pointer, this.dirEl, this.colorEl, h('div.ct-piles', h('div.ct-deck-wrap', this.deckEl, this.deckCount), this.discardEl), this.pendingEl);
     this.seatsEl = h('div.ct-seats');
     this.felt = h('div.ct-felt', this.center, this.seatsEl);
     this.handEl = h('div.ct-hand');
@@ -133,7 +136,15 @@ export class CardTable {
     v.pop = null;
     v.endOverlay = h('div.end-overlay', { hidden: true });
     v.playersEl = h('div.ct-layer', this.felt, this.meZone);
-    v.gameEl = h('div.game.cards-game', h('div.ct-room', v.playersEl), this.fx, this.banner, h('div.topbar', v.toolbar, v.popover));
+    // Décor vivant : halos de couleur, sol néon, particules
+    const sparks = Array.from({ length: 26 }, () => h('i.ct-spark', { style: {
+      left: Math.random() * 100 + '%',
+      '--s': (2 + Math.random() * 4).toFixed(1) + 'px',
+      '--d': (9 + Math.random() * 14).toFixed(1) + 's',
+      '--delay': (-Math.random() * 20).toFixed(1) + 's',
+    } }));
+    this.bg = h('div.ct-bg', h('i.ct-blob.b1'), h('i.ct-blob.b2'), h('i.ct-blob.b3'), h('div.ct-floor'), h('div.ct-sparks', sparks));
+    v.gameEl = h('div.game.cards-game', this.bg, h('div.ct-room', v.playersEl), this.fx, this.banner, h('div.topbar', v.toolbar, v.popover));
     v.root.append(v.gameEl, v.endOverlay);
     v.renderTabs();
     v.renderChat();
@@ -150,6 +161,7 @@ export class CardTable {
       if (!this.state || this.busy) return;
       this.renderSeats();
       this.renderHand();
+      this.aimPointer();
     };
     window.addEventListener('resize', this.onResize);
   }
@@ -277,6 +289,40 @@ export class CardTable {
     this.renderHand();
     this.renderActions();
     this.renderToolbar();
+    this.aimPointer();
+  }
+
+  /** Oriente le faisceau de l'arène vers le joueur dont c'est le tour. */
+  aimPointer() {
+    const st = this.state;
+    const ptr = this.pointer;
+    if (!st || !ptr) return;
+    // Vers un adversaire uniquement : quand c'est mon tour, ma main et « À VOUS ! » suffisent
+    const id = st.over || st.phase === 'roundEnd' || st.current === this.me ? null : st.current;
+    const target = id === this.me ? this.handEl : id ? this.seatsEl.querySelector(`.ct-seat[data-pid="${CSS.escape(id)}"] .ct-badge`) : null;
+    if (!target) {
+      ptr.classList.remove('on');
+      return;
+    }
+    requestAnimationFrame(() => {
+      const c = this.center.getBoundingClientRect();
+      const t = target.getBoundingClientRect();
+      const cx = c.left + c.width / 2;
+      const cy = c.top + c.height / 2;
+      const dx = t.left + t.width / 2 - cx;
+      const dy = t.top + t.height / 2 - cy;
+      let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+      // Rotation par le plus court chemin
+      const prev = this.ptrDeg ?? deg;
+      deg = prev + ((((deg - prev) % 360) + 540) % 360) - 180;
+      this.ptrDeg = deg;
+      const p = this.player(id);
+      ptr.style.setProperty('--pc', p ? p.color : '#fff');
+      const half = id === this.me ? t.height / 2 : Math.max(t.width, t.height) / 2;
+      ptr.style.setProperty('--len', Math.max(40, Math.hypot(dx, dy) - half - 10) + 'px');
+      ptr.style.transform = `rotate(${deg}deg)`;
+      ptr.classList.add('on');
+    });
   }
 
   addLog(l, silent) {
@@ -308,7 +354,7 @@ export class CardTable {
       });
     }
     // Plaques posées sur le rebord de la table (en pourcentage du tapis)
-    const L = { l: [0, 46, 'l'], r: [100, 46, 'r'], t: [50, 0, 't'], tl: [24, 2, 't'], tr: [76, 2, 't'], tl2: [33, 0, 't'], tr2: [67, 0, 't'], t1: [40, 0, 't'], t2: [60, 0, 't'] };
+    const L = { l: [0, 48, 'l'], r: [100, 48, 'r'], t: [50, 5, 't'], tl: [22, 9, 't'], tr: [78, 9, 't'], tl2: [32, 6, 't'], tr2: [68, 6, 't'], t1: [39, 5, 't'], t2: [61, 5, 't'] };
     const map = { 1: ['t'], 2: ['tl2', 'tr2'], 3: ['l', 't', 'r'], 4: ['l', 'tl2', 'tr2', 'r'], 5: ['l', 'tl', 't', 'tr', 'r'], 6: ['l', 'tl', 't1', 't2', 'tr', 'r'] };
     return (map[n] || map[5]).map((k) => L[k]);
   }
@@ -399,6 +445,9 @@ export class CardTable {
       this.discardEl.append(el);
     });
     this.colorEl.style.setProperty('--cc', CCOLORS[d.color] || '#fff');
+    // Toute l'ambiance prend la couleur en cours
+    this.v.gameEl.style.setProperty('--cc', CCOLORS[d.color] || '#a66bff');
+    this.arena.classList.toggle('ccw', d.dir < 0);
     this.colorEl.dataset.name = CNAMES[d.color] || '';
     this.dirEl.classList.toggle('ccw', d.dir < 0);
     this.dirEl.style.setProperty('--cc', CCOLORS[d.color] || '#fff');

@@ -1,6 +1,6 @@
 'use strict';
 const db = require('./db');
-const { BADGES, evaluate, evaluateCards } = require('./badges');
+const { BADGES, evaluate, evaluateCards, evaluateHorses } = require('./badges');
 
 const PAWNS = ['🎩', '🚗', '🐕', '🚀', '🐱', '⛵', '🎸', '🦖', '🐧', '🍀', '⚽', '🎯'];
 const VIP_PAWNS = ['👑', '💎', '🦄', '🐉', '🦁', '🛸', '🔥', '⭐'];
@@ -52,7 +52,11 @@ const q = {
   stats: db.prepare('SELECT * FROM stats WHERE user_id = ?'),
   badges: db.prepare('SELECT badge, earned_at FROM user_badges WHERE user_id = ? ORDER BY earned_at'),
   history: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
-    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? ORDER BY g.id DESC LIMIT 20`),
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux') ORDER BY g.id DESC LIMIT 20`),
+  historyHorses: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'chevaux' ORDER BY g.id DESC LIMIT 20`),
+  historyCards: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'cartes' ORDER BY g.id DESC LIMIT 20`),
 };
 
 function getUser(id) {
@@ -85,8 +89,12 @@ function profile(key) {
   const stats = q.stats.get(u.id) || {};
   const cards = cardStats.get(u.id) || null;
   const badges = q.badges.all(u.id);
-  const history = q.history.all(u.id).map((h) => ({ ...h, players: JSON.parse(h.players) }));
-  return { user: publicUser(u), stats, cards, badges, history };
+  const parse = (h) => ({ ...h, players: JSON.parse(h.players) });
+  const history = q.history.all(u.id).map(parse);
+  const historyCards = q.historyCards.all(u.id).map(parse);
+  const historyHorses = q.historyHorses.all(u.id).map(parse);
+  const horses = horseStats.get(u.id) || null;
+  return { user: publicUser(u), stats, cards, horses, badges, history, historyCards, historyHorses };
 }
 
 const insertGame = db.prepare(`INSERT INTO games (room_code, started_at, ended_at, duration, rounds, win_type, winner_name, winner_user_id, settings, players)
@@ -215,12 +223,70 @@ const recordCardGame = db.transaction((room, result, settings) => {
   return { gameId, rewards };
 });
 
+/** Enregistre une course de Petits chevaux : historique, statistiques, XP et badges. */
+const ensureHorseStats = db.prepare('INSERT OR IGNORE INTO horse_stats (user_id) VALUES (?)');
+const horseStats = db.prepare('SELECT * FROM horse_stats WHERE user_id = ?');
+const recordHorseGame = db.transaction((room, result, settings) => {
+  const now = Date.now();
+  const winner = result.players.find((p) => p.rank === 1);
+  const gameId = insertGame.run({
+    room_code: room,
+    started_at: now - result.duration * 1000,
+    ended_at: now,
+    duration: result.duration,
+    rounds: result.rounds,
+    win_type: 'chevaux',
+    winner_name: winner ? winner.name : null,
+    winner_user_id: winner ? winner.userId : null,
+    settings: JSON.stringify({ ...settings, kind: 'chevaux' }),
+    players: JSON.stringify(result.players.map((p) => ({ name: p.name, rank: p.rank, bot: p.isBot, userId: p.userId, netWorth: p.home }))),
+  }).lastInsertRowid;
+  const rewards = {};
+  for (const me of result.players) {
+    if (!me.userId) continue;
+    const uid = me.userId;
+    ensureHorseStats.run(uid);
+    const old = horseStats.get(uid);
+    const won = me.rank === 1;
+    const streak = won ? old.current_streak + 1 : 0;
+    const st = me.stats || {};
+    db.prepare(`UPDATE horse_stats SET games = games + 1, wins = wins + ?, horses_home = horses_home + ?, captures = captures + ?, captured = captured + ?,
+      sixes = sixes + ?, rolls = rolls + ?, current_streak = ?, best_streak = MAX(best_streak, ?), play_seconds = play_seconds + ? WHERE user_id = ?`).run(
+      won ? 1 : 0, me.home || 0, st.captures || 0, st.captured || 0, st.sixes || 0, st.rolls || 0, streak, streak, result.duration, uid
+    );
+    insertGP.run(gameId, uid, me.rank, me.home || 0, 0);
+    const xp = 15 + (won ? 60 : 0) + (st.captures || 0) * 4;
+    addXp.run(xp, uid);
+    const owned = new Set(q.badges.all(uid).map((b) => b.badge));
+    const newBadges = evaluateHorses(horseStats.get(uid), me, result, owned);
+    for (const b of newBadges) insertBadge.run(uid, b, now);
+    rewards[uid] = { xp, ratingDelta: null, badges: newBadges.map((id) => BADGES.find((b) => b.id === id)) };
+  }
+  return { gameId, rewards };
+});
+
 function leaderboard(sort = 'rating', limit = 50) {
-  if (sort === 'cartes') {
+  // Classements des Petits chevaux
+  if (sort.startsWith('h_')) {
+    const hcols = { h_wins: 'h.wins', h_winrate: 'winrate', h_games: 'h.games', h_captures: 'h.captures', h_home: 'h.horses_home' };
+    const hcol = hcols[sort] || 'h.wins';
     return db
-      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, c.games, c.wins, c.best_streak,
+      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, h.games, h.wins, h.best_streak, h.captures, h.horses_home,
+        CASE WHEN h.games > 0 THEN ROUND(100.0 * h.wins / h.games, 1) ELSE 0 END AS winrate
+        FROM horse_stats h JOIN users u ON u.id = h.user_id WHERE u.banned = 0 AND h.games > 0 ${sort === 'h_winrate' ? 'AND h.games >= 5' : ''}
+        ORDER BY ${hcol} DESC, h.wins DESC LIMIT ?`)
+      .all(limit)
+      .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
+  }
+  // Classements de « Carton ! » (tables séparées de MyPoly)
+  if (sort === 'cartes' || sort.startsWith('c_')) {
+    const ccols = { cartes: 'c.wins', c_wins: 'c.wins', c_winrate: 'winrate', c_games: 'c.games', c_streak: 'c.best_streak', c_cards: 'c.cards_played' };
+    const ccol = ccols[sort] || 'c.wins';
+    return db
+      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, c.games, c.wins, c.best_streak, c.cards_played,
         CASE WHEN c.games > 0 THEN ROUND(100.0 * c.wins / c.games, 1) ELSE 0 END AS winrate
-        FROM card_stats c JOIN users u ON u.id = c.user_id WHERE u.banned = 0 AND c.games > 0 ORDER BY c.wins DESC, winrate DESC LIMIT ?`)
+        FROM card_stats c JOIN users u ON u.id = c.user_id WHERE u.banned = 0 AND c.games > 0 ${sort === 'c_winrate' ? 'AND c.games >= 5' : ''}
+        ORDER BY ${ccol} DESC, c.wins DESC LIMIT ?`)
       .all(limit)
       .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
   }
@@ -238,4 +304,4 @@ function leaderboard(sort = 'rating', limit = 50) {
     .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
 }
 
-module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, leaderboard, BADGES };
+module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, recordHorseGame, leaderboard, BADGES };

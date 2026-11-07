@@ -102,6 +102,20 @@ CREATE TABLE IF NOT EXISTS card_stats (
   play_seconds INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS horse_stats (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  games INTEGER NOT NULL DEFAULT 0,
+  wins INTEGER NOT NULL DEFAULT 0,
+  horses_home INTEGER NOT NULL DEFAULT 0,
+  captures INTEGER NOT NULL DEFAULT 0,
+  captured INTEGER NOT NULL DEFAULT 0,
+  sixes INTEGER NOT NULL DEFAULT 0,
+  rolls INTEGER NOT NULL DEFAULT 0,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  best_streak INTEGER NOT NULL DEFAULT 0,
+  play_seconds INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor_id INTEGER,
@@ -116,6 +130,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
 if (!userCols.includes('display_name')) db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
 if (!userCols.includes('saved_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_settings TEXT');
+if (!userCols.includes('saved_card_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_card_settings TEXT');
+if (!userCols.includes('saved_horse_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_horse_settings TEXT');
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_display_name ON users(display_name COLLATE NOCASE) WHERE display_name IS NOT NULL");
 
 module.exports = db;

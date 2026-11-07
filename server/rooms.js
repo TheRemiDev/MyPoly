@@ -3,6 +3,11 @@ const crypto = require('crypto');
 const { Game } = require('./game/engine');
 const { CardGame } = require('./cartes/engine');
 const CS = require('./cartes/settings');
+const { HorseGame } = require('./chevaux/engine');
+const HS = require('./chevaux/settings');
+/** Jeux disponibles sur le site. */
+const KINDS = ['poly', 'cartes', 'chevaux'];
+const kindOf = (k) => (KINDS.includes(k) ? k : 'poly');
 const { sanitize, DEFAULTS } = require('./game/settings');
 const R = require('./game/random');
 const U = require('./users');
@@ -144,7 +149,9 @@ function musicNext(room) {
 }
 
 function sanitizeFor(kind, input, base) {
-  return kind === 'cartes' ? CS.sanitize(input, base) : sanitize(input, base);
+  if (kind === 'cartes') return CS.sanitize(input, base);
+  if (kind === 'chevaux') return HS.sanitize(input, base);
+  return sanitize(input, base);
 }
 
 function createRoom(ident, settings, kind = 'poly') {
@@ -154,7 +161,7 @@ function createRoom(ident, settings, kind = 'poly') {
     kind,
     name: `Salle de ${ident.name.replace(' (invité)', '')}`,
     host: ident.key,
-    settings: kind === 'cartes' ? CS.sanitize(settings) : { ...sanitize(settings), melenchon: ident.role === 'admin' ? !!(settings && settings.melenchon) : false, politicalBoard: ident.role === 'admin' ? !!(settings && settings.politicalBoard) : false },
+    settings: kind !== 'poly' ? sanitizeFor(kind, settings) : { ...sanitize(settings), melenchon: ident.role === 'admin' ? !!(settings && settings.melenchon) : false, politicalBoard: ident.role === 'admin' ? !!(settings && settings.politicalBoard) : false },
     state: 'lobby',
     seats: [],
     sockets: new Map(),
@@ -254,8 +261,9 @@ function startGame(room) {
     room.game.start();
     return;
   }
-  room.game = new Game({
-    players: room.seats.map((s) => ({ id: s.key, userId: s.userId, name: s.name, color: s.color, pawn: s.pawn, isBot: s.isBot, role: s.role, vip: s.vip, level: s.level })),
+  const Engine = room.kind === 'chevaux' ? HorseGame : Game;
+  room.game = new Engine({
+    players,
     settings: room.settings,
     onUpdate: (payload) => {
       touch(room);
@@ -275,10 +283,11 @@ function endGame(room, result) {
   let rewards = {};
   // On n'enregistre que des parties "réelles" (au moins 2 tours) pour éviter les abus
   const registered = result.players.some((p) => p.userId);
-  const real = room.kind === 'cartes' ? result.turns >= 6 : result.rounds >= 2;
+  const real = room.kind === 'cartes' || room.kind === 'chevaux' ? result.turns >= 6 : result.rounds >= 2;
   if (registered && real) {
     try {
-      ({ rewards } = room.kind === 'cartes' ? U.recordCardGame(room.code, result, room.settings) : U.recordGame(room.code, result, room.settings));
+      const rec = { cartes: U.recordCardGame, chevaux: U.recordHorseGame }[room.kind] || U.recordGame;
+      ({ rewards } = rec(room.code, result, room.settings));
     } catch (e) {
       console.error('[stats] erreur enregistrement partie', e);
     }
@@ -413,7 +422,7 @@ function attach(server) {
     socket.on('room:create', (data, cb) => {
       if (guestBlocked(cb)) return;
       if (rooms.size >= MAX_ROOMS) return reply(cb, { error: 'Le serveur est plein, réessayez plus tard.' });
-      const kind = data && data.kind === 'cartes' ? 'cartes' : 'poly';
+      const kind = kindOf(data && data.kind);
       const room = createRoom(ident, data && data.settings, kind);
       // L'hôte est placé en premier, puis les bots (qui prennent des pions et couleurs libres)
       seat(room, ident);
@@ -456,7 +465,7 @@ function attach(server) {
       const before = { melenchon: room.settings.melenchon, politicalBoard: room.settings.politicalBoard };
       room.settings = sanitizeFor(room.kind, data && data.settings, room.settings);
       // Options réservées : seul un administrateur peut les changer
-      if (ident.role !== 'admin' && room.kind !== 'cartes') Object.assign(room.settings, before);
+      if (ident.role !== 'admin' && room.kind === 'poly') Object.assign(room.settings, before);
       if (data && data.name) room.name = cleanText(data.name, 40) || room.name;
       while (room.seats.length > room.settings.maxPlayers) {
         const bot = [...room.seats].reverse().find((s) => s.isBot);
