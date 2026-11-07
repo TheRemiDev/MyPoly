@@ -8,6 +8,16 @@ export const store = {
   key: null, // identifiant de connexion (u:ID ou g:hash)
 };
 
+/** Règles enregistrées : sur le compte si connecté, sinon dans ce navigateur. */
+export function savedSettings() {
+  if (store.user) return store.user.savedSettings || null;
+  try {
+    return JSON.parse(storage('savedSettings') || 'null');
+  } catch {
+    return null;
+  }
+}
+
 export function guestId() {
   let id = storage('guestId');
   if (!id || !/^[a-zA-Z0-9]{16,64}$/.test(id)) {

@@ -1,6 +1,6 @@
 // Point d'entrée : routeur, navigation et pages hors partie
 import { $, h, api, toast, modal, roleTags, nameClass, fmt, timeAgo, duration, storage, esc } from './util.js';
-import { store, connectSocket, on, emit, guestName } from './store.js';
+import { store, connectSocket, on, emit, guestName, savedSettings } from './store.js';
 import * as Sound from './sound.js';
 import { renderRoom } from './game.js';
 
@@ -122,7 +122,8 @@ async function homePage() {
   async function create(bots) {
     if (!saveGuest()) return;
     await new Promise((r) => (store.socket.connected ? r() : store.socket.once('connect', r)));
-    const res = await emit('room:create', { settings: {}, bots });
+    // Les règles enregistrées par le joueur sont appliquées à chaque nouvelle salle
+    const res = await emit('room:create', { settings: savedSettings() || {}, bots });
     if (res.error) return toast(res.error, 'error');
     navigate('/r/' + res.code);
   }

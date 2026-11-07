@@ -322,6 +322,9 @@ textarea.input { resize: vertical; }
 ::-webkit-scrollbar-corner { background: transparent; }
 .set-row > :last-child { flex: none; }
 .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.rules-save { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: 12px; background: rgba(63, 167, 255, .14); border: 1px solid rgba(63, 167, 255, .45); font-weight: 700; font-size: .9rem; animation: pop .3s ease; }
+.rules-save.ok { background: rgba(46, 204, 113, .12); border-color: rgba(46, 204, 113, .45); }
+.rules-save-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .set-group-title { font-weight: 900; color: var(--gold); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
 .set-label { font-weight: 600; font-size: .92rem; }
@@ -1207,7 +1210,7 @@ body.in-game { overflow: hidden; }
 
 
 /* ------------------------------------------------- option « Mélenchon » */
-.tile-face { width: 2.6cqw; height: 2.6cqw; object-fit: contain; filter: drop-shadow(0 0.2cqw 0.2cqw rgba(0, 0, 0, .25)); }
+.tile-face { width: 2.2cqw; height: 2.2cqw; object-fit: contain; filter: drop-shadow(0 0.2cqw 0.2cqw rgba(0, 0, 0, .25)); }
 .mel-pop { position: absolute; inset: 0; z-index: 80; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   background: radial-gradient(circle at 50% 45%, rgba(214, 40, 40, .35), rgba(0, 0, 0, .35) 60%, transparent 80%); animation: fadeIn .3s ease; }
 .mel-pop.out { animation: notifOut .45s ease forwards; }

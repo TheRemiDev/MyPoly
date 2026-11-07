@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 // ------------------------------------------------------------ migrations
 const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
 if (!userCols.includes('display_name')) db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
+if (!userCols.includes('saved_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_settings TEXT');
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_display_name ON users(display_name COLLATE NOCASE) WHERE display_name IS NOT NULL");
 
 module.exports = db;

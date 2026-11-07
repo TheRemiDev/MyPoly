@@ -148,8 +148,30 @@ router.patch('/me', requireAuth, async (req, res) => {
   res.json({ user: me(U.getUser(u.id)) });
 });
 
+// Règles de partie enregistrées pour les prochaines salles
+router.put('/me/settings', requireAuth, (req, res) => {
+  const { sanitize } = require('./game/settings');
+  const body = req.body || {};
+  if (body.settings === null) {
+    db.prepare('UPDATE users SET saved_settings = NULL WHERE id = ?').run(req.user.id);
+    return res.json({ user: me(U.getUser(req.user.id)) });
+  }
+  const s = sanitize(body.settings);
+  if (req.user.role !== 'admin') delete s.melenchon;
+  db.prepare('UPDATE users SET saved_settings = ? WHERE id = ?').run(JSON.stringify(s), req.user.id);
+  res.json({ user: me(U.getUser(req.user.id)) });
+});
+
+function savedOf(u) {
+  try {
+    return u.saved_settings ? JSON.parse(u.saved_settings) : null;
+  } catch {
+    return null;
+  }
+}
+
 function me(u) {
-  return { ...U.publicUser(u), username: u.username, displayName: u.display_name || null, email: u.email, staff: U.isStaff(u) };
+  return { ...U.publicUser(u), username: u.username, displayName: u.display_name || null, email: u.email, staff: U.isStaff(u), savedSettings: savedOf(u) };
 }
 
 module.exports = { router, attachUser, requireAuth, requireStaff, userFromToken, parseCookie, createUser, COOKIE, me };

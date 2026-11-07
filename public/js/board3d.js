@@ -1000,7 +1000,8 @@ export class Board3D {
     if (c.type === 'city' || c.type === 'resort' || c.type === 'tax') {
       const icon = c.type === 'city' ? c.icon : c.type === 'resort' ? c.emoji : '💸';
       const iy = body.y + body.h * 0.27;
-      if (c.type === 'tax' && s.melenchon) drawMelenchon(g, cx, iy + m * 0.02, m * 0.46);
+      // Taille réduite et remontée : la tête ne touche plus le nom de la case
+      if (c.type === 'tax' && s.melenchon) drawMelenchon(g, cx, iy - m * 0.02, m * 0.34);
       else emoji(g, icon, cx, iy, m * 0.36);
       fitText(g, c.type === 'tax' ? (s.melenchon ? 'MÉLENCHON' : 'IMPÔTS') : c.name.toUpperCase(), cx, body.y + body.h * 0.56, body.w * 0.9, m * 0.15, 900, c.type === 'resort' ? '#3b2a05' : '#1e1e33');
       pill(g, c.type === 'tax' ? `${s.taxPercent} %` : priceTxt, cx, body.y + body.h * 0.8, m * 0.13, c.type === 'tax' ? '#c0392b' : priceBg);

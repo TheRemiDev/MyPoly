@@ -1,6 +1,6 @@
 // Vue d'une salle : salon d'attente + plateau de jeu animé
-import { $, $$, h, fmt, toast, modal, roleTags, nameClass, sleep, confetti, duration, storage } from './util.js';
-import { store, on, emit } from './store.js';
+import { $, $$, h, fmt, toast, modal, roleTags, nameClass, sleep, confetti, duration, storage, api } from './util.js';
+import { store, on, emit, savedSettings } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
 import { Board3D, webglAvailable } from './board3d.js';
@@ -341,10 +341,50 @@ class RoomView {
     els.actions.append(h('button.btn.ghost', { onclick: () => navigate('/') }, '← Quitter'));
     if (this.isHost) {
       const n = r.seats.length;
-      els.actions.append(h('button.btn.primary.lg.start-btn', { disabled: n < 2, onclick: () => this.cmd('room:start') }, n < 2 ? 'Ajoutez au moins 1 joueur ou bot' : `🚀 Lancer la partie (${n} joueurs)`));
+      els.actions.append(h('button.btn.primary.lg.start-btn', { disabled: n < 2, onclick: () => this.startGame() }, n < 2 ? 'Ajoutez au moins 1 joueur ou bot' : `🚀 Lancer la partie (${n} joueurs)`));
     } else {
       els.actions.append(h('div.waiting', h('span.dot-pulse'), mySeat ? ' En attente du lancement par l\'hôte…' : ' Salle pleine : vous êtes spectateur.'));
     }
+  }
+
+  /** Règles à comparer : sans les options propres à la salle elle-même. */
+  rulesKey(s) {
+    const d = { ...this.meta.defaults, ...(s || {}) };
+    return JSON.stringify(Object.keys(this.meta.defaults).sort().map((k) => [k, d[k]]));
+  }
+  /** Vrai si les règles de la salle diffèrent à la fois des règles par défaut et des règles enregistrées. */
+  rulesUnsaved() {
+    const cur = this.rulesKey(this.room.settings);
+    return cur !== this.rulesKey(this.meta.defaults) && cur !== this.rulesKey(savedSettings());
+  }
+  async saveRules(settings) {
+    const clean = settings ? { ...settings } : null;
+    if (store.user) {
+      try {
+        const res = await api('/auth/me/settings', { method: 'PUT', body: { settings: clean } });
+        store.user = res.user;
+      } catch (e) {
+        toast(e.message, 'error');
+        return false;
+      }
+    } else storage('savedSettings', clean ? JSON.stringify(clean) : null);
+    toast(clean ? '💾 Règles enregistrées pour vos prochaines parties' : 'Règles par défaut rétablies pour vos prochaines parties', 'success');
+    this.rulesDismissed = false;
+    this.renderSettings();
+    return true;
+  }
+  async startGame() {
+    if (this.isHost && this.rulesUnsaved() && !this.rulesDismissed) {
+      const v = await modal({
+        title: '💾 Enregistrer ces règles ?',
+        body: h('p', 'Vous avez personnalisé les règles de cette partie. Voulez-vous les réutiliser automatiquement pour vos prochaines salles ?'),
+        buttons: [{ label: 'Non merci', value: 'no' }, { label: 'Enregistrer', value: 'yes', class: 'primary' }],
+      });
+      if (v === null) return;
+      if (v === 'yes') await this.saveRules(this.room.settings);
+      else this.rulesDismissed = true;
+    }
+    this.cmd('room:start');
   }
 
   renderSettings() {
@@ -352,6 +392,23 @@ class RoomView {
     const box = this.lobbyEls.settings;
     const editable = this.isHost;
     box.innerHTML = '';
+    if (editable) {
+      const saved = savedSettings();
+      if (this.rulesUnsaved() && !this.rulesDismissed) {
+        box.append(h('div.rules-save',
+          h('span', '💾 Règles personnalisées'),
+          h('div.rules-save-actions',
+            h('button.btn.sm.primary', { onclick: () => this.saveRules(this.room.settings) }, 'Enregistrer pour mes prochaines parties'),
+            h('button.btn.sm.ghost', { onclick: () => { this.rulesDismissed = true; this.renderSettings(); } }, 'Non merci')
+          )
+        ));
+      } else if (saved && this.rulesKey(s) === this.rulesKey(saved)) {
+        box.append(h('div.rules-save.ok',
+          h('span', '✔ Vos règles enregistrées sont appliquées'),
+          h('button.btn.sm.ghost', { onclick: () => this.saveRules(null) }, 'Oublier mes règles')
+        ));
+      }
+    }
     if (editable) box.append(h('div.presets', Object.entries(PRESETS).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
     const groups = SETTINGS_UI.slice();
@@ -1078,7 +1135,7 @@ class RoomView {
       el.innerHTML = '';
       el.style.removeProperty('--owner');
       el.classList.toggle('owned', !!owner);
-      el.classList.toggle('dim', !!this.highlightOwner && (!owner || owner.id !== this.highlightOwner));
+      el.classList.toggle('dim', (!!this.highlightOwner && (!owner || owner.id !== this.highlightOwner)) || (myTurn && st.phase === 'travel' && i % 8 === 0));
       if (owner) el.style.setProperty('--owner', owner.color);
       const fest = st.festival && st.festival.cell === i;
       el.classList.toggle('festival-on', fest);
@@ -1145,6 +1202,8 @@ class RoomView {
         if ((st.phase === 'festival' || st.phase === 'debt') && owner === this.me) selectable.add(i);
       }
       if (this.highlightOwner && owner !== this.highlightOwner) dimmed.add(i);
+      // Voyage en avion : les coins (non desservis) sont grisés
+      if (myTurn && st.phase === 'travel' && i % 8 === 0) dimmed.add(i);
     });
     this.b3.update({
       props: st.props,
@@ -1609,7 +1668,7 @@ class RoomView {
       case 'travel':
         panel.append(
           h('div.panel-title', '✈️ Où voulez-vous aller ?'),
-          h('div.hint', `Cliquez sur une case du plateau, hors coins (billet : ${fmt(pend.fee)}).`),
+          h('div.hint', `Cliquez sur une case en surbrillance (billet : ${fmt(pend.fee)}).`),
           h('button.btn.skip', { onclick: act('skip') }, '🎲 Rester au sol et lancer les dés')
         );
         break;
@@ -1828,7 +1887,7 @@ class RoomView {
     const st = this.state;
     if (!st) return;
     if (this.canAct()) {
-      if (st.phase === 'travel' && i % 8 !== 0) return this.action('travel', { cell: i });
+      if (st.phase === 'travel') return i % 8 !== 0 ? this.action('travel', { cell: i }) : undefined;
       const pr = st.props[i];
       if (st.phase === 'festival' && pr && pr.owner === this.me) return this.action('festival', { cell: i });
       if (st.phase === 'debt' && pr && pr.owner === this.me && this.debt) return this.toggleDebtPick(i);
