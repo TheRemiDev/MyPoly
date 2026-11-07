@@ -1484,3 +1484,6 @@ body:not(.in-game) {
 .music-btn.playing { box-shadow: inset 0 0 0 2px #2ecc71; }
 .music-btn.blocked { animation: pulse 1s infinite; box-shadow: inset 0 0 0 2px #ffd166; }
 .btn.block { width: 100%; }
+
+.tip-desc { max-width: 260px; white-space: normal; margin-top: 4px; font-style: italic; color: #ffe08a; line-height: 1.35; }
+.cell-desc { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(255, 209, 102, .1); border: 1px solid rgba(255, 209, 102, .35); font-style: italic; color: #ffe8a8; line-height: 1.45; }

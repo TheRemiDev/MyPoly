@@ -1360,6 +1360,7 @@ class RoomView {
         if (c.type === 'city' && this.room.settings.takeover && pr.level < 4) lines.push(h('div.muted', `Rachat : ${fmt(pr.takeover)}`));
       } else lines.push(h('div', 'À vendre : ', h('b', fmt(c.price))));
     } else lines.push(h('div.muted', 'Cliquez pour plus d\'infos'));
+    if (c.desc) lines.push(h('div.tip-desc', c.desc));
     this.tip.innerHTML = '';
     this.tip.append(...lines);
     const w = this.gameEl.getBoundingClientRect();
@@ -1557,7 +1558,8 @@ class RoomView {
     const el = h('div.chance-card', h('div.chance-inner', h('div.chance-back', h('span', '?')), h('div.chance-front', h('div.chance-icon', card.icon), h('div.chance-title', card.title), h('div.chance-text', card.text), p ? h('div.chance-who', p.name) : null)));
     this.cardSlot.append(el);
     requestAnimationFrame(() => el.classList.add('flip'));
-    await sleep(2100);
+    // Temps de lecture proportionnel au texte (même formule que le serveur)
+    await sleep(Math.min(9000, 3500 + (card.title.length + card.text.length) * 40));
     el.classList.add('out');
     setTimeout(() => el.remove(), 400);
   }
@@ -2078,6 +2080,7 @@ class RoomView {
       }[c.type];
       body = h('p', txt);
     }
+    if (c.desc) body = h('div', body, h('p.cell-desc', '🗯️ ' + c.desc));
     modal({ title: c.name, body, className: 'cell-modal' });
   }
 
