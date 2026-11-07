@@ -1391,11 +1391,20 @@ class RoomView {
         ),
         p.bankrupt ? h('div.pc-stamp', 'FAILLITE') : null,
         isTurn ? h('div.pcard-turn', p.id === this.me ? '🎲 À VOUS !' : 'JOUE…') : null,
-        isTurn ? h('div.pcard-timer') : null
+        isTurn ? h('div.pcard-timer', { style: { transform: `scaleX(${this.timerFraction()})` } }) : null
       );
       this.playersEl.append(card);
       if (!p.bankrupt) this.animateCash(cashEl, p.id, cash);
     }
+  }
+
+  /** Part du temps de décision restant (0 à 1) pour le joueur actif. */
+  timerFraction() {
+    const st = this.state;
+    if (!st || !st.deadline) return 1;
+    const total = (this.room.settings.turnTime || 30) * 1000;
+    const left = st.deadline - (Date.now() + this.clockOffset);
+    return Math.max(0, Math.min(1, left / total));
   }
 
   /** Compteur d'argent qui défile (vert si gain, rouge si dépense). */
@@ -1785,7 +1794,8 @@ class RoomView {
       Sound.play('tick');
     }
     const ring = this.playersEl.querySelector('.pcard.turn .pcard-timer');
-    if (ring) ring.style.width = pct + '%';
+    // La barre garde ses marges dans la fiche : elle se vide par rétrécissement, sans jamais déborder
+    if (ring) ring.style.transform = `scaleX(${pct / 100})`;
   }
 
   // ------------------------------------------------------------ fin de partie

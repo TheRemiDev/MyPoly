@@ -1126,3 +1126,7 @@ body.in-game { overflow: hidden; }
   .game { --safe-top: 140px; }
   .topbar { top: 88px; }
 }
+
+/* Minuteur du joueur actif : contenu dans la fiche, se vide vers le centre du médaillon */
+.pcard.corner .pcard-timer { width: auto !important; transition: transform .25s linear; transform-origin: left center; }
+.pcard.corner.c-tr .pcard-timer, .pcard.corner.c-br .pcard-timer { transform-origin: right center; }
