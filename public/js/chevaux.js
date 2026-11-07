@@ -6,6 +6,8 @@ import { h, toast, modal, roleTags, nameClass, sleep, confetti, duration } from 
 import { store, emit } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen } from './app.js';
+import { webglAvailable } from './board3d.js';
+import { Horse3D, TOP, BOARD_TOP, TILE_H } from './horses3d.js';
 
 export const HORSE_SETTINGS_UI = [
   { group: 'Course', items: [
@@ -40,6 +42,7 @@ const TRACK = 60;
 const ENTRY = 58;
 const CENTER = 65;
 const QNAMES = ['Rouge', 'Vert', 'Jaune', 'Bleu'];
+const QCOLORS = ['#ff5a5f', '#2ecc71', '#ffb020', '#3fa7ff'];
 const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
 
 // --------------------------------------------------------------- géométrie
@@ -110,25 +113,20 @@ export class HorseTable {
   }
 
   // ============================================================== structure
+  /** Même structure que l'écran MyPoly : plateau 3D plein écran, fiches dans les coins, notifications. */
   build() {
     const v = this.v;
+    this.host = h('div.board3d-host');
+    // Plateau 2D de secours (navigateurs sans WebGL)
     this.boardEl = h('div.hz-board');
     this.horseLayer = h('div.hz-horses');
     this.boardEl.append(this.horseLayer);
+    this.boardWrap = h('div.hz-board-wrap', this.boardEl);
     this.die = makeDie();
-    this.rollBtn = h('button.hz-roll', { onclick: () => this.roll() }, '🎲 Lancer le dé');
+    this.rollBtn = h('button.btn.roll-btn.hz-rollbtn', { onclick: () => this.roll() }, '🎲 Lancer le dé');
     this.hintEl = h('div.hz-hint');
-    this.dicePanel = h('div.hz-dice-panel', this.die, h('div.hz-dice-side', this.hintEl, this.rollBtn));
-    this.platesEl = h('div.hz-plates');
-    this.fx = h('div.ct-fx');
-    this.banner = h('div.ct-banners');
-    const sparks = Array.from({ length: 22 }, () => h('i.ct-spark', { style: {
-      left: Math.random() * 100 + '%',
-      '--s': (2 + Math.random() * 4).toFixed(1) + 'px',
-      '--d': (9 + Math.random() * 14).toFixed(1) + 's',
-      '--delay': (-Math.random() * 20).toFixed(1) + 's',
-    } }));
-    this.bg = h('div.ct-bg', h('i.ct-blob.b1'), h('i.ct-blob.b2'), h('i.ct-blob.b3'), h('div.ct-floor'), h('div.ct-sparks', sparks));
+    this.actionEl = h('div.hz-action', this.die, this.hintEl, this.rollBtn);
+    this.fx = h('div.fx-layer.hz-fx');
 
     v.toolbar = h('div.toolbar');
     v.logEl = h('div.log');
@@ -144,9 +142,29 @@ export class HorseTable {
     );
     v.pop = null;
     v.endOverlay = h('div.end-overlay', { hidden: true });
-    v.playersEl = h('div.hz-stage', h('div.hz-board-wrap', this.boardEl), this.dicePanel, this.platesEl);
-    v.gameEl = h('div.game.cards-game.horses-game', this.bg, v.playersEl, this.fx, this.banner, h('div.topbar', v.toolbar, v.popover));
+    v.notifStacks = Object.fromEntries(['tl', 'tr', 'bl', 'br', 'mid'].map((k) => [k, h('div.notif-stack.ns-' + k)]));
+    v.playersEl = h('div.corners');
+    v.gameEl = h('div.game.horses-game', this.host, this.boardWrap, this.fx, ...Object.values(v.notifStacks), v.playersEl, this.actionEl, h('div.topbar', v.toolbar, v.popover));
     v.root.append(v.gameEl, v.endOverlay);
+    if (webglAvailable()) {
+      try {
+        this.b3 = new Horse3D(this.host, {
+          onClick: (key) => {
+            const [pid, i] = key.split('|');
+            this.move(Number(i), pid);
+          },
+          onHover: (key) => {
+            if (!key) return this.preview(null);
+            const [pid, i] = key.split('|');
+            this.preview(this.player(pid), Number(i));
+          },
+        });
+        v.gameEl.classList.add('webgl');
+      } catch (e) {
+        console.error('WebGL indisponible', e);
+        this.b3 = null;
+      }
+    }
     v.renderTabs();
     v.renderChat();
     this.renderToolbar();
@@ -164,6 +182,7 @@ export class HorseTable {
 
   destroy() {
     document.removeEventListener('keydown', this.onKey);
+    if (this.b3) this.b3.destroy();
     this.dead = true;
   }
 
@@ -181,6 +200,7 @@ export class HorseTable {
       h('button.icon-btn' + (v.pop === 'log' ? '.on' : ''), { title: 'Journal de la partie', onclick: () => v.togglePop('log') }, '📜'),
       h('button.icon-btn' + (v.pop === 'emote' ? '.on' : ''), { title: 'Réagir', onclick: () => v.togglePop('emote') }, '😀'),
       h('button.icon-btn.music-btn' + (v.pop === 'music' ? '.on' : '') + (v.music && v.music.track ? '.playing' : ''), { title: 'Musique', onclick: () => v.togglePop('music') }, v.music && v.music.track && (v.music.muted || v.music.volume === 0) ? '🔇' : '🎵'),
+      h('button.icon-btn', { hidden: !this.b3, title: 'Recentrer la caméra (double-clic sur le plateau)', onclick: () => this.b3 && this.b3.resetView() }, '🎥'),
       h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
       h('button.icon-btn', { title: 'Son', onclick: (e) => (e.target.textContent = Sound.toggle() ? '🔊' : '🔇') }, Sound.isEnabled() ? '🔊' : '🔇'),
       h('button.icon-btn', { title: 'Plein écran (F)', onclick: toggleFullscreen }, '⛶'),
@@ -206,7 +226,7 @@ export class HorseTable {
           s.noPassing ? h('li', 'Interdit de doubler : un cheval ne peut pas passer par-dessus un autre.') : null
         ),
         h('div', `${yes(s.sixToExit)} Un 6 pour sortir · ${yes(s.sixReplay)} Un 6 fait rejouer · ${yes(s.strictLadder)} Échelle classique · ${yes(s.noPassing)} Interdit de doubler · ${yes(s.captureReplay)} Rejouer après une prise`),
-        h('div.muted', 'Raccourcis : Espace pour lancer le dé, 1 à 4 pour choisir un cheval.')
+        h('div.muted', 'Raccourcis : Espace pour lancer le dé, 1 à 4 pour choisir un cheval. Faites glisser pour tourner la caméra, double-clic pour la recentrer.')
       ),
     });
   }
@@ -261,13 +281,16 @@ export class HorseTable {
       this.v.logEl.innerHTML = '';
       for (const l of st.log) this.addLog(l, true);
     }
-    if (first) this.buildBoard();
-    this.renderAll();
+    if (first) {
+      this.buildBoard();
+      if (this.b3 && st.dice) this.b3.setDie(st.dice);
+    }
+    this.renderAll(!first && !instant);
   }
 
-  renderAll() {
-    this.renderPlates();
-    this.renderHorses();
+  renderAll(animate = false) {
+    this.renderPlayers();
+    this.renderHorses(animate);
     this.renderControls();
     this.renderToolbar();
   }
@@ -282,12 +305,45 @@ export class HorseTable {
   }
 
   // ================================================================ plateau
-  /** Cases fixes du plateau (dessinées une fois, orientées selon ma place). */
+  owners() {
+    const o = {};
+    for (const p of this.state.players) o[p.quad] = p;
+    return o;
+  }
   buildBoard() {
+    if (this.b3) return this.build3d();
+    this.build2d();
+  }
+  /** Plateau 3D : parcours, échelles, écuries et arrivée, orientés selon ma place. */
+  build3d() {
+    const owner = this.owners();
+    const starts = {};
+    for (let q = 0; q < 4; q++) starts[startOf(q)] = { color: QCOLORS[q], angle: this.arrowAngle(startOf(q)) };
+    const ladders = [];
+    for (let q = 0; q < 4; q++) for (let s = 1; s <= 6; s++) ladders.push({ rc: this.view(ladderCell(q, s)), color: QCOLORS[q], n: s });
+    const yards = [];
+    for (let q = 0; q < 4; q++) {
+      const [r0, c0] = this.view(rot([0, 0], q));
+      const [r1, c1] = this.view(rot([6, 6], q));
+      const rm = Math.min(r0, r1);
+      const cm = Math.min(c0, c1);
+      const slots = YARD_SLOTS.map((s) => {
+        const [sr, sc] = this.view(rot(s, q));
+        return [(sc - cm + 0.5) / 7, (sr - rm + 0.5) / 7];
+      });
+      const p = owner[q];
+      yards.push({ rc0: [rm, cm], color: p ? QCOLORS[q] : '#6d7487', name: p ? p.name : QNAMES[q], slots, slotsKey: slots.flat().join(',') });
+    }
+    // Couleurs de l'arrivée : haut, droite, bas, gauche (le côté d'où arrive chaque échelle)
+    const colors = ['', '', '', ''];
+    for (let q = 0; q < 4; q++) colors[([3, 0, 1, 2][q] + this.turnView) % 4] = QCOLORS[q];
+    this.b3.buildBoard({ track: TRACK_CELLS.map((rc) => this.view(rc)), starts: Object.fromEntries(Object.entries(starts).map(([g, s]) => [Number(g), s])), ladders, yards, center: { colors } });
+  }
+  /** Plateau 2D de secours. */
+  build2d() {
     const b = this.boardEl;
     b.querySelectorAll('.hz-cell, .hz-yard, .hz-center').forEach((e) => e.remove());
-    const owner = {}; // quadrant de chaque joueur
-    for (const p of this.state.players) owner[p.quad] = p;
+    const owner = this.owners();
     const place = (el, [r, c], w = 1, hgt = 1) => {
       el.style.left = (c / N) * 100 + '%';
       el.style.top = (r / N) * 100 + '%';
@@ -296,95 +352,101 @@ export class HorseTable {
       b.insertBefore(el, this.horseLayer);
       return el;
     };
-    // Écuries
     for (let q = 0; q < 4; q++) {
       const p = owner[q];
       const [r0, c0] = this.view(rot([0, 0], q));
       const [r1, c1] = this.view(rot([6, 6], q));
-      const yard = h('div.hz-yard.q' + q + (p ? '' : '.empty'), p ? h('div.hz-yard-name', p.pawn, ' ', p.name) : h('div.hz-yard-name', QNAMES[q]),
-        ...YARD_SLOTS.map(() => h('i.hz-slot')));
+      const yard = h('div.hz-yard.q' + q + (p ? '' : '.empty'), h('div.hz-yard-name', p ? p.name : QNAMES[q]), ...YARD_SLOTS.map(() => h('i.hz-slot')));
       place(yard, [Math.min(r0, r1), Math.min(c0, c1)], 7, 7);
-      // Emplacements : positionnés comme les chevaux à l'écurie
       [...yard.querySelectorAll('.hz-slot')].forEach((s, i) => {
         const [sr, sc] = this.view(rot(YARD_SLOTS[i], q));
         s.style.left = ((sc - Math.min(c0, c1) + 0.5) / 7) * 100 + '%';
         s.style.top = ((sr - Math.min(r0, r1) + 0.5) / 7) * 100 + '%';
       });
     }
-    // Parcours
     TRACK_CELLS.forEach((rc, g) => {
       const q = [0, 1, 2, 3].find((k) => startOf(k) === g);
-      const el = h('div.hz-cell.track' + (q !== undefined ? '.start.q' + q : ''), { 'data-g': g }, q !== undefined ? h('span.hz-arrow', '➜') : null);
+      const el = h('div.hz-cell.track' + (q !== undefined ? '.start.q' + q : ''), q !== undefined ? h('span.hz-arrow', '➜') : null);
       if (q !== undefined) el.firstChild.style.rotate = this.arrowAngle(g) + 'deg';
       place(el, this.view(rc));
     });
-    // Échelles
-    for (let q = 0; q < 4; q++) {
-      for (let s = 1; s <= 6; s++) place(h('div.hz-cell.ladder.q' + q, { 'data-q': q, 'data-step': s }, h('b', String(s))), this.view(ladderCell(q, s)));
-    }
-    // Centre
+    for (let q = 0; q < 4; q++) for (let s = 1; s <= 6; s++) place(h('div.hz-cell.ladder.q' + q, h('b', String(s))), this.view(ladderCell(q, s)));
     const center = h('div.hz-center', h('div.hz-center-tri'), h('span.hz-center-icon', '🏆'));
     center.style.setProperty('--rot', this.turnView * 90 + 'deg');
     place(center, [7, 7], 3, 3);
   }
-  /** Angle de la flèche d'une case de départ (sens de la course). */
   arrowAngle(g) {
     const a = this.view(TRACK_CELLS[g]);
     const b = this.view(TRACK_CELLS[(g + 1) % TRACK]);
     return (Math.atan2(b[0] - a[0], b[1] - a[1]) * 180) / Math.PI;
   }
-
-  /** Cellule (ligne, colonne) affichée d'un cheval. */
   cellOf(p, r, i) {
     if (r === -1) return this.view(rot(YARD_SLOTS[i], p.quad));
     if (r <= ENTRY) return this.view(TRACK_CELLS[(startOf(p.quad) + r) % TRACK]);
     if (r < CENTER) return this.view(ladderCell(p.quad, r - ENTRY));
     return this.view(rot(CENTER_SLOTS[i], p.quad));
   }
+  /** Hauteur du sol (3D) sous un cheval selon sa position. */
+  floorOf(r) {
+    if (r === -1) return BOARD_TOP + TILE_H * 0.7;
+    if (r === CENTER) return this.b3.centerTop;
+    if (r > ENTRY) return BOARD_TOP + TILE_H + (r - ENTRY) * 0.012;
+    return TOP;
+  }
 
-  renderHorses() {
+  renderHorses(animate = false, flight = null) {
     const st = this.state;
     const d = this.disp;
     if (!st || !d) return;
-    this.horseEls ||= {};
     const opts = new Set(this.myMove() ? st.options : []);
-    const seen = new Set();
-    // Empilement : plusieurs chevaux sur la même case
+    // Empilement de plusieurs chevaux sur la même case
     const stacks = {};
+    const items = [];
     for (const p of st.players) {
       if (p.out) continue;
       (d.horses[p.id] || p.horses).forEach((r, i) => {
-        const key = this.cellOf(p, r, i).join(':') + (r === -1 || r === CENTER ? ':' + p.id + i : '');
-        (stacks[key] ||= []).push(p.id + ':' + i);
+        const rc = this.cellOf(p, r, i);
+        const key = rc.join(':');
+        (stacks[key] ||= []).push(p.id + '|' + i);
+        items.push({ p, r, i, rc, key });
       });
     }
-    for (const p of st.players) {
-      if (p.out) continue;
-      (d.horses[p.id] || p.horses).forEach((r, i) => {
-        const id = p.id + ':' + i;
-        seen.add(id);
-        let el = this.horseEls[id];
-        if (!el) {
-          el = h('div.hz-horse', { style: { '--c': p.color } }, h('span.hz-horse-ico', '♞'), h('b.hz-horse-n', String(i + 1)));
-          el.addEventListener('click', () => this.move(i, p.id));
-          el.addEventListener('mouseenter', () => this.preview(p, i));
-          el.addEventListener('mouseleave', () => this.preview(null));
-          this.horseLayer.append(el);
-          this.horseEls[id] = el;
-        }
-        const [rr, cc] = this.cellOf(p, r, i);
-        const key = [rr, cc].join(':') + (r === -1 || r === CENTER ? ':' + p.id + i : '');
+    if (this.b3) {
+      const list = items.map(({ p, r, i, rc, key }) => {
         const stack = stacks[key];
-        const k = stack.indexOf(id);
-        const off = stack.length > 1 ? (k - (stack.length - 1) / 2) * 0.28 : 0;
-        el.style.left = ((cc + 0.5 + off) / N) * 100 + '%';
-        el.style.top = ((rr + 0.5 - Math.abs(off) * 0.3) / N) * 100 + '%';
-        el.classList.toggle('home', r === CENTER);
-        el.classList.toggle('yard', r === -1);
-        el.classList.toggle('can', p.id === this.me && opts.has(i));
-        el.classList.toggle('mine', p.id === this.me);
-        el.style.zIndex = String(10 + rr);
+        const k = stack.indexOf(p.id + '|' + i);
+        const n = stack.length;
+        const a = (k / Math.max(1, n)) * Math.PI * 2 + Math.PI / 4;
+        const off = n > 1 ? [Math.cos(a) * 0.13, Math.sin(a) * 0.13] : null;
+        return { key: p.id + '|' + i, color: p.color, rc, top: this.floorOf(r), off, can: p.id === this.me && opts.has(i), mine: p.id === this.me, home: r === CENTER, flight: flight === p.id + '|' + i };
       });
+      this.b3.sync(list, animate);
+      return;
+    }
+    this.horseEls ||= {};
+    const seen = new Set();
+    for (const { p, r, i, rc, key } of items) {
+      const id = p.id + '|' + i;
+      seen.add(id);
+      let el = this.horseEls[id];
+      if (!el) {
+        el = h('div.hz-horse', { style: { '--c': p.color } }, h('span.hz-horse-ico', '♞'), h('b.hz-horse-n', String(i + 1)));
+        el.addEventListener('click', () => this.move(i, p.id));
+        el.addEventListener('mouseenter', () => this.preview(p, i));
+        el.addEventListener('mouseleave', () => this.preview(null));
+        this.horseLayer.append(el);
+        this.horseEls[id] = el;
+      }
+      const stack = stacks[key];
+      const k = stack.indexOf(id);
+      const off = stack.length > 1 ? (k - (stack.length - 1) / 2) * 0.28 : 0;
+      el.style.left = ((rc[1] + 0.5 + off) / N) * 100 + '%';
+      el.style.top = ((rc[0] + 0.5 - Math.abs(off) * 0.3) / N) * 100 + '%';
+      el.classList.toggle('home', r === CENTER);
+      el.classList.toggle('yard', r === -1);
+      el.classList.toggle('can', p.id === this.me && opts.has(i));
+      el.classList.toggle('mine', p.id === this.me);
+      el.style.zIndex = String(10 + Math.round(rc[0]));
     }
     for (const [id, el] of Object.entries(this.horseEls)) {
       if (!seen.has(id)) {
@@ -394,7 +456,6 @@ export class HorseTable {
     }
   }
 
-  /** Destination d'un cheval (même règle que le serveur), pour l'aperçu au survol. */
   targetOf(p, i, dv) {
     const st = this.state.settings;
     const r = (this.disp.horses[p.id] || p.horses)[i];
@@ -410,44 +471,52 @@ export class HorseTable {
     }
     return r + dv > CENTER ? null : r + dv;
   }
+  /** Repère de la case d'arrivée du cheval survolé. */
   preview(p, i) {
-    this.boardEl.querySelectorAll('.hz-cell.target').forEach((e) => e.classList.remove('target'));
-    this.previewEl && this.previewEl.remove();
+    if (this.previewEl) this.previewEl.remove();
+    this.previewEl = null;
+    if (this.b3) this.b3.showTarget(null);
     if (!p || p.id !== this.me || !this.myMove() || !this.state.options.includes(i)) return;
     const to = this.targetOf(p, i, this.state.dice);
     if (to === null) return;
-    const [r, c] = this.cellOf(p, to, i);
-    const mark = h('div.hz-target', { style: { '--c': p.color, left: ((c + 0.5) / N) * 100 + '%', top: ((r + 0.5) / N) * 100 + '%' } });
+    const rc = this.cellOf(p, to, i);
+    if (this.b3) return this.b3.showTarget(rc, p.color, this.floorOf(to));
+    const mark = h('div.hz-target', { style: { '--c': p.color, left: ((rc[1] + 0.5) / N) * 100 + '%', top: ((rc[0] + 0.5) / N) * 100 + '%' } });
     this.horseLayer.append(mark);
     this.previewEl = mark;
   }
 
-  renderPlates() {
+  /** Fiches des joueurs dans les coins (comme MyPoly), du côté de leur écurie. */
+  renderPlayers() {
     const st = this.state;
     if (!st) return;
-    this.platesEl.innerHTML = '';
-    // Coin de l'écran correspondant à l'écurie (après rotation de la vue)
+    const v = this.v;
+    v.playersEl.innerHTML = '';
     const corner = (q) => {
       const [r, c] = this.view(rot([3, 3], q));
       return (r < 8 ? 't' : 'b') + (c < 8 ? 'l' : 'r');
     };
+    const need = st.settings.horsesToWin;
     for (const p of st.players) {
       const turn = st.current === p.id && !st.over;
       const isMe = p.id === this.me;
-      const need = st.settings.horsesToWin;
-      const plate = h('div.hz-plate.c-' + corner(p.quad) + (isMe ? '.me' : ''), { 'data-pid': p.id },
-        h('div.ct-badge' + (turn ? '.turn' : '') + (p.out ? '.out' : '') + (isMe ? '.me' : ''), { style: { '--c': p.color } },
-          h('div.ct-avatar', p.out ? '💀' : p.pawn),
-          h('div.ct-binfo',
-            h('div.ct-name', h('span.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
-            h('div.hz-progress', Array.from({ length: need }, (_, k) => h('i' + (k < p.home ? '.on' : ''), '♞')), h('small', `${p.home}/${need}`)),
-            !p.isBot && !p.connected ? h('div.ct-chips', h('span.pc-chip.off', '📡 Déconnecté')) : p.afk ? h('div.ct-chips', h('span.pc-chip.off', '💤 Absent')) : null
-          ),
-          turn ? h('div.ct-turn', isMe ? '🎲 À VOUS !' : 'JOUE…') : null,
-          turn ? h('div.ct-timer', h('i')) : null
-        )
+      const onBoard = p.horses.filter((r) => r >= 0 && r < CENTER).length;
+      const card = h('div.pcard.corner.c-' + corner(p.quad) + (turn ? '.turn' : '') + (p.out ? '.out' : '') + (isMe ? '.me' : '') + (p.vip ? '.vip' : ''),
+        { 'data-pid': p.id, style: { '--c': p.color } },
+        h('div.pc-face'),
+        h('div.pc-avatar', h('span.pc-pawn', p.out ? '💀' : p.pawn)),
+        h('div.pc-body',
+          h('div.pc-name', h('span.pc-name-text.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
+          h('div.pc-cash.hz-home', Array.from({ length: need }, (_, k) => h('span.hz-home-ico' + (k < p.home ? '.on' : ''), '♞')), h('span.hz-home-n', `${p.home}/${need}`)),
+          h('div.pc-chips',
+            p.out ? h('span.pc-chip.off', 'Abandon') : h('span.pc-chip', { title: 'Chevaux en course' }, `🏇 ${onBoard} en course`),
+            !p.isBot && !p.connected ? h('span.pc-chip.off', { title: 'Déconnecté' }, '📡') : p.afk ? h('span.pc-chip.off', { title: 'Absent' }, '💤') : null
+          )
+        ),
+        turn ? h('div.pcard-turn', isMe ? '🎲 À VOUS !' : 'JOUE…') : null,
+        turn ? h('div.pcard-timer') : null
       );
-      this.platesEl.append(plate);
+      v.playersEl.append(card);
     }
   }
 
@@ -464,33 +533,31 @@ export class HorseTable {
     if (!st) return;
     const cur = this.player(st.current);
     const mine = this.myTurn();
-    this.dicePanel.style.setProperty('--c', cur ? cur.color : '#fff');
+    this.actionEl.style.setProperty('--c', cur ? cur.color : '#fff');
     if (!this.rolling) showFace(this.die, (this.disp && this.disp.dice) || st.dice || 6);
-    this.die.classList.toggle('idle', !st.dice);
+    this.die.hidden = !!this.b3;
     this.rollBtn.hidden = !(mine && st.phase === 'roll');
-    this.dicePanel.classList.toggle('mine', mine && st.phase === 'roll');
     let hint = '';
     if (st.over) hint = '🏁 Course terminée';
-    else if (mine && st.phase === 'roll') hint = st.tries ? `Encore ${3 - st.tries} essai${3 - st.tries > 1 ? 's' : ''} pour faire un 6 !` : 'À vous de lancer le dé !';
-    else if (mine && st.phase === 'move') hint = `Vous avez fait ${st.dice} : choisissez un cheval`;
-    else if (cur) hint = `${cur.name} ${st.phase === 'move' ? 'choisit un cheval…' : 'va lancer le dé…'}`;
+    else if (mine && st.phase === 'roll') hint = st.tries ? `Encore ${3 - st.tries} essai${3 - st.tries > 1 ? 's' : ''} pour faire un 6 !` : 'Espace pour lancer';
+    else if (mine && st.phase === 'move') hint = `🎲 ${st.dice} : cliquez sur un cheval qui brille`;
+    else if (cur) hint = `${cur.name} ${st.phase === 'move' ? 'choisit un cheval…' : 'lance le dé…'}`;
     this.hintEl.textContent = hint;
+    this.actionEl.classList.toggle('mine', mine);
   }
 
   updateTimer() {
     const st = this.state;
     if (!st || st.over) return;
-    const bar = this.platesEl.querySelector('.ct-badge.turn .ct-timer i');
+    const bar = this.v.playersEl.querySelector('.pcard.turn .pcard-timer');
     if (!bar) return;
     if (!st.deadline || this.busy) {
-      bar.parentElement.hidden = true;
+      bar.style.transform = 'scaleX(1)';
       return;
     }
     const total = (this.room.settings.turnTime || 20) * 1000;
     const left = st.deadline - (Date.now() + this.v.clockOffset);
-    bar.parentElement.hidden = false;
     bar.style.transform = `scaleX(${Math.max(0, Math.min(1, left / total))})`;
-    bar.parentElement.classList.toggle('urgent', left < 5000);
     const secs = Math.ceil(left / 1000);
     if (st.current === this.me && left < 5000 && left > 0 && secs !== this.lastTick) {
       this.lastTick = secs;
@@ -514,6 +581,7 @@ export class HorseTable {
   roll() {
     if (!this.myTurn() || this.state.phase !== 'roll') return;
     this.rollBtn.hidden = true;
+    Sound.play('click');
     this.act('roll');
   }
   move(i, pid = this.me) {
@@ -533,9 +601,10 @@ export class HorseTable {
   }
 
   // ============================================================ animations
-  pointOfCell([r, c]) {
+  screenOf(rc, r = 0) {
+    if (this.b3) return this.b3.toScreen(rc, this.floorOf(r) + 0.45);
     const b = this.boardEl.getBoundingClientRect();
-    return { x: b.left + ((c + 0.5) / N) * b.width, y: b.top + ((r + 0.5) / N) * b.height };
+    return { x: b.left + ((rc[1] + 0.5) / N) * b.width, y: b.top + ((rc[0] + 0.5) / N) * b.height };
   }
   bubble(pt, content, cls = '', ms = 1500) {
     if (!pt) return;
@@ -545,14 +614,9 @@ export class HorseTable {
     this.fx.append(el);
     setTimeout(() => el.remove(), ms);
   }
-  showBanner(icon, title, sub, color = '#3fa7ff', ms = 1400) {
-    const b = h('div.ct-banner', { style: { '--c': color } }, h('span.ct-banner-icon', icon), h('div', h('b', title), sub ? h('small', sub) : null));
-    this.banner.append(b);
-    setTimeout(() => b.classList.add('out'), ms);
-    setTimeout(() => b.remove(), ms + 400);
-  }
-  plateOf(pid) {
-    return this.platesEl.querySelector(`[data-pid="${CSS.escape(pid)}"] .ct-badge`);
+  announce(o) {
+    this.v.evPid = o.pid;
+    this.v.announce(o);
   }
 
   async play(ev, st) {
@@ -562,83 +626,84 @@ export class HorseTable {
       case 'turn':
         this.state = { ...this.state, current: ev.pid, phase: 'roll', dice: null };
         d.dice = null;
-        this.renderPlates();
+        this.renderPlayers();
         this.renderControls();
+        if (ev.pid === this.me) Sound.play('turn');
         return;
       case 'dice': {
-        this.rolling = true;
-        this.die.classList.remove('idle');
-        this.die.classList.add('rolling');
-        this.dicePanel.style.setProperty('--c', p ? p.color : '#fff');
         Sound.play('dice');
-        for (let k = 0; k < 8; k++) {
-          showFace(this.die, 1 + Math.floor(Math.random() * 6));
-          await sleep(85);
-        }
-        this.die.classList.remove('rolling');
-        showFace(this.die, ev.value);
         d.dice = ev.value;
-        this.rolling = false;
-        this.die.classList.remove('land');
-        void this.die.offsetWidth;
-        this.die.classList.add('land');
-        if (ev.value === 6) this.bubble(this.rectOf(this.die), '6 !', '.warn', 1000);
-        await sleep(350);
+        if (this.b3) {
+          await this.b3.rollDie(ev.value, p ? p.color : '#fff');
+        } else {
+          this.rolling = true;
+          this.die.classList.add('rolling');
+          for (let k = 0; k < 8; k++) {
+            showFace(this.die, 1 + Math.floor(Math.random() * 6));
+            await sleep(85);
+          }
+          this.die.classList.remove('rolling');
+          this.rolling = false;
+          showFace(this.die, ev.value);
+        }
+        const pt = this.b3 ? this.b3.dieScreen() : this.rectOf(this.die);
+        this.bubble({ x: pt.x, y: pt.y - 50 }, `🎲 ${ev.value}`, ev.value === 6 ? '.warn' : '', 1100);
+        await sleep(250);
         return;
       }
       case 'noMove':
-        this.bubble(this.rectOf(this.die), ev.tries ? `Raté (${ev.tries}/3)` : 'Aucun coup possible', '.warn', 1200);
-        await sleep(500);
+        if (p) this.announce({ icon: '🎲', title: `${p.name} fait ${ev.value}`, text: ev.tries ? `Raté… encore ${3 - ev.tries} essai${3 - ev.tries > 1 ? 's' : ''} pour faire un 6` : 'Aucun cheval ne peut bouger', color: p.color, pid: p.id, ms: 2000 });
+        await sleep(400);
         return;
       case 'replay':
-        if (p) this.showBanner('🔁', `${p.name} rejoue !`, null, p.color, 1000);
-        await sleep(300);
+        if (p) this.announce({ icon: '🔁', title: `${p.name} rejoue !`, text: 'Un 6, ça se fête', color: p.color, pid: p.id, kind: 'gold', ms: 2000 });
+        await sleep(250);
         return;
       case 'exit': {
         d.horses[ev.pid][ev.horse] = 0;
-        this.renderHorses();
+        this.renderHorses(true, ev.pid + '|' + ev.horse);
         Sound.play('buy');
-        if (p) this.bubble(this.pointOfCell(this.cellOf(p, 0, ev.horse)), '🐎 Sortie !', '', 1100);
-        await sleep(520);
+        if (p) {
+          this.announce({ icon: '🐎', title: `${p.name} sort un cheval !`, text: 'Direction la piste', color: p.color, pid: p.id, ms: 2200 });
+          await sleep(650);
+          if (this.b3) this.b3.burst(this.cellOf(p, 0, ev.horse), p.color, 14);
+        }
+        await sleep(150);
         return;
       }
       case 'move': {
-        const el = this.horseEls[ev.pid + ':' + ev.horse];
-        if (el) el.classList.add('hopping');
         for (const r of ev.path) {
           d.horses[ev.pid][ev.horse] = r;
-          this.renderHorses();
+          this.renderHorses(true);
           Sound.play('step');
-          await sleep(170);
+          await sleep(175);
         }
-        if (el) el.classList.remove('hopping');
-        await sleep(120);
+        await sleep(80);
         return;
       }
       case 'capture': {
         const victim = this.player(ev.victim);
-        const g = TRACK_CELLS[ev.cell];
-        const pt = this.pointOfCell(this.view(g));
-        this.bubble(pt, '💥 PAF !', '.hit', 1300);
+        const rc = this.view(TRACK_CELLS[ev.cell]);
         Sound.play('takeover');
+        this.bubble(this.screenOf(rc), '💥 PAF !', '.hit', 1300);
+        if (this.b3) {
+          this.b3.burst(rc, victim ? victim.color : '#fff', 26);
+          this.b3.shake(0.45);
+        }
         if (d.horses[ev.victim]) d.horses[ev.victim][ev.horse] = -1;
-        await sleep(250);
-        this.renderHorses();
-        if (victim && p) this.showBanner('💥', `${p.name} renvoie un cheval de ${victim.name} à l'écurie !`, null, p.color, 1500);
-        await sleep(650);
+        await sleep(200);
+        this.renderHorses(true, ev.victim + '|' + ev.horse);
+        if (victim && p) this.announce({ icon: '💥', title: `${p.name} renvoie un cheval de ${victim.name} !`, text: 'Retour à l\'écurie', color: p.color, pid: p.id, kind: 'danger', ms: 3000 });
+        await sleep(750);
         return;
       }
       case 'finish': {
         Sound.play('festival');
-        const b = this.boardEl.getBoundingClientRect();
-        this.bubble({ x: b.left + b.width / 2, y: b.top + b.height / 2 }, '🏁 Arrivé !', '.shout', 1500);
-        if (p) this.showBanner('🏁', `Un cheval de ${p.name} arrive !`, `${ev.home}/${st.settings.horsesToWin}`, p.color, 1500);
-        const pl = st.players.find((x) => x.id === ev.pid);
-        if (pl && this.state) {
-          const sp = this.state.players.find((x) => x.id === ev.pid);
-          if (sp) sp.home = ev.home;
-        }
-        this.renderPlates();
+        if (this.b3) this.b3.burst([8, 8], p ? p.color : '#ffd166', 40, this.b3.centerTop);
+        if (p) this.announce({ icon: '🏁', title: `Un cheval de ${p.name} arrive !`, text: `${ev.home}/${st.settings.horsesToWin} au centre`, color: p.color, pid: p.id, kind: 'gold', ms: 3000 });
+        const sp = this.state.players.find((x) => x.id === ev.pid);
+        if (sp) sp.home = ev.home;
+        this.renderPlayers();
         await sleep(900);
         return;
       }
@@ -646,7 +711,7 @@ export class HorseTable {
         Sound.play('win');
         return;
       case 'out':
-        if (p) this.showBanner('🏳️', `${p.name} abandonne`, null, '#888', 1200);
+        if (p) this.announce({ icon: '🏳️', title: `${p.name} abandonne`, color: '#888', pid: p.id });
         return;
     }
   }
@@ -656,9 +721,11 @@ export class HorseTable {
   }
 
   onEmote({ key, emoji }) {
-    const plate = this.plateOf(key);
-    if (!plate) return;
-    this.bubble(this.rectOf(plate), emoji, '.emote', 2200);
+    const card = this.v.playersEl.querySelector(`[data-pid="${CSS.escape(key)}"]`);
+    if (!card) return;
+    const b = h('div.emote-card', emoji);
+    card.append(b);
+    setTimeout(() => b.remove(), 2200);
   }
 
   // ========================================================= fin de partie
