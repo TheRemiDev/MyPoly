@@ -100,7 +100,13 @@ export class CardTable {
     this.deckEl = h('div.ct-deck', { title: 'Piocher (D)', onclick: () => this.draw() });
     this.discardEl = h('div.ct-discard');
     this.colorEl = h('div.ct-color');
-    this.dirEl = h('div.ct-dir', { html: '<svg viewBox="0 0 100 100" aria-hidden="true"><defs><marker id="ctArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="currentColor"/></marker></defs><path d="M50 6 A44 44 0 0 1 94 50" fill="none" stroke="currentColor" stroke-width="3" marker-end="url(#ctArrow)"/><path d="M50 94 A44 44 0 0 1 6 50" fill="none" stroke="currentColor" stroke-width="3" marker-end="url(#ctArrow)"/></svg>' });
+    const ringText = '★ CARTON ! ★ VIDE TA MAIN ★ CRIE « CARTON ! » ★ CARTON ! ★ VIDE TA MAIN ★ CRIE « CARTON ! » ';
+    this.dirEl = h('div.ct-dir', { html: `<svg viewBox="0 0 200 200" aria-hidden="true"><defs><path id="ctRingPath" d="M100 100 m-84 0 a84 84 0 1 1 168 0 a84 84 0 1 1 -168 0"/></defs>
+      <circle cx="100" cy="100" r="95" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 5" opacity=".6"/>
+      <circle cx="100" cy="100" r="74" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/>
+      <text font-size="9.5" font-weight="900" letter-spacing="2.2" fill="currentColor"><textPath href="#ctRingPath">${ringText}</textPath></text>
+      ${[0, 90, 180, 270].map((a) => `<path transform="rotate(${a} 100 100)" d="M100 3 l7 5 -7 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}
+    </svg>` });
     this.pendingEl = h('div.ct-pending', { hidden: true });
     this.deckCount = h('div.ct-deck-count');
     this.center = h('div.ct-center', this.dirEl, this.colorEl, h('div.ct-piles', h('div.ct-deck-wrap', this.deckEl, this.deckCount), this.discardEl), this.pendingEl);
@@ -299,11 +305,11 @@ export class CardTable {
         const second = k >= row1;
         const m = second ? n - row1 : row1;
         const j = second ? k - row1 : k;
-        return [((j + 0.5) / m) * 100, second ? 33 : 15];
+        return [((j + 0.5) / m) * 100, second ? 33 : 15, 't'];
       });
     }
-    const L = { l: [8, 46], tl: [25, 17], t: [50, 12], tr: [75, 17], r: [92, 46] };
-    const map = { 1: ['t'], 2: ['tl', 'tr'], 3: ['l', 't', 'r'], 4: ['l', 'tl', 'tr', 'r'], 5: ['l', 'tl', 't', 'tr', 'r'], 6: ['l', 'tl', 't', 't', 'tr', 'r'] };
+    const L = { l: [7, 50, 'l'], tl: [25, 19, 't'], t: [50, 15, 't'], tr: [75, 19, 't'], r: [93, 50, 'r'], t1: [38, 15, 't'], t2: [62, 15, 't'] };
+    const map = { 1: ['t'], 2: ['tl', 'tr'], 3: ['l', 't', 'r'], 4: ['l', 'tl', 'tr', 'r'], 5: ['l', 'tl', 't', 'tr', 'r'], 6: ['l', 'tl', 't1', 't2', 'tr', 'r'] };
     return (map[n] || map[5]).map((k) => L[k]);
   }
 
@@ -314,8 +320,8 @@ export class CardTable {
     const pos = this.seatPositions(others.length);
     this.seatsEl.innerHTML = '';
     others.forEach((p, k) => {
-      const [x, y] = pos[k];
-      this.seatsEl.append(this.seatEl(p, x, y));
+      const [x, y, side] = pos[k];
+      this.seatsEl.append(this.seatEl(p, x, y, side));
     });
     // Ma fiche (en bas)
     this.meBar.innerHTML = '';
@@ -344,7 +350,7 @@ export class CardTable {
     );
   }
 
-  seatEl(p, x, y) {
+  seatEl(p, x, y, side = 't') {
     const count = this.disp ? this.disp.counts[p.id] ?? p.count : p.count;
     const shown = Math.min(count, 12);
     const fan = h('div.ct-fan', Array.from({ length: shown }, (_, k) => {
@@ -353,7 +359,7 @@ export class CardTable {
       b.style.transform = `rotate(${a}deg)`;
       return b;
     }));
-    const seat = h('div.ct-seat', { 'data-pid': p.id, style: { left: x + '%', top: y + '%', '--c': p.color } }, fan, this.badgeEl(p, false));
+    const seat = h('div.ct-seat.s-' + side, { 'data-pid': p.id, style: { left: x + '%', top: y + '%', '--c': p.color } }, this.badgeEl(p, false), fan);
     // Joueur qui a oublié de crier « Carton ! » : tout le monde peut le prendre
     const me = this.player(this.me);
     if (p.exposed && me && !me.out && !this.state.over) {
@@ -375,8 +381,23 @@ export class CardTable {
     const st = this.state;
     const d = this.disp;
     if (!st || !d) return;
+    // Défausse en vrac : les dernières cartes posées restent visibles dessous
+    this.pile ||= [];
+    if (!d.top) this.pile = [];
+    else if (!this.pile.length || this.pile[this.pile.length - 1].id !== d.top.id) {
+      if (!this.pile.some((c) => c.id === d.top.id)) this.pile.push(d.top);
+      else this.pile = [d.top];
+      if (this.pile.length > 5) this.pile = this.pile.slice(-5);
+    }
     this.discardEl.innerHTML = '';
-    if (d.top) this.discardEl.append(cardEl(d.top, '.big'));
+    this.pile.forEach((c, k) => {
+      const el = cardEl(c, '.big' + (k === this.pile.length - 1 ? '.top' : ''));
+      const r = ((c.id * 47) % 34) - 17;
+      const dx = ((c.id * 13) % 18) - 9;
+      const dy = ((c.id * 29) % 14) - 7;
+      el.style.transform = `translate(${dx}px, ${dy}px) rotate(${r}deg)`;
+      this.discardEl.append(el);
+    });
     this.colorEl.style.setProperty('--cc', CCOLORS[d.color] || '#fff');
     this.colorEl.dataset.name = CNAMES[d.color] || '';
     this.dirEl.classList.toggle('ccw', d.dir < 0);
