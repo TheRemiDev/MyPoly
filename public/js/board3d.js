@@ -538,67 +538,73 @@ export class Board3D {
     const scenic = [park.clone(), park.clone().addScaledVector(dir, 0.7), P(5.6, 0.75, -5.6), P(7.4, 1.8, -4.5), P(6.8, 2.6, 2.0), P(2.0, 3.2, 3.4), P(-2.5, 3.3, 0.5), P(-1.5, 3.2, -4.0), P(2.5, 2.9, -7.6), P(7.6, 2.0, -9.0), P(8.8, 1.4, -8.4), P(7.0, 0.9, -7.0), P(5.6, 0.45, -5.6), park.clone().addScaledVector(dir, 0.7), park.clone()];
     scenic.forEach((p) => (p.y = Math.max(p.y, y0)));
     this.flightPaths = [takeoff, scenic].map((pts) => new THREE.CatmullRomCurve3(pts, false, 'centripetal'));
-    // Deux avions qui se relaient : l'un attend au parking pendant que l'autre fait son tour.
-    // Le suivant décolle quand le premier a fait 60 % de son vol, et chacun dure 16 s :
-    // la piste et le parking ne sont jamais occupés par deux avions à la fois.
+    // Un seul avion de ligne : il attend longtemps au parking entre deux vols (40 à 75 s)
+    const approach = [P(8.8, 1.5, -8.6), P(7.0, 0.9, -7.0), P(5.6, 0.45, -5.6), park.clone().addScaledVector(dir, 0.7), park.clone()];
+    approach.forEach((p) => (p.y = Math.max(p.y, y0)));
+    this.approachPath = new THREE.CatmullRomCurve3(approach, false, 'centripetal');
+    this.airport = { park, dir, y0 };
     this.flightDur = 16;
-    const liveries = ['#ff5a5f', '#3fa7ff'];
-    this.planes = liveries.map((c, k) => {
-      const obj = this.makePlane(c);
-      obj.position.copy(park);
-      obj.lookAt(park.clone().add(dir));
-      this.scene.add(obj);
-      const p = { obj, phase: 'wait', t: 0, park, dir, curve: null };
-      if (k === 1) this.startFlight(p, 0.3);
-      return p;
-    });
+    const obj = this.makePlane('#ff5a5f');
+    obj.position.copy(park);
+    obj.lookAt(park.clone().add(dir));
+    this.scene.add(obj);
+    this.planes = [{ obj, phase: 'wait', wait: 25 + Math.random() * 20, t: 0, park, dir, curve: null, dur: this.flightDur }];
   }
 
-  startFlight(p, t0 = 0) {
+  startFlight(p, curve = null, dur = this.flightDur) {
     p.phase = 'flight';
-    p.t = t0;
-    p.curve = this.flightPaths[Math.floor(Math.random() * this.flightPaths.length)];
+    p.t = 0;
+    p.dur = dur;
+    p.curve = curve || this.flightPaths[Math.floor(Math.random() * this.flightPaths.length)];
+    p.obj.visible = true;
   }
 
-  /** Quand un joueur prend l'avion, l'avion au parking décolle tout de suite si la piste le permet. */
-  launchPlane() {
-    if (!this.planes) return;
-    const parked = this.planes.find((x) => x.phase === 'wait');
-    const other = this.planes.find((x) => x !== parked);
-    if (parked && other && other.phase === 'flight' && other.t >= 0.25) this.startFlight(parked);
+  /** Ancienne API : plus de décollage automatique quand un joueur voyage (voir flyPawn). */
+  launchPlane() {}
+
+  /** Orientation et inclinaison d'un avion le long de sa trajectoire (u entre 0 et 1). */
+  orientPlane(o, curve, u, dt) {
+    const pos = curve.getPointAt(u);
+    const ahead = curve.getPointAt(Math.min(1, u + 0.004));
+    const ahead2 = curve.getPointAt(Math.min(1, u + 0.03));
+    o.position.copy(pos);
+    if (ahead.distanceToSquared(pos) > 1e-8) o.lookAt(ahead);
+    const d1 = ahead.clone().sub(pos).setY(0).normalize();
+    const d2 = ahead2.clone().sub(ahead).setY(0).normalize();
+    const turn = d1.x * d2.z - d1.z * d2.x;
+    const inner = o.userData.inner;
+    inner.rotation.z += (Math.max(-0.6, Math.min(0.6, -turn * 18)) - inner.rotation.z) * Math.min(1, dt * 4);
   }
 
   updatePlanes(dt, time) {
     if (!this.planes) return;
     for (const p of this.planes) {
       const o = p.obj;
-      const other = this.planes.find((x) => x !== p);
-      const nav = (time * 2 + this.planes.indexOf(p)) % 1 < 0.15;
-      o.userData.navL.visible = o.userData.navR.visible = nav || p.phase !== 'flight';
+      o.userData.navL.visible = o.userData.navR.visible = (time * 2) % 1 < 0.15 || p.phase !== 'flight';
+      if (p.phase === 'charter' || p.phase === 'away') {
+        // Avion réquisitionné pour un voyage de joueur : piloté par flyPawn()
+        if (p.phase === 'away') {
+          p.wait -= dt;
+          if (p.wait <= 0) this.startFlight(p, this.approachPath, 6);
+        }
+        continue;
+      }
       if (p.phase === 'wait') {
-        if (other.phase === 'flight' && other.t >= 0.6) this.startFlight(p);
+        p.wait -= dt;
+        if (p.wait <= 0) this.startFlight(p);
         continue;
       }
       if (p.phase === 'flight') {
-        p.t += dt / this.flightDur;
+        p.t += dt / p.dur;
         const t = Math.min(1, p.t);
         // Accélération sur la piste au décollage, freinage à l'atterrissage
-        const u = t < 0.08 ? 0.08 * Math.pow(t / 0.08, 2) : t > 0.92 ? 1 - 0.08 * Math.pow((1 - t) / 0.08, 2) : t;
-        const pos = p.curve.getPointAt(u);
-        const ahead = p.curve.getPointAt(Math.min(1, u + 0.004));
-        const ahead2 = p.curve.getPointAt(Math.min(1, u + 0.03));
-        o.position.copy(pos);
-        if (ahead.distanceToSquared(pos) > 1e-8) o.lookAt(ahead);
-        // Inclinaison dans les virages
-        const d1 = ahead.clone().sub(pos).setY(0).normalize();
-        const d2 = ahead2.clone().sub(ahead).setY(0).normalize();
-        const turn = d1.x * d2.z - d1.z * d2.x;
-        const inner = o.userData.inner;
-        inner.rotation.z += (Math.max(-0.6, Math.min(0.6, -turn * 18)) - inner.rotation.z) * Math.min(1, dt * 4);
+        const takeoff = p.curve !== this.approachPath;
+        const u = takeoff && t < 0.08 ? 0.08 * Math.pow(t / 0.08, 2) : t > 0.92 ? 1 - 0.08 * Math.pow((1 - t) / 0.08, 2) : t;
+        this.orientPlane(o, p.curve, u, dt);
         if (t >= 1) {
           p.phase = 'turn';
           p.t = 0;
-          inner.rotation.z = 0;
+          o.userData.inner.rotation.z = 0;
         }
         continue;
       }
@@ -610,9 +616,151 @@ export class Board3D {
         const a0 = Math.atan2(back.x, back.z);
         o.position.copy(p.park);
         o.rotation.set(0, a0 + Math.PI * ease.inOut(t), 0);
-        if (t >= 1) p.phase = 'wait';
+        if (t >= 1) {
+          p.phase = 'wait';
+          p.wait = 40 + Math.random() * 35;
+        }
       }
     }
+  }
+
+  /**
+   * Voyage d'un joueur depuis l'Aéroport : le pion monte dans l'avion, l'avion décolle,
+   * survole le plateau jusqu'à la case choisie, le pion descend en parachute,
+   * puis l'avion s'éloigne et revient se garer plus tard.
+   */
+  async flyPawn(pid, to) {
+    const pw = this.pawns[pid];
+    if (!pw) return;
+    const { park, dir, y0 } = this.airport;
+    // L'avion de ligne est réquisitionné s'il est au sol ; sinon un second appareil est affrété
+    const liner = this.planes[0];
+    let plane;
+    let temp = false;
+    if (liner && (liner.phase === 'wait' || liner.phase === 'turn' || liner.phase === 'away')) {
+      plane = liner.obj;
+      liner.phase = 'charter';
+      plane.visible = true;
+    } else {
+      plane = this.makePlane('#3fa7ff');
+      this.scene.add(plane);
+      temp = true;
+    }
+    plane.userData.inner.rotation.z = 0;
+    plane.position.copy(park);
+    plane.lookAt(park.clone().add(dir));
+    const pawn = pw.obj;
+    pw.moving = true;
+
+    // 1. Embarquement : le pion saute dans l'avion et disparaît dans la cabine
+    const from = pawn.position.clone();
+    const door = park.clone().add(new THREE.Vector3(0, 0.05, 0));
+    await this.tween(650, (t) => {
+      pawn.position.lerpVectors(from, door, ease.inOut(t));
+      pawn.position.y = from.y + Math.sin(t * Math.PI) * 0.6 + (door.y - from.y) * t;
+      pawn.scale.setScalar(Math.max(0.01, 1 - ease.inOut(t) * 0.99));
+    });
+    pawn.visible = false;
+    if (this.cb.onBoard) this.cb.onBoard();
+
+    // 2. Trajectoire : piste, montée, survol de la case d'arrivée, puis départ vers le large
+    const b = cellBox(to);
+    const dest = new THREE.Vector3(b.cx, TOP + 1.9, b.cz);
+    const runEnd = park.clone().addScaledVector(dir, 0.7);
+    const climb = new THREE.Vector3(5.7, 1.0, -5.7);
+    const mid = climb.clone().lerp(dest, 0.5);
+    mid.y = 2.8;
+    // Sortie : on continue dans la même direction, au-delà du plateau
+    const heading = dest.clone().sub(mid).setY(0).normalize();
+    const exit = dest.clone().addScaledVector(heading, 6);
+    exit.y = 2.6;
+    const pts = [park.clone(), runEnd, climb, mid, dest, exit];
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    // Point de largage : position de la trajectoire la plus proche au-dessus de la case
+    let uDrop = 0.7;
+    let best = Infinity;
+    for (let k = 0; k <= 200; k++) {
+      const u = k / 200;
+      const q = curve.getPointAt(u);
+      const d = (q.x - dest.x) ** 2 + (q.z - dest.z) ** 2;
+      if (d < best) {
+        best = d;
+        uDrop = u;
+      }
+    }
+    const length = curve.getLength();
+    const dur = Math.max(3200, length * 330);
+    let dropped = false;
+    let landed = null;
+    if (this.cb.onTakeoff) this.cb.onTakeoff();
+    await this.tween(dur, (t) => {
+      // Accélération au sol au départ, puis vitesse de croisière
+      const u = t < 0.12 ? 0.12 * Math.pow(t / 0.12, 2) : t;
+      this.orientPlane(plane, curve, u, 1 / 60);
+      if (!dropped && u >= uDrop) {
+        dropped = true;
+        landed = this.parachute(pw, plane.position.clone(), to);
+      }
+      // L'avion s'estompe en quittant le plateau
+      const fade = u > 0.92 ? 1 - (u - 0.92) / 0.08 : 1;
+      plane.scale.setScalar(Math.max(0.01, fade));
+    });
+    plane.scale.setScalar(1);
+    if (!dropped) landed = this.parachute(pw, plane.position.clone(), to);
+    if (temp) this.scene.remove(plane);
+    else {
+      plane.visible = false;
+      liner.phase = 'away';
+      liner.wait = 12 + Math.random() * 8; // revient se poser un peu plus tard
+    }
+    await landed;
+    pw.moving = false;
+    pw.pos = to;
+  }
+
+  /** Le pion descend en parachute jusqu'à la case et rebondit à l'atterrissage. */
+  async parachute(pw, start, to) {
+    const pawn = pw.obj;
+    const end = this.pawnSlot(to, 0, 1);
+    const chute = new THREE.Group();
+    const canopyMat = new THREE.MeshStandardMaterial({ color: pawn.userData.body.material.color, roughness: 0.6, side: THREE.DoubleSide });
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.32, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2.2), canopyMat);
+    canopy.position.y = 0.95;
+    const stripe = new THREE.Mesh(new THREE.SphereGeometry(0.325, 18, 4, 0, Math.PI * 2, Math.PI / 4.2, 0.18), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+    stripe.position.y = 0.95;
+    chute.add(canopy, stripe);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(Math.cos(a) * 0.28, 0.98, Math.sin(a) * 0.28), new THREE.Vector3(0, 0.45, 0)]);
+      chute.add(new THREE.Line(geo, lineMat));
+    }
+    chute.traverse((o) => o.isMesh && (o.castShadow = true));
+    pawn.add(chute);
+    pawn.visible = true;
+    pawn.position.copy(start).add(new THREE.Vector3(0, -0.25, 0));
+    pawn.scale.setScalar(0.01);
+    const from = pawn.position.clone();
+    if (this.cb.onDrop) this.cb.onDrop();
+    await this.tween(1900, (t) => {
+      pawn.scale.setScalar(Math.max(0.01, Math.min(1, t * 6)));
+      pawn.position.x = from.x + (end.x - from.x) * ease.out(t);
+      pawn.position.z = from.z + (end.z - from.z) * ease.out(t);
+      pawn.position.y = from.y + (end.y - from.y) * t;
+      pawn.rotation.z = Math.sin(t * 9) * 0.18 * (1 - t);
+      chute.scale.setScalar(Math.min(1, t * 5));
+    });
+    pawn.rotation.z = 0;
+    // Le parachute se replie, petit rebond à l'atterrissage
+    this.dust(end, 0xffffff);
+    this.bumpTile(to);
+    await this.tween(380, (t) => {
+      chute.scale.set(Math.max(0.01, 1 - t), Math.max(0.01, 1 - t), Math.max(0.01, 1 - t));
+      pawn.position.y = end.y + Math.sin(t * Math.PI) * 0.15;
+    });
+    pawn.remove(chute);
+    pawn.position.copy(end);
+    pawn.scale.setScalar(1);
   }
 
   emojiSprite(e, scale, ring = null) {
