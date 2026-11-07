@@ -130,6 +130,21 @@ class Game {
   ownsCountry(pid, country) {
     return COUNTRY_CELLS[country].every((i) => this.props[i].owner === pid);
   }
+  /** Pays d'une ville et indication de monopole (null si ce n'est pas une ville). */
+  countryOf(i) {
+    return CELLS[i].type === 'city' ? CELLS[i].country : null;
+  }
+  announceMonopoly(p, country) {
+    const ct = COUNTRIES.find((c) => c.id === country);
+    this.emit({ t: 'monopoly', pid: p.id, country, cells: COUNTRY_CELLS[country] }, 3000);
+    this.say(`👑 MONOPOLE ! ${p.name} possède tout le pays ${ct.flag} ${ct.name}${this.settings.countryDoubleRent ? ' : loyers ×2' : ''} !`, p.id);
+  }
+  announceMonopolyLost(p, country) {
+    const ct = COUNTRIES.find((c) => c.id === country);
+    this.emit({ t: 'monopolyLost', pid: p.id, country, cells: COUNTRY_CELLS[country] }, 600);
+    this.say(`💔 ${p.name} perd son monopole ${ct.flag} ${ct.name}.`, p.id);
+  }
+
   rent(i) {
     const c = CELLS[i];
     const s = this.props[i];
@@ -360,11 +375,14 @@ class Game {
   sell(p, i) {
     const v = this.sellValue(i);
     const level = this.props[i].level;
+    const country = this.countryOf(i);
+    const hadMono = country && this.ownsCountry(p.id, country);
     this.props[i] = { owner: null, level: 0 };
     if (this.festival.cell === i) this.festival = { cell: null, mult: 1 };
     // Évènement émis avant le gain pour que l'animation de démolition précède l'argent
     this.emit({ t: 'sell', pid: p.id, cell: i, level, value: v }, 1300);
     this.money(p, v, 'sell');
+    if (hadMono) this.announceMonopolyLost(p, country);
     this.say(`${p.name} vend ${CELLS[i].name} pour ${fmt(v)}.`, p.id);
   }
   bankrupt(p, creditor) {
@@ -636,6 +654,7 @@ class Game {
         if (level) p.stats.built += level;
         this.emit({ t: 'buy', pid: p.id, cell: i, level }, 500);
         this.say(`${p.name} achète ${c.name}${level ? ` avec ${level} maison${level > 1 ? 's' : ''}` : ''} (${fmt(cost)}).`, p.id);
+        if (c.type === 'city' && this.ownsCountry(p.id, c.country)) this.announceMonopoly(p, c.country);
         return this.endAction();
       }
       case 'build': {
@@ -662,10 +681,14 @@ class Game {
         const price = this.takeoverPrice(i);
         if (p.cash < price) return { error: 'Fonds insuffisants.' };
         const owner = this.player(s.owner);
+        const country = this.countryOf(i);
+        const ownerHadMono = country && this.ownsCountry(owner.id, country);
         this.transfer(p, owner, price, 'takeover');
         s.owner = p.id;
         p.stats.takeovers++;
         this.emit({ t: 'takeover', pid: p.id, from: owner.id, cell: i }, 700);
+        if (ownerHadMono) this.announceMonopolyLost(owner, country);
+        if (country && this.ownsCountry(p.id, country)) this.announceMonopoly(p, country);
         this.say(`🤝 ${p.name} rachète ${CELLS[i].name} à ${owner.name} pour ${fmt(price)} !`, p.id);
         const w = this.monopolyWin(p);
         if (w) return this.finish(p, w);

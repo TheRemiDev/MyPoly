@@ -496,6 +496,7 @@ class RoomView {
         onHover: (i) => (i >= 0 ? this.showTip(i) : this.hideTip()),
         onStep: () => Sound.play('step'),
         onDemolish: () => Sound.play('crumble'),
+        onFirework: () => Sound.play('firework'),
       });
       this.gameEl.classList.add('webgl');
     } catch (e) {
@@ -544,6 +545,33 @@ class RoomView {
     el.style.top = c.y + 'px';
     this.pawnLayer.append(el);
     setTimeout(() => el.remove(), 1900);
+  }
+
+  /** Célébration d'un monopole sur le plateau 2D : cases dorées, feux d'artifice, titre. */
+  async celebrate2d(cells, color, subtitle) {
+    if (!this.cellEls || !this.cellEls.length || document.hidden) return sleep(400);
+    cells.forEach((i, k) => setTimeout(() => this.pulseCell(i, { color: '#ffd166' }, 'mono'), k * 140));
+    const pts = cells.map((i) => this.cellCenter(i));
+    for (let wave = 0; wave < 3; wave++) {
+      pts.forEach((pt, k) => setTimeout(() => {
+        this.fireworks2d(pt.x + (Math.random() - 0.5) * 60, pt.y - 40 - Math.random() * 60, color);
+        Sound.play('firework');
+      }, 300 + wave * 600 + k * 140));
+    }
+    const banner = h('div.mono-title', h('div.mono-big', 'MONOPOLE !'), h('div.mono-sub', { style: { background: color } }, subtitle));
+    this.hud.append(banner);
+    setTimeout(() => banner.remove(), 3300);
+    await sleep(3000);
+  }
+  fireworks2d(x, y, color) {
+    const colors = [color, '#ffd166', '#ffffff', '#ff5a5f', '#3fa7ff', '#2ecc71'];
+    for (let k = 0; k < 30; k++) {
+      const a = (k / 30) * Math.PI * 2 + Math.random() * 0.2;
+      const d = 40 + Math.random() * 45;
+      const p = h('div.fw-particle', { style: { left: x + 'px', top: y + 'px', background: colors[k % colors.length], color: colors[k % colors.length], '--dx': Math.cos(a) * d + 'px', '--dy': Math.sin(a) * d + 'px' } });
+      this.pawnLayer.append(p);
+      setTimeout(() => p.remove(), 1300);
+    }
   }
 
   /** Recadre brièvement la caméra 3D sur une case. */
@@ -851,6 +879,26 @@ class RoomView {
           this.cellLabel(cell, 'SAISI', '#e74c3c');
           await sleep(level ? 450 : 320);
         }
+        await sleep(500);
+        return;
+      }
+      case 'monopoly': {
+        const ct = this.meta.countries.find((c) => c.id === ev.country);
+        const double = this.room.settings.countryDoubleRent;
+        const subtitle = `${ct.flag} ${ct.name.toUpperCase()}${double ? ' · LOYERS ×2' : ' COMPLET'}`;
+        Sound.play('monopoly');
+        this.announce({ icon: '👑', title: `MONOPOLE pour ${p.name} !`, text: `${ct.flag} ${ct.name} complet${double ? ' · tous les loyers doublés' : ''}`, color: p.color, kind: 'gold', ms: 3800 });
+        if (this.b3 && !document.hidden) {
+          await this.b3.celebrate(ev.cells, p.color, subtitle);
+        } else {
+          await this.celebrate2d(ev.cells, p.color, subtitle);
+        }
+        return;
+      }
+      case 'monopolyLost': {
+        const ct = this.meta.countries.find((c) => c.id === ev.country);
+        this.announce({ icon: '💔', title: `${p.name} perd son monopole`, text: `${ct.flag} ${ct.name} n'est plus complet`, color: p.color, kind: 'danger' });
+        for (const i of ev.cells) this.pulseCell(i, null, 'destroy');
         await sleep(500);
         return;
       }

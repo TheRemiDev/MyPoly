@@ -90,6 +90,20 @@ const SFX = {
     noise(0.05, 0.35, 0.3, 900);
     tone(140, 0, 0.5, { type: 'sawtooth', gain: 0.12, slide: -90 });
   },
+  monopoly: () => {
+    // Fanfare triomphale
+    [[523, 0], [659, 0.12], [784, 0.24], [1046, 0.38], [784, 0.56], [1046, 0.68], [1318, 0.84]].forEach(([f, t]) => {
+      tone(f, t, 0.32, { type: 'square', gain: 0.07 });
+      tone(f / 2, t, 0.32, { type: 'triangle', gain: 0.1 });
+    });
+    tone(1568, 1.0, 0.7, { type: 'triangle', gain: 0.14 });
+  },
+  firework: () => {
+    // Sifflement puis détonation
+    tone(900 + Math.random() * 400, 0, 0.25, { type: 'sine', gain: 0.05, slide: 900 });
+    noise(0.22, 0.35, 0.45, 600 + Math.random() * 900);
+    noise(0.26, 0.5, 0.18, 3500);
+  },
   crumble: () => {
     for (let i = 0; i < 5; i++) noise(i * 0.06, 0.08, 0.25, 400 + Math.random() * 800);
   },
