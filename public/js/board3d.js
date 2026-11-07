@@ -1396,10 +1396,28 @@ export class Board3D {
       const sp = this.textSprite(`🎉 ×${mult}`, { bg: '#ff2fb3', scale: 0.42 });
       sp.position.y = 0.85;
       obj.add(sp);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.025, 8, 40), new THREE.MeshBasicMaterial({ color: 0xff2fb3, transparent: true, opacity: 0.8 }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.y = 0.05;
-      ring.userData.pulse = true;
+      // Cadre lumineux qui suit le bord de la case : le nom et le prix restent dégagés
+      const bx = t.box;
+      const hw = bx.w / 2 + 0.02;
+      const hd = bx.d / 2 + 0.02;
+      const e = 0.05;
+      const outer = new THREE.Shape();
+      outer.moveTo(-hw, -hd);
+      outer.lineTo(hw, -hd);
+      outer.lineTo(hw, hd);
+      outer.lineTo(-hw, hd);
+      outer.closePath();
+      const hole = new THREE.Path();
+      hole.moveTo(-hw + e, -hd + e);
+      hole.lineTo(-hw + e, hd - e);
+      hole.lineTo(hw - e, hd - e);
+      hole.lineTo(hw - e, -hd + e);
+      hole.closePath();
+      outer.holes.push(hole);
+      const ring = new THREE.Mesh(new THREE.ShapeGeometry(outer), new THREE.MeshBasicMaterial({ color: 0xff2fb3, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.012;
+      ring.userData.frame = true;
       obj.add(ring);
       const confetti = [];
       for (let k = 0; k < 12; k++) {
@@ -1839,10 +1857,13 @@ export class Board3D {
         o.position.y = TOP + t.lift;
         for (const c of o.userData.confetti) {
           const a = c.userData.a + time * 1.2;
-          c.position.set(Math.cos(a) * 0.42, 0.35 + Math.sin(time * 3 + c.userData.a * 3) * 0.12, Math.sin(a) * 0.42);
+          // Les confettis tournent autour du badge « ×N », au-dessus de la case (jamais devant le prix)
+          c.position.set(Math.cos(a) * 0.3, 0.88 + Math.sin(time * 3 + c.userData.a * 3) * 0.05, Math.sin(a) * 0.14);
           c.rotation.set(time * 3 + a, time * 2, 0);
         }
         o.children[0].position.y = 0.85 + Math.sin(time * 3) * 0.06;
+        const fr = o.children.find((c) => c.userData.frame);
+        if (fr) fr.material.opacity = 0.65 + Math.sin(time * 4) * 0.3;
       }
     }
     // Bâtiments : étoile des hôtels, drapeaux
