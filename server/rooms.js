@@ -94,6 +94,7 @@ function roomPublic(room) {
     seats: room.seats.map((s) => seatPublic(s, room)),
     spectators: [...room.sockets.keys()].filter((k) => !room.seats.some((s) => s.key === k) && isConnected(room, k)).length,
     result: room.result || null,
+    music: room.music.current ? { ...room.music, serverNow: Date.now() } : { current: null, queue: room.music.queue, serverNow: Date.now() },
     createdAt: room.createdAt,
   };
 }
@@ -115,6 +116,30 @@ function touch(room) {
   room.lastActivity = Date.now();
 }
 
+// ------------------------------------------------------------ musique (YouTube)
+/** Extrait l'identifiant d'une vidéo YouTube depuis un lien (ou l'identifiant seul). */
+function youtubeId(input) {
+  const s = String(input || '').trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  const m = s.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+async function youtubeTitle(id) {
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`, { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return cleanText(j.title, 120) || null;
+  } catch {
+    return null;
+  }
+}
+function musicNext(room) {
+  const next = room.music.queue.shift();
+  room.music.current = next ? { ...next, startedAt: Date.now() } : null;
+  broadcastRoom(room);
+}
+
 function createRoom(ident, settings) {
   const code = makeCode();
   const room = {
@@ -131,6 +156,7 @@ function createRoom(ident, settings) {
     createdAt: Date.now(),
     lastActivity: Date.now(),
     leaveTimers: new Map(),
+    music: { current: null, queue: [] }, // musique YouTube diffusée par l'hôte
   };
   rooms.set(code, room);
   return room;
@@ -453,6 +479,51 @@ function attach(server) {
       systemChat(room, '🔁 Nouvelle partie ! Retour au salon.');
       broadcastRoom(room);
       reply(cb, { ok: true });
+    });
+
+    // Musique : l'hôte choisit, tout le monde entend (chacun gère son volume)
+    socket.on('music:add', async (data, cb) => {
+      const room = current();
+      if (!isHost(room)) return reply(cb, { error: 'Seul l\'hôte peut choisir la musique.' });
+      const id = youtubeId(data && data.url);
+      if (!id) return reply(cb, { error: 'Lien YouTube invalide.' });
+      if (room.music.queue.length >= 30) return reply(cb, { error: 'La file d\'attente est pleine (30 titres).' });
+      const title = (await youtubeTitle(id)) || 'Vidéo YouTube';
+      const track = { id, title, by: ident.name };
+      const now = !room.music.current;
+      if (now) room.music.current = { ...track, startedAt: Date.now() };
+      else room.music.queue.push(track);
+      broadcastRoom(room);
+      systemChat(room, now ? `🎵 ${ident.name} lance « ${title} ».` : `🎵 ${ident.name} ajoute « ${title} » à la file.`);
+      reply(cb, { ok: true });
+    });
+    socket.on('music:skip', (cb) => {
+      const room = current();
+      if (!isHost(room)) return reply(cb, { error: 'Seul l\'hôte peut changer la musique.' });
+      musicNext(room);
+      reply(cb, { ok: true });
+    });
+    socket.on('music:stop', (cb) => {
+      const room = current();
+      if (!isHost(room)) return reply(cb, { error: 'Seul l\'hôte peut arrêter la musique.' });
+      room.music = { current: null, queue: [] };
+      broadcastRoom(room);
+      reply(cb, { ok: true });
+    });
+    socket.on('music:remove', (data, cb) => {
+      const room = current();
+      if (!isHost(room)) return reply(cb, { error: 'Action réservée à l\'hôte.' });
+      const k = Number(data && data.index);
+      if (Number.isInteger(k) && k >= 0 && k < room.music.queue.length) room.music.queue.splice(k, 1);
+      broadcastRoom(room);
+      reply(cb, { ok: true });
+    });
+    // Fin de piste signalée par un client : on passe au titre suivant (une seule fois)
+    socket.on('music:ended', (data) => {
+      const room = current();
+      const cur = room && room.music.current;
+      if (!cur || !data || data.id !== cur.id || Date.now() - cur.startedAt < 10000) return;
+      musicNext(room);
     });
 
     socket.on('chat:send', (data) => {

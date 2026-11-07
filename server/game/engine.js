@@ -359,7 +359,7 @@ class Game {
     this.rolledDouble = false;
     this.emit({ t: 'move', pid: p.id, from, to: CORNERS.jail, teleport: true }, ANIM.teleport);
     this.emit({ t: 'jail', pid: p.id }, ANIM.small);
-    this.say(`${p.name} est coincé(e) sur l'Île déserte !`, p.id);
+    this.say(this.theme ? `🚔 ${p.name} est placé(e) en garde à vue !` : `${p.name} est coincé(e) sur l'Île déserte !`, p.id);
   }
 
   // -------------------------------------------------------------- payments
@@ -539,7 +539,8 @@ class Game {
     const id = this.deck.pop();
     const card = this.themedCard(CARDS.find((c) => c.id === id));
     p.stats.cards++;
-    this.emit({ t: 'card', pid: p.id, card }, ANIM.card);
+    // Durée d'affichage proportionnelle au texte (le client utilise la même formule)
+    this.emit({ t: 'card', pid: p.id, card }, Math.min(9000, 3500 + (card.title.length + card.text.length) * 40) + 400);
     this.say(`${p.name} tire « ${card.title} » : ${card.text}`, p.id);
     const others = this.alive().filter((o) => o !== p);
     switch (id) {

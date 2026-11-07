@@ -1459,3 +1459,31 @@ body:not(.in-game) {
 .mel-counter.bump { animation: melBump .6s cubic-bezier(.2, 1.6, .4, 1); }
 .mel-counter.appear { animation: pop .5s cubic-bezier(.2, 1.6, .4, 1); }
 @keyframes melBump { 40% { scale: 1.15; } }
+
+.notif-quip { font-size: .74rem; font-style: italic; color: #ffe08a; margin-top: 3px; line-height: 1.3; }
+
+/* ------------------------------------------------------------- musique */
+.yt-host { position: fixed; left: -10000px; top: 0; width: 200px; height: 113px; pointer-events: none; }
+.music-title { margin-top: 16px; }
+.music-panel { display: flex; flex-direction: column; gap: 10px; }
+.music-now { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; background: rgba(0, 0, 0, .25); }
+.music-thumb { width: 84px; height: 47px; object-fit: cover; border-radius: 8px; flex: none; }
+.music-info { display: flex; flex-direction: column; min-width: 0; }
+.music-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.music-info small:first-child { color: #7ef0ac; font-weight: 800; font-size: .72rem; }
+.music-empty { font-size: .85rem; }
+.music-vol { display: flex; align-items: center; gap: 8px; }
+.music-vol input[type=range] { flex: 1; accent-color: #ff5a5f; }
+.music-add { display: flex; gap: 6px; }
+.music-add .input { flex: 1; width: auto; }
+.music-queue { display: flex; flex-direction: column; gap: 4px; }
+.music-q { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: .82rem; padding: 4px 8px; border-radius: 8px; background: rgba(0, 0, 0, .2); }
+.music-q span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-q .icon-btn { width: 24px; height: 24px; font-size: .7rem; }
+.music-host-actions { display: flex; gap: 6px; }
+.music-btn.playing { box-shadow: inset 0 0 0 2px #2ecc71; }
+.music-btn.blocked { animation: pulse 1s infinite; box-shadow: inset 0 0 0 2px #ffd166; }
+.btn.block { width: 100%; }
+
+.tip-desc { max-width: 260px; white-space: normal; margin-top: 4px; font-style: italic; color: #ffe08a; line-height: 1.35; }
+.cell-desc { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(255, 209, 102, .1); border: 1px solid rgba(255, 209, 102, .35); font-style: italic; color: #ffe8a8; line-height: 1.45; }
