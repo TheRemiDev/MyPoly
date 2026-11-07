@@ -659,7 +659,7 @@ export class Board3D {
     await this.tween(650, (t) => {
       pawn.position.lerpVectors(from, door, ease.inOut(t));
       pawn.position.y = from.y + Math.sin(t * Math.PI) * 0.6 + (door.y - from.y) * t;
-      pawn.scale.setScalar(Math.max(0.01, 1 - ease.inOut(t) * 0.99));
+      pawn.scale.setScalar(Math.max(0.01, (1 - ease.inOut(t) * 0.99) * (pawn.userData.baseScale || 1)));
     });
     pawn.visible = false;
     if (this.cb.onBoard) this.cb.onBoard();
@@ -744,7 +744,7 @@ export class Board3D {
     const from = pawn.position.clone();
     if (this.cb.onDrop) this.cb.onDrop();
     await this.tween(1900, (t) => {
-      pawn.scale.setScalar(Math.max(0.01, Math.min(1, t * 6)));
+      pawn.scale.setScalar(Math.max(0.01, Math.min(1, t * 6)) * (pawn.userData.baseScale || 1));
       pawn.position.x = from.x + (end.x - from.x) * ease.out(t);
       pawn.position.z = from.z + (end.z - from.z) * ease.out(t);
       pawn.position.y = from.y + (end.y - from.y) * t;
@@ -761,7 +761,7 @@ export class Board3D {
     });
     pawn.remove(chute);
     pawn.position.copy(end);
-    pawn.scale.setScalar(1);
+    pawn.scale.setScalar(pawn.userData.baseScale || 1);
   }
 
   emojiSprite(e, scale, ring = null) {
@@ -942,7 +942,7 @@ export class Board3D {
       grd.addColorStop(0, '#fffdf6');
       grd.addColorStop(1, '#f1e7d0');
     } else {
-      const cols = { start: ['#e2ffe9', '#3fcf85', '#1f9e5b'], jail: ['#fff4d1', '#ffbe55', '#2aa8cf'], festival: ['#ffe6f7', '#cf75ff', '#7d3bea'], travel: ['#e6f5ff', '#68bbff', '#2a7fdc'] }[c.type];
+      const cols = { start: ['#e2ffe9', '#3fcf85', '#1f9e5b'], jail: this.meta.cornerNames ? ['#d5d8de', '#8a919c', '#4a505a'] : ['#fff4d1', '#ffbe55', '#2aa8cf'], festival: ['#ffe6f7', '#cf75ff', '#7d3bea'], travel: ['#e6f5ff', '#68bbff', '#2a7fdc'] }[c.type];
       grd = g.createRadialGradient(W / 2, H * 0.38, 10, W / 2, H / 2, W * 0.75);
       grd.addColorStop(0, cols[0]);
       grd.addColorStop(0.62, cols[1]);
@@ -1042,7 +1042,8 @@ export class Board3D {
       glow.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = glow;
       g.fillRect(0, 0, W, H);
-      emoji(g, icons[c.type], W / 2, H * 0.38, W * 0.38);
+      if (c.type === 'jail' && this.meta.cornerNames) this.drawCell(g, W, H);
+      else emoji(g, (this.meta.cornerIcons && this.meta.cornerIcons[c.type]) || icons[c.type], W / 2, H * 0.38, W * 0.38);
       // Ruban
       g.font = `900 ${W * 0.1}px ${FONT}`;
       const rw = Math.min(W * 0.9, g.measureText(names[c.type]).width + W * 0.14);
@@ -1181,7 +1182,7 @@ export class Board3D {
   placeBuilding(i, level, color, f) {
     const a = this.bandAnchor(i);
     const obj = level === 4 ? this.makeHotel(color) : this.makeHouse(color);
-    obj.userData.base = level === 4 ? 1.2 : 1.15;
+    obj.userData.base = level === 4 ? 1.1 : 1.0;
     obj.scale.setScalar(obj.userData.base);
     const p = a.a.clone().lerp(a.b, f);
     obj.position.set(p.x, TOP, p.z);
@@ -1785,17 +1786,80 @@ export class Board3D {
     ring.position.y = 0.012;
     g.add(ring);
     g.userData = { ring, label, head, body };
+    g.scale.setScalar(0.85);
+    g.userData.baseScale = 0.85;
     g.position.y = TOP;
     this.scene.add(g);
     return g;
   }
 
+  /**
+   * Emplacement d'un pion sur une case. Hors coins, les pions se rangent sur le
+   * bord de la case qui masque le moins le texte vu depuis la caméra (bord du
+   * fond pour les rangées haute et basse, bord extérieur pour les colonnes).
+   */
   pawnSlot(pos, k, n) {
     const b = cellBox(pos);
-    if (n <= 1) return new THREE.Vector3(b.cx, TOP, b.cz);
-    const r = Math.min(b.w, b.d) * 0.26;
-    const a = (k / n) * Math.PI * 2 + Math.PI / 4;
-    return new THREE.Vector3(b.cx + Math.cos(a) * r, TOP, b.cz + Math.sin(a) * r);
+    const side = pos % 8 === 0 ? -1 : Math.floor(pos / 8);
+    if (side < 0) {
+      if (n <= 1) return new THREE.Vector3(b.cx, TOP, b.cz);
+      const r = Math.min(b.w, b.d) * 0.26;
+      const a = (k / n) * Math.PI * 2 + Math.PI / 4;
+      return new THREE.Vector3(b.cx + Math.cos(a) * r, TOP, b.cz + Math.sin(a) * r);
+    }
+    const t = n > 1 ? k / (n - 1) - 0.5 : 0;
+    if (side === 0 || side === 2) return new THREE.Vector3(b.cx + t * b.w * 0.62, TOP, b.cz - b.d * 0.32);
+    const x = side === 1 ? b.cx - b.w * 0.3 : b.cx + b.w * 0.3;
+    return new THREE.Vector3(x, TOP, b.cz + t * b.d * 0.6);
+  }
+
+  /** Case « Garde à vue » du plateau politique : cellule, barreaux, CRS et matraques. */
+  drawCell(g, W, H) {
+    const x0 = W * 0.2;
+    const y0 = H * 0.1;
+    const w = W * 0.6;
+    const h = H * 0.5;
+    // Mur de la cellule
+    const wall = g.createLinearGradient(0, y0, 0, y0 + h);
+    wall.addColorStop(0, '#6b717c');
+    wall.addColorStop(1, '#3d424b');
+    g.fillStyle = wall;
+    rr(g, x0, y0, w, h, 14);
+    g.fill();
+    // CRS dans la cellule
+    emoji(g, '👮', W / 2, y0 + h * 0.55, h * 0.62);
+    // Matraques croisées
+    g.save();
+    g.translate(W / 2, y0 + h * 0.82);
+    for (const a of [-0.65, 0.65]) {
+      g.save();
+      g.rotate(a);
+      g.fillStyle = '#16181c';
+      rr(g, -w * 0.32, -h * 0.035, w * 0.64, h * 0.07, h * 0.035);
+      g.fill();
+      g.fillStyle = '#2c2f36';
+      rr(g, w * 0.12, -h * 0.07, h * 0.035, h * 0.14, 3);
+      g.fill();
+      g.restore();
+    }
+    g.restore();
+    // Barreaux
+    g.fillStyle = '#c9ced6';
+    g.strokeStyle = '#555b66';
+    g.lineWidth = 2;
+    const bars = 6;
+    for (let k = 0; k < bars; k++) {
+      const bx = x0 + (w / (bars - 1)) * k - 5;
+      rr(g, bx, y0 - 4, 10, h + 8, 5);
+      g.fill();
+      g.stroke();
+    }
+    rr(g, x0 - 8, y0 - 8, w + 16, 14, 7);
+    g.fill();
+    g.stroke();
+    rr(g, x0 - 8, y0 + h - 6, w + 16, 14, 7);
+    g.fill();
+    g.stroke();
   }
 
   /** players : [{ id, pos, color, pawn, vip, bankrupt, current }] */
@@ -1829,16 +1893,16 @@ export class Board3D {
     const obj = pw.obj;
     if (ev.teleport) {
       await this.tween(260, (t) => {
-        obj.scale.setScalar(Math.max(0.01, 1 - t));
+        obj.scale.setScalar(Math.max(0.01, (1 - t) * (obj.userData.baseScale || 1)));
         obj.position.y = TOP + t * 0.6;
       });
       const to = this.pawnSlot(ev.to, 0, 1);
       obj.position.set(to.x, TOP + 2, to.z);
       await this.tween(420, (t) => {
-        obj.scale.setScalar(Math.max(0.01, t));
+        obj.scale.setScalar(Math.max(0.01, t * (obj.userData.baseScale || 1)));
         obj.position.y = TOP + 2 * (1 - ease.bounce(t));
       });
-      obj.scale.setScalar(1);
+      obj.scale.setScalar(obj.userData.baseScale || 1);
       this.dust(obj.position, 0xffffff);
       pw.pos = ev.to;
       pw.moving = false;
@@ -1856,9 +1920,10 @@ export class Board3D {
         obj.position.lerpVectors(from, to, t);
         obj.position.y = TOP + Math.sin(t * Math.PI) * 0.38;
         const sq = 1 + Math.sin(t * Math.PI) * 0.08;
-        obj.scale.set(1 / sq, sq, 1 / sq);
+        const k0 = obj.userData.baseScale || 1;
+        obj.scale.set(k0 / sq, k0 * sq, k0 / sq);
       });
-      obj.scale.set(1, 1, 1);
+      obj.scale.setScalar(obj.userData.baseScale || 1);
       pos = next;
       pw.pos = pos;
       this.bumpTile(pos);

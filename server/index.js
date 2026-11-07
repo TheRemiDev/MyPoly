@@ -25,9 +25,11 @@ app.use(
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
-        'script-src': ["'self'"],
+        // YouTube : lecteur intégré pour la musique diffusée par l'hôte
+        'script-src': ["'self'", 'https://www.youtube.com', 'https://s.ytimg.com'],
+        'frame-src': ['https://www.youtube.com', 'https://www.youtube-nocookie.com'],
         'style-src': ["'self'", "'unsafe-inline'"],
-        'img-src': ["'self'", 'data:'],
+        'img-src': ["'self'", 'data:', 'https://i.ytimg.com'],
         'connect-src': ["'self'", 'ws:', 'wss:'],
         'upgrade-insecure-requests': config.secureCookies ? [] : null,
       },

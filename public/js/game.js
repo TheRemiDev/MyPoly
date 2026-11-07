@@ -5,6 +5,7 @@ import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
 import { Board3D, webglAvailable } from './board3d.js';
 import { melenchonURL } from './melenchon.js';
+import { MusicPlayer } from './music.js';
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
 const LEVEL_LABEL = ['Terrain', '1 maison', '2 maisons', '3 maisons', 'Hôtel'];
@@ -163,6 +164,8 @@ class RoomView {
       ...m,
       src: m,
       cornerNames: theme.corners,
+      cornerIcons: theme.cornerIcons,
+      quips: theme.quips,
       cells: m.cells.map((c) => ({ ...c, ...(theme.cells[c.index] || {}) })),
       countries: m.countries.map((c) => ({ ...c, ...(theme.countries[c.id] || {}) })),
     };
@@ -205,6 +208,11 @@ class RoomView {
       navigate('/');
     });
     sub('connect', () => this.join());
+    this.musicBoxes = [];
+    this.music = new MusicPlayer({
+      onEnded: (id) => store.socket && store.socket.emit('music:ended', { id }),
+      onChange: () => this.renderMusic(),
+    });
     this.onKey = (e) => {
       if (e.target.matches('input, textarea, select')) return;
       if (e.key === 'f' || e.key === 'F') toggleFullscreen();
@@ -238,6 +246,7 @@ class RoomView {
   }
 
   destroy() {
+    if (this.music) this.music.destroy();
     for (const off of this.offs) off();
     document.removeEventListener('keydown', this.onKey);
     window.removeEventListener('resize', this.onResize);
@@ -252,6 +261,7 @@ class RoomView {
   onRoom(room) {
     const prevState = this.room && this.room.state;
     this.room = room;
+    if (this.music) this.music.sync(room.music);
     const mode = room.state === 'lobby' ? 'lobby' : 'game';
     if (mode !== this.mode) {
       this.mode = mode;
@@ -295,7 +305,7 @@ class RoomView {
         h('div.lobby-grid',
           h('div.card.lobby-players', h('h2', '👥 Joueurs'), this.lobbyEls.seats, this.lobbyEls.look),
           h('div.card.lobby-settings', h('h2', '⚙️ Règles de la partie'), this.lobbyEls.settings),
-          h('div.card.lobby-chat', h('h2', '💬 Discussion'), this.chatBox)
+          h('div.card.lobby-chat', h('h2', '💬 Discussion'), this.chatBox, h('h2.music-title', '🎵 Musique'), this.buildMusic())
         ),
         this.lobbyEls.actions
       )
@@ -575,7 +585,7 @@ class RoomView {
     this.popTitle = h('b');
     this.popover = h('div.popover', { hidden: true },
       h('div.pop-head', this.popTitle, h('button.icon-btn.pop-close', { title: 'Fermer', onclick: () => this.togglePop(null) }, '✕')),
-      h('div.pop-body', this.logEl, this.chatBox, this.emoteGrid)
+      h('div.pop-body', this.logEl, this.chatBox, this.emoteGrid, (this.musicPop = this.buildMusic()))
     );
     this.pop = null;
     this.endOverlay = h('div.end-overlay', { hidden: true });
@@ -648,7 +658,7 @@ class RoomView {
     const n = h('div.notif.' + kind + (slot !== 'mid' && slot[1] === 'r' ? '.right' : ''),
       { style: { '--c': color, '--life': ms + 'ms' } },
       h('div.notif-icon', icon),
-      h('div.notif-body', h('div.notif-title', title), text ? h('div.notif-text', text) : null),
+      h('div.notif-body', h('div.notif-title', title), text ? h('div.notif-text', text) : null, this.quipFor(this.evType) ? h('div.notif-quip', this.quipFor(this.evType)) : null),
       h('div.notif-life')
     );
     stack.prepend(n);
@@ -657,6 +667,16 @@ class RoomView {
       n.classList.add('out');
       setTimeout(() => n.remove(), 420);
     }, ms);
+  }
+
+  /** Pique humoristique du thème de plateau (plateau politique), ou null. */
+  quipFor(type) {
+    const q = this.meta.quips && this.meta.quips[type];
+    if (!q || !q.length) return null;
+    if (this.lastQuip && this.lastQuip.type === type && this.lastQuip.ev === this.evSeq) return this.lastQuip.text;
+    const text = q[Math.floor(Math.random() * q.length)];
+    this.lastQuip = { type, ev: this.evSeq, text };
+    return text;
   }
 
   /** Étiquette qui jaillit au-dessus d'une case. */
@@ -770,6 +790,67 @@ class RoomView {
     return null;
   }
 
+  // -------------------------------------------------------------- musique
+  /** Panneau musique (salon et partie) : rempli par renderMusic(). */
+  buildMusic() {
+    const box = h('div.music-panel');
+    this.musicBoxes.push(box);
+    this.renderMusicBox(box);
+    return box;
+  }
+  renderMusic() {
+    this.musicBoxes = this.musicBoxes.filter((b) => b.isConnected || b === this.musicPop);
+    for (const b of this.musicBoxes) this.renderMusicBox(b);
+    if (this.toolbar && this.mode === 'game') this.renderToolbar();
+  }
+  renderMusicBox(box) {
+    const m = this.music;
+    const room = this.room;
+    if (!m || !room) return;
+    const q = (room.music && room.music.queue) || [];
+    // Conserve la saisie de l'hôte si le panneau est redessiné pendant qu'il tape
+    const prev = box.querySelector('.music-add input');
+    const typed = prev ? prev.value : '';
+    const hadFocus = prev && document.activeElement === prev;
+    box.innerHTML = '';
+    const t = m.track;
+    box.append(
+      t
+        ? h('div.music-now',
+            h('img.music-thumb', { src: `https://i.ytimg.com/vi/${t.id}/mqdefault.jpg`, alt: '' }),
+            h('div.music-info', h('small', m.blocked ? '⏸ En attente de votre autorisation' : '▶ En cours'), h('b', t.title || 'Vidéo YouTube'), t.by ? h('small.muted', 'par ' + t.by) : null)
+          )
+        : h('div.music-empty.muted', this.isHost ? 'Aucune musique. Collez un lien YouTube ci-dessous pour en diffuser à tous les joueurs.' : 'L\'hôte n\'a pas lancé de musique.'),
+      m.blocked && t ? h('button.btn.primary.sm.block', { onclick: () => m.resume() }, '🔊 Activer la musique') : null,
+      h('div.music-vol',
+        h('button.icon-btn', { title: m.muted ? 'Remettre le son' : 'Couper le son', onclick: () => m.toggleMute() }, m.muted || m.volume === 0 ? '🔇' : '🔊'),
+        h('input', { type: 'range', min: 0, max: 100, value: m.muted ? 0 : m.volume, oninput: (e) => m.setVolume(Number(e.target.value)), 'aria-label': 'Volume de la musique' }),
+        h('small.muted', (m.muted ? 0 : m.volume) + ' %')
+      )
+    );
+    if (this.isHost) {
+      const input = h('input.input.sm', { placeholder: 'Lien YouTube…', autocomplete: 'off' });
+      input.value = typed;
+      if (hadFocus) setTimeout(() => input.focus(), 0);
+      const add = async () => {
+        if (!input.value.trim()) return;
+        const res = await emit('music:add', { url: input.value });
+        if (res.error) return toast(res.error, 'error');
+        input.value = '';
+        // Clic de l'hôte = interaction : la lecture n'est pas bloquée chez lui
+        setTimeout(() => m.resume(), 600);
+      };
+      input.addEventListener('keydown', (e) => e.key === 'Enter' && add());
+      box.append(
+        h('div.music-add', input, h('button.btn.primary.sm', { onclick: add }, t ? '+ File' : '▶ Lancer')),
+        q.length ? h('div.music-queue', h('small.muted', `À suivre (${q.length})`), q.map((x, k) => h('div.music-q', h('span', `${k + 1}. ${x.title}`), h('button.icon-btn', { title: 'Retirer', onclick: () => emit('music:remove', { index: k }) }, '✕')))) : null,
+        t ? h('div.music-host-actions', h('button.btn.ghost.sm', { onclick: () => emit('music:skip') }, '⏭ Suivant'), h('button.btn.ghost.sm', { onclick: () => emit('music:stop') }, '⏹ Arrêter')) : null
+      );
+    } else if (q.length) {
+      box.append(h('div.music-queue', h('small.muted', `À suivre (${q.length})`), q.map((x, k) => h('div.music-q', h('span', `${k + 1}. ${x.title}`)))));
+    }
+  }
+
   /** Ouvre / ferme la petite fenêtre flottante (chat, journal ou émotes). */
   togglePop(name) {
     this.pop = name && this.pop !== name ? name : null;
@@ -780,10 +861,11 @@ class RoomView {
     if (!this.popover) return;
     const p = this.pop;
     this.popover.hidden = !p;
-    this.popTitle.textContent = { chat: '💬 Discussion', log: '📜 Journal de la partie', emote: '😀 Réagir' }[p] || '';
+    this.popTitle.textContent = { chat: '💬 Discussion', log: '📜 Journal de la partie', emote: '😀 Réagir', music: '🎵 Musique' }[p] || '';
     this.logEl.hidden = p !== 'log';
     this.chatBox.hidden = p !== 'chat';
     this.emoteGrid.hidden = p !== 'emote';
+    this.musicPop.hidden = p !== 'music';
     if (p === 'chat') {
       this.unread = 0;
       this.chatBox._list.scrollTop = 1e9;
@@ -803,6 +885,7 @@ class RoomView {
       h('button.icon-btn' + (this.pop === 'chat' ? '.on' : ''), { title: 'Discussion', onclick: () => this.togglePop('chat') }, '💬', this.unread ? h('span.tb-badge', String(this.unread)) : null),
       h('button.icon-btn' + (this.pop === 'log' ? '.on' : ''), { title: 'Journal de la partie', onclick: () => this.togglePop('log') }, '📜'),
       h('button.icon-btn' + (this.pop === 'emote' ? '.on' : ''), { title: 'Réagir', onclick: () => this.togglePop('emote') }, '😀'),
+      h('button.icon-btn.music-btn' + (this.pop === 'music' ? '.on' : '') + (this.music && this.music.track ? '.playing' : '') + (this.music && this.music.blocked ? '.blocked' : ''), { title: 'Musique', onclick: () => this.togglePop('music') }, this.music && this.music.track && (this.music.muted || this.music.volume === 0) ? '🔇' : '🎵'),
       h('button.icon-btn.view-btn', { title: this.b3 ? 'Passer au plateau 2D' : 'Passer au plateau 3D', onclick: () => this.toggleView() }, this.b3 ? '2D' : '3D'),
       h('button.icon-btn', { hidden: !this.b3, title: 'Recentrer la caméra (double-clic sur le plateau)', onclick: () => this.b3 && this.b3.resetView() }, '🎥'),
       h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
@@ -908,6 +991,8 @@ class RoomView {
   async playEvent(ev, st) {
     const p = ev.pid ? st.players.find((x) => x.id === ev.pid) : null;
     this.evPid = ev.pid || null; // joueur concerné : la notification s'affiche près de sa fiche
+    this.evType = ev.t;
+    this.evSeq = (this.evSeq || 0) + 1;
     switch (ev.t) {
       case 'log':
         this.addLog(ev);
@@ -1020,7 +1105,9 @@ class RoomView {
         return;
       case 'jail':
         Sound.play('jail');
-        this.announce({ icon: '🏝️', title: `${p.name} échoue sur l'Île déserte`, text: 'Double, amende ou 3 tours d\'attente', color: p.color, kind: 'info' });
+        this.announce(this.meta.cornerNames
+          ? { icon: '🚔', title: `${p.name} est placé(e) en garde à vue`, text: 'Double, avocat, amende ou 3 tours en cellule', color: p.color, kind: 'danger' }
+          : { icon: '🏝️', title: `${p.name} échoue sur l'Île déserte`, text: 'Double, amende ou 3 tours d\'attente', color: p.color, kind: 'info' });
         return;
       case 'festival': {
         const c = this.meta.cells[ev.cell];
@@ -1195,7 +1282,7 @@ class RoomView {
           h('div.tile-price', s.taxPercent + ' %')
         ));
       } else {
-        const icons = { start: '🏁', jail: '🏝️', festival: '🎪', travel: '✈️' };
+        const icons = { start: '🏁', jail: '🏝️', festival: '🎪', travel: '✈️', ...(this.meta.cornerIcons || {}) };
         const sub = {
           start: `+${fmt(s.salary)}`,
           jail: `Amende ${fmt(s.jailFine)}`,

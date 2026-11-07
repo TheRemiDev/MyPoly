@@ -359,7 +359,7 @@ class Game {
     this.rolledDouble = false;
     this.emit({ t: 'move', pid: p.id, from, to: CORNERS.jail, teleport: true }, ANIM.teleport);
     this.emit({ t: 'jail', pid: p.id }, ANIM.small);
-    this.say(`${p.name} est coincé(e) sur l'Île déserte !`, p.id);
+    this.say(this.theme ? `🚔 ${p.name} est placé(e) en garde à vue !` : `${p.name} est coincé(e) sur l'Île déserte !`, p.id);
   }
 
   // -------------------------------------------------------------- payments
