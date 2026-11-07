@@ -5,6 +5,7 @@
 // =============================================================================
 import * as THREE from '/vendor/three/three.module.min.js';
 import { drawMelenchon } from './melenchon.js';
+import { drawLogo } from './logo.js';
 
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif";
 const SIZES = [1.5, 1, 1, 1, 1, 1, 1, 1, 1.5]; // largeur des colonnes / lignes
@@ -418,27 +419,6 @@ export class Board3D {
     g.moveTo(-85, 0); g.lineTo(0, 12); g.lineTo(85, 0); g.lineTo(0, -12); g.closePath();
     g.fill();
     g.restore();
-    // Logo
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.font = `900 210px ${FONT}`;
-    g.lineJoin = 'round';
-    g.lineWidth = 26;
-    g.strokeStyle = '#0a3446';
-    const wMy = g.measureText('My').width;
-    const wPoly = g.measureText('Poly').width;
-    const x0 = S / 2 - (wMy + wPoly) / 2;
-    g.textAlign = 'left';
-    g.strokeText('MyPoly', x0, S * 0.15);
-    g.fillStyle = '#ffffff';
-    g.fillText('My', x0, S * 0.15);
-    const lg = g.createLinearGradient(x0 + wMy, 0, x0 + wMy + wPoly, 0);
-    lg.addColorStop(0, '#ff5a5f');
-    lg.addColorStop(0.5, '#ff8a3d');
-    lg.addColorStop(1, '#ffd166');
-    g.fillStyle = lg;
-    g.fillText('Poly', x0 + wMy, S * 0.15);
-
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.maxAniso;
@@ -448,6 +428,39 @@ export class Board3D {
     center.position.y = BOARD_TOP + 0.022;
     center.receiveShadow = true;
     this.scene.add(center);
+
+    // Logo en relief avec reflet animé, posé au-dessus de l'océan
+    const logo = drawLogo({ tagline: this.meta.tagline || undefined });
+    const ltex = new THREE.CanvasTexture(logo.canvas);
+    ltex.colorSpace = THREE.SRGBColorSpace;
+    ltex.anisotropy = this.maxAniso;
+    const lw = 4.3;
+    const lh = lw / logo.aspect;
+    const logoMesh = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), new THREE.MeshBasicMaterial({ map: ltex, transparent: true, depthWrite: false }));
+    logoMesh.rotation.x = -Math.PI / 2;
+    logoMesh.position.set(0, BOARD_TOP + 0.03, -size / 2 + lh / 2 + 0.12);
+    logoMesh.renderOrder = 2;
+    this.scene.add(logoMesh);
+    // Reflet : bande lumineuse qui balaie les lettres
+    const sc = makeCanvas(512, 64);
+    const sg = sc.getContext('2d');
+    const band = sg.createLinearGradient(0, 0, 512, 0);
+    band.addColorStop(0.42, 'rgba(255,255,255,0)');
+    band.addColorStop(0.5, 'rgba(255,255,255,.95)');
+    band.addColorStop(0.58, 'rgba(255,255,255,0)');
+    sg.fillStyle = band;
+    sg.fillRect(0, 0, 512, 64);
+    const stex = new THREE.CanvasTexture(sc);
+    stex.wrapS = THREE.ClampToEdgeWrapping;
+    stex.repeat.set(0.35, 1);
+    const mtex = new THREE.CanvasTexture(logo.mask);
+    const shine = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), new THREE.MeshBasicMaterial({ map: stex, alphaMap: mtex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.55 }));
+    shine.rotation.x = -Math.PI / 2;
+    shine.position.copy(logoMesh.position);
+    shine.position.y += 0.002;
+    shine.renderOrder = 3;
+    this.scene.add(shine);
+    this.logoShine = stex;
 
     // Reflets d'eau animés
     const wc = makeCanvas(256, 256);
@@ -1457,6 +1470,50 @@ export class Board3D {
 
   // ------------------------------------------------------------ case d'arrivée
   /** Faisceau, anneau et flèche sur la case où le pion va atterrir. */
+  /** Alerte « presque monopole » : cases du joueur qui clignotent, cases manquantes cerclées de rouge. */
+  alertCells(cells, missing, color) {
+    for (let wave = 0; wave < 3; wave++) {
+      cells.forEach((i, k) => this.wait(wave * 1300 + k * 80).then(() => {
+        const t = this.tiles[i];
+        if (!t) return;
+        t.flash = new THREE.Color(wave % 2 ? '#ff3b3b' : color);
+        t.flashT = 1.4;
+        t.lift = 0.14;
+      }));
+    }
+    for (const i of missing) {
+      const b = cellBox(i);
+      const r = Math.min(b.w, b.d) * 0.44;
+      const g = new THREE.Group();
+      const mat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, side: THREE.DoubleSide });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.78, r, 48), mat(0xff2d3d, 0.95));
+      const wave = new THREE.Mesh(new THREE.RingGeometry(r * 0.92, r, 48), mat(0xff2d3d, 0.8));
+      ring.rotation.x = wave.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.03;
+      wave.position.y = 0.031;
+      const mark = this.textSprite('!', { bg: '#ff2d3d', fg: '#ffffff', size: 64, scale: 0.36 });
+      mark.material.depthTest = false;
+      mark.renderOrder = 30;
+      mark.position.y = 0.55;
+      const ms = mark.scale.clone();
+      g.add(ring, wave, mark);
+      g.position.set(b.cx, TOP, b.cz);
+      this.scene.add(g);
+      this.tween(4300, (t) => {
+        const k = (t * 4300) % 900 / 900;
+        wave.scale.setScalar(1 + k * 0.9);
+        wave.material.opacity = 0.8 * (1 - k);
+        const pop = t < 0.08 ? ease.back(t / 0.08) : 1;
+        const fade = t > 0.88 ? 1 - (t - 0.88) / 0.12 : 1;
+        ring.scale.setScalar(Math.max(0.01, pop));
+        ring.material.opacity = 0.95 * fade;
+        mark.scale.set(ms.x * pop, ms.y * pop, 1);
+        mark.position.y = 0.55 + Math.abs(Math.sin(t * Math.PI * 6)) * 0.18;
+        mark.material.opacity = fade;
+      }).then(() => this.scene.remove(g));
+    }
+  }
+
   markTarget(i, color) {
     this.clearTarget(true);
     const b = cellBox(i);
@@ -2257,6 +2314,8 @@ export class Board3D {
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, this.clock.getDelta());
     const time = this.clock.elapsedTime;
+    // Reflet du logo : un passage toutes les 6 s
+    if (this.logoShine) this.logoShine.offset.x = 0.65 - ((time % 6) / 1.6) * 1.3;
     // Interpolations
     for (let k = this.tweens.length - 1; k >= 0; k--) {
       const tw = this.tweens[k];

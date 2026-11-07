@@ -1033,7 +1033,48 @@ class Game {
     }
   }
 
+  /** Prévient tout le monde quand un joueur est à un pas d'une victoire par monopole. */
+  checkThreats() {
+    if (this.over) return;
+    this.threats ||= {};
+    const st = this.settings;
+    for (const p of this.players) {
+      const prev = this.threats[p.id] || {};
+      const now = {};
+      if (!p.bankrupt) {
+        if (st.tripleMonopoly) {
+          const owned = COUNTRIES.filter((c) => this.ownsCountry(p.id, c.id)).map((c) => c.id);
+          if (owned.length === 2) now.triple = owned.join(',');
+        }
+        if (st.resortMonopoly) {
+          const mine = RESORTS.filter((i) => this.props[i].owner === p.id);
+          if (mine.length === RESORTS.length - 1) now.resort = 1;
+        }
+      }
+      if (now.triple && !prev.triple) {
+        const owned = now.triple.split(',');
+        const cells = owned.flatMap((c) => COUNTRY_CELLS[c]);
+        // Cases encore à prendre dans les pays déjà entamés
+        const missing = COUNTRIES.filter((c) => !owned.includes(c.id))
+          .map((c) => COUNTRY_CELLS[c.id])
+          .filter((list) => list.some((i) => this.props[i].owner === p.id))
+          .flatMap((list) => list.filter((i) => this.props[i].owner !== p.id));
+        const flags = owned.map((c) => this.countryInfo(c));
+        this.emit({ t: 'threat', pid: p.id, kind: 'triple', countries: owned, cells, missing }, 4600);
+        this.say(`🚨 ALERTE : ${p.name} possède déjà 2 pays (${flags.map((c) => c.flag + ' ' + c.name).join(', ')}) — un de plus et c'est la victoire !`, p.id);
+      }
+      if (now.resort && !prev.resort) {
+        const cells = RESORTS.filter((i) => this.props[i].owner === p.id);
+        const missing = RESORTS.filter((i) => this.props[i].owner !== p.id);
+        this.emit({ t: 'threat', pid: p.id, kind: 'resort', cells, missing }, 4600);
+        this.say(`🚨 ALERTE : ${p.name} possède ${cells.length} stations balnéaires sur ${RESORTS.length} — il ne lui manque que ${missing.map((i) => this.cellName(i)).join(', ')} !`, p.id);
+      }
+      this.threats[p.id] = now;
+    }
+  }
+
   flush() {
+    this.checkThreats();
     this.flushedAt = Date.now();
     const events = this.events;
     this.events = [];
