@@ -729,7 +729,10 @@ class RoomView {
     );
     this.gameEl.append(pop);
     setTimeout(() => Sound.play('pay'), 900);
-    setTimeout(() => Sound.play('cash'), 1500);
+    setTimeout(() => {
+      Sound.play('cash');
+      this.renderMelCounter((this.melShown || 0) + ev.amount);
+    }, 1500);
     await sleep(2900);
     pop.classList.add('out');
     setTimeout(() => pop.remove(), 450);
@@ -1613,7 +1616,40 @@ class RoomView {
   }
 
   // ---------------------------------------------------------------- centre
+  /** Compteur « Mélenchon a volé … » (mode Mélenchon uniquement). */
+  renderMelCounter(animateTo) {
+    const s = this.room && this.room.settings;
+    if (!s || !s.melenchon || !this.gameEl) {
+      if (this.melCounter) this.melCounter.remove();
+      this.melCounter = null;
+      return;
+    }
+    if (!this.melCounter) {
+      this.melValue = h('b', fmt(0));
+      this.melCounter = h('div.mel-counter', { title: 'Total prélevé par Mélenchon pendant cette partie' },
+        h('img', { src: melenchonURL(), alt: '' }), h('div', h('small', 'Mélenchon a volé'), this.melValue));
+      this.gameEl.append(this.melCounter);
+      this.melShown = 0;
+    }
+    const target = animateTo != null ? animateTo : (this.state && this.state.melenchonLoot) || 0;
+    if (target === this.melShown) return;
+    const from = this.melShown;
+    const t0 = performance.now();
+    this.melCounter.classList.remove('bump');
+    void this.melCounter.offsetWidth;
+    this.melCounter.classList.add('bump');
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / 900);
+      const v = Math.round(from + (target - from) * (1 - Math.pow(1 - t, 3)));
+      this.melValue.textContent = fmt(v);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    this.melShown = target;
+    requestAnimationFrame(step);
+  }
+
   renderCenter() {
+    this.renderMelCounter();
     const st = this.state;
     const s = this.room.settings;
     this.centerInfo.innerHTML = '';

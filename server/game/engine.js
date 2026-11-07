@@ -206,7 +206,12 @@ class Game {
     this.rolledDouble = false;
     this.doubles = 0;
     this.emit({ t: 'turn', pid: p.id });
-    if (p.jailed) this.setPhase('jail');
+    if (p.jailed && p.jailTurns >= 3) {
+      p.jailed = false;
+      p.jailTurns = 0;
+      this.say(`🛟 ${p.name} est secouru(e) après 3 tours sur l'île et peut rejouer.`, p.id);
+      this.setPhase('roll');
+    } else if (p.jailed) this.setPhase('jail');
     else if (p.travel) this.setPhase('travel');
     else this.setPhase('roll');
   }
@@ -285,6 +290,8 @@ class Game {
     return {
       winner: this.winner,
       winType: this.winType,
+      melenchon: !!this.settings.melenchon,
+      melenchonLoot: this.melenchonLoot || 0,
       duration: Math.round(((this.endedAt || Date.now()) - this.startedAt) / 1000),
       rounds: this.round,
       players: this.players.map((p) => ({
@@ -368,6 +375,8 @@ class Game {
   }
   transfer(from, to, amount, reason) {
     this.money(from, -amount, reason);
+    // Mode Mélenchon : cumul de tout ce que la case Impôts a prélevé
+    if (reason === 'tax' && this.settings.melenchon) this.melenchonLoot = (this.melenchonLoot || 0) + amount;
     if (to && !to.bankrupt) this.money(to, amount, reason);
     if (reason === 'rent') {
       from.stats.rentPaid += amount;
@@ -903,14 +912,11 @@ class Game {
       p.jailed = false;
       this.say(`${p.name} fait un double (${d1}+${d2}) et s'échappe de l'île !`, p.id);
     } else {
+      // Raté : le joueur reste bloqué ce tour-ci. Après 3 tours ratés, il est libéré
+      // au début de son tour suivant (voir beginTurn) : 3 tours complets sur l'île.
       p.jailTurns++;
-      if (p.jailTurns >= 3) {
-        p.jailed = false;
-        this.say(`${p.name} est secouru(e) après 3 tours sur l'île (${d1}+${d2}).`, p.id);
-      } else {
-        this.say(`${p.name} tente un double : ${d1}+${d2}… raté (${p.jailTurns}/3).`, p.id);
-        return this.nextTurn();
-      }
+      this.say(`${p.name} tente un double : ${d1}+${d2}… raté (${p.jailTurns}/3).${p.jailTurns >= 3 ? ' Libération au prochain tour.' : ''}`, p.id);
+      return this.nextTurn();
     }
     this.setPhase('resolving');
     this.moveBy(p, d1 + d2);
@@ -1092,6 +1098,7 @@ class Game {
       log: this.log.slice(-40),
       over: this.over,
       serverNow: Date.now(),
+      melenchonLoot: this.melenchonLoot || 0,
     };
   }
 
