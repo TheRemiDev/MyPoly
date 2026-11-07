@@ -430,8 +430,10 @@ class Game {
         if (this.settings.festival && this.owned(p).length) return this.setPhase('festival');
         return this.endAction();
       case 'tax': {
-        const amount = Math.round((this.netWorth(p) * this.settings.taxPercent) / 100);
-        this.say(`${p.name} paie ${fmt(amount)} d'impôts.`, p.id);
+        const worth = this.netWorth(p);
+        const amount = Math.round((worth * this.settings.taxPercent) / 100);
+        this.emit({ t: 'tax', pid: p.id, cell: i, amount, percent: this.settings.taxPercent, worth, canPay: p.cash >= amount }, 1600);
+        this.say(`💸 ${p.name} paie ${fmt(amount)} d'impôts (${this.settings.taxPercent} % de sa fortune de ${fmt(worth)}).`, p.id);
         return this.charge(p, amount, null, 'tax', () => this.endAction());
       }
       case 'chance':
@@ -554,14 +556,16 @@ class Game {
         p.coupon = true;
         return this.endAction();
       case 'quake': {
-        const targets = others.filter((o) => this.owned(o).some((i) => this.props[i].level > 0));
+        // Les hôtels sont intouchables : seules les villes avec 1 à 3 maisons sont visées
+        const hit = (i) => this.props[i].level > 0 && this.props[i].level < 4;
+        const targets = others.filter((o) => this.owned(o).some(hit));
         if (!targets.length) {
-          this.say('Le séisme ne touche aucun bâtiment.');
+          this.say('Le séisme ne touche aucun bâtiment (les hôtels sont protégés).');
           return this.endAction();
         }
         const victim = R.pick(targets);
         const best = this.owned(victim)
-          .filter((i) => this.props[i].level > 0)
+          .filter(hit)
           .sort((a, b) => this.props[b].level - this.props[a].level || CELLS[b].price - CELLS[a].price)[0];
         this.props[best].level--;
         this.emit({ t: 'quake', pid: victim.id, by: p.id, cell: best, level: this.props[best].level }, 1600);
@@ -716,6 +720,13 @@ class Game {
           this.bankrupt(p, to);
           this.afterDebt = null;
           return this.endAction();
+        }
+        if (type === 'sellMany') {
+          const list = Array.isArray(d.cells) ? [...new Set(d.cells.map(Number))] : [];
+          if (!list.length) return { error: 'Sélectionnez au moins une propriété.' };
+          if (list.some((i) => !this.props[i] || this.props[i].owner !== p.id)) return { error: 'Propriété invalide.' };
+          for (const i of list) this.sell(p, i);
+          return this.checkDebt(p);
         }
         if (type !== 'sell') return { error: 'Action invalide.' };
         const i = Number(d.cell);
@@ -907,6 +918,11 @@ class Game {
     }
     if (this.phase === 'takeover') pending.owner = this.props[pending.cell].owner;
     if (this.phase === 'jail') pending.fine = this.settings.jailFine;
+    if (this.phase === 'debt') {
+      pending.cash = p.cash;
+      pending.missing = Math.max(0, pending.amount - p.cash);
+      pending.toName = pending.to ? (this.player(pending.to) || {}).name : null;
+    }
     if (this.phase === 'travel') pending.fee = this.settings.travelFee;
     return pending;
   }

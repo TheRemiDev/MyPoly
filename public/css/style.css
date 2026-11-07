@@ -663,6 +663,43 @@ body.in-game:has(.lobby) { overflow: auto; }
 .mono-sub { font-size: 2cqw; font-weight: 900; color: #fff; padding: 0.5cqw 1.8cqw; border-radius: 99px; box-shadow: 0 0 0 0.25cqw #fff, 0 1cqw 2cqw rgba(0, 0, 0, .45); white-space: nowrap; }
 @keyframes monoIn { 0% { scale: 0; rotate: -8deg; opacity: 0; } 12% { scale: 1.15; rotate: 3deg; opacity: 1; } 20% { scale: 1; rotate: 0deg; } 82% { opacity: 1; translate: -50% -50%; } 100% { opacity: 0; translate: -50% -80%; } }
 
+/* -------------------------------------------------- menu de dette (vente) */
+.action-panel.wide { width: min(66cqw, 100%); top: 30%; }
+.webgl .action-panel.wide { top: 27%; }
+.debt-panel { width: 100%; display: flex; flex-direction: column; gap: 0.9cqw; padding: 1.6cqw; border-radius: 2cqw; background: rgba(14, 17, 38, .94); border: 0.2cqw solid rgba(255, 71, 87, .6); box-shadow: 0 2cqw 5cqw rgba(0, 0, 0, .6), 0 0 3cqw rgba(255, 71, 87, .25); backdrop-filter: blur(8px); }
+.debt-head { display: flex; align-items: center; gap: 1.2cqw; }
+.debt-icon { font-size: 3.6cqw; }
+.debt-title { font-weight: 900; font-size: 2.2cqw; color: #ffd5d9; }
+.debt-reason { font-size: 1.45cqw; color: rgba(255, 255, 255, .8); font-weight: 600; }
+.debt-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8cqw; }
+.debt-sum > div { background: rgba(255, 255, 255, .06); border-radius: 1.2cqw; padding: 0.7cqw 1cqw; display: flex; flex-direction: column; }
+.debt-sum small { font-size: 1.1cqw; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.debt-sum b { font-size: 2.1cqw; font-weight: 900; }
+.debt-sum .miss b { color: #ff8a93; }
+.debt-bar { position: relative; height: 3cqw; border-radius: 99px; background: rgba(255, 255, 255, .08); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.debt-bar > div { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #ff9f43, #ff6b6b); transition: width .3s ease; }
+.debt-bar.ok > div { background: linear-gradient(90deg, #2ecc71, #7ef0ac); }
+.debt-bar span { position: relative; font-weight: 900; font-size: 1.35cqw; text-shadow: 0 0.15cqw 0.3cqw rgba(0, 0, 0, .6); }
+.debt-tools { display: flex; align-items: center; justify-content: space-between; gap: 1cqw; font-size: 1.2cqw; }
+.debt-tools .btn.sm { font-size: 1.2cqw; padding: 0.4cqw 1cqw; }
+.debt-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7cqw; max-height: 24cqw; overflow-y: auto; padding-right: 0.4cqw; }
+.debt-card { --band: #888; display: flex; align-items: center; gap: 0.9cqw; text-align: left; padding: 0.8cqw 1cqw; border-radius: 1.2cqw; cursor: pointer; font: inherit; color: #fff; background: rgba(255, 255, 255, .05); border: 0.2cqw solid rgba(255, 255, 255, .12); border-left: 0.7cqw solid var(--band); transition: transform .12s, background .15s, border-color .15s; }
+.debt-card:hover { transform: translateY(-0.15cqw); background: rgba(255, 255, 255, .1); }
+.debt-card.on { background: rgba(255, 71, 87, .18); border-color: #ff6b6b; box-shadow: 0 0 1.4cqw rgba(255, 71, 87, .35); }
+.debt-check { flex: none; width: 2.2cqw; height: 2.2cqw; border-radius: 0.6cqw; border: 0.2cqw solid rgba(255, 255, 255, .5); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.5cqw; }
+.debt-card.on .debt-check { background: #ff4757; border-color: #ff4757; }
+.debt-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.debt-name { font-weight: 800; font-size: 1.4cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.debt-meta { font-size: 1.15cqw; color: var(--muted); display: flex; gap: 0.6cqw; align-items: center; }
+.debt-mono { color: #ffd166; font-weight: 800; }
+.debt-gain { font-weight: 900; font-size: 1.6cqw; color: #7ef0ac; white-space: nowrap; }
+.debt-actions { display: flex; gap: 1cqw; align-items: stretch; }
+.debt-go { flex: 1; font-size: 1.8cqw !important; padding: 1.1cqw !important; }
+.debt-actions .btn.danger { font-size: 1.3cqw; }
+.cell.picked { box-shadow: 0 0 0 0.45cqw #ff4757, 0 0 2.5cqw rgba(255, 71, 87, .8) !important; transform: translateY(-0.4cqw); z-index: 5; }
+.cell.picked::after { content: '✓ VENDRE'; position: absolute; left: 50%; top: 50%; translate: -50% -50%; background: #ff4757; color: #fff; font-weight: 900; font-size: max(6px, 0.95cqw); padding: 0.2cqw 0.6cqw; border-radius: 99px; z-index: 4; white-space: nowrap; }
+@media (max-width: 600px) { .debt-list { grid-template-columns: 1fr; } .action-panel.wide { width: 92cqw; top: 18%; } }
+
 /* Boutons « passer » : bien visibles sur le plateau */
 .action-panel .btn.skip {
   width: 100%; justify-content: center;

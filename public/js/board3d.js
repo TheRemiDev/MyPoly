@@ -574,6 +574,7 @@ export class Board3D {
         t.tex.needsUpdate = true;
       }
       t.selectable = view.selectable.has(i);
+      t.picked = view.picked ? view.picked.has(i) : false;
       t.dimmed = view.dimmed.has(i);
       this.syncBuildings(i, owner, pr ? pr.level : 0);
       this.syncFestival(i, fest);
@@ -1691,7 +1692,7 @@ export class Board3D {
     // Cases : survol, sélection, flash, rebond
     for (let i = 0; i < this.tiles.length; i++) {
       const t = this.tiles[i];
-      const target = (this.hover === i ? 0.07 : 0) + (t.selectable ? 0.05 + Math.sin(time * 5) * 0.04 : 0);
+      const target = (this.hover === i ? 0.07 : 0) + (t.picked ? 0.2 : t.selectable ? 0.05 + Math.sin(time * 5) * 0.04 : 0);
       t.lift += (target - t.lift) * Math.min(1, dt * 12);
       t.bump = Math.max(0, t.bump - dt * 5);
       t.group.position.y = BOARD_TOP + t.lift - Math.sin(t.bump * Math.PI) * 0.05;
@@ -1700,6 +1701,9 @@ export class Board3D {
         t.flashT = Math.max(0, t.flashT - dt * 1.6);
         m.emissive.copy(t.flash);
         m.emissiveIntensity = t.flashT * 0.6;
+      } else if (t.picked) {
+        m.emissive.set(0xff4757);
+        m.emissiveIntensity = 0.25 + (Math.sin(time * 6) + 1) * 0.1;
       } else if (t.selectable) {
         m.emissive.set(0x7fdcff);
         m.emissiveIntensity = 0.06 + (Math.sin(time * 5) + 1) * 0.07;
