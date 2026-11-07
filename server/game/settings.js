@@ -22,6 +22,7 @@ const DEFAULTS = {
   travelFee: 50, // coût du vol depuis l'Aéroport
   startBonus: true, // atterrir sur le Départ = salaire doublé
   taxPercent: 10, // % de la fortune pour la case Impôts
+  melenchon: false, // (administrateurs) la case Impôts devient « Mélenchon »
   isPublic: false, // salle visible dans la liste publique
   allowSpectators: true,
 };

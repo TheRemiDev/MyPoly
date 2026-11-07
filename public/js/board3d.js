@@ -4,6 +4,7 @@
 //  dés 3D, pièces volantes, caméra orientable (glisser / molette / pincer).
 // =============================================================================
 import * as THREE from '/vendor/three/three.module.min.js';
+import { drawMelenchon } from './melenchon.js';
 
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif";
 const SIZES = [1.5, 1, 1, 1, 1, 1, 1, 1, 1.5]; // largeur des colonnes / lignes
@@ -894,7 +895,7 @@ export class Board3D {
       const owner = pr && pr.owner ? view.players[pr.owner] : null;
       const fest = view.festival && view.festival.cell === i ? view.festival.mult : 0;
       const mono = owner && c.type === 'city' && view.mono(owner.id, c.country);
-      const sig = JSON.stringify([owner && owner.color, owner && owner.pawn, pr && pr.rent, fest, mono, view.settings.salary, view.settings.jailFine, view.settings.travelFee, view.settings.taxPercent, i === 16 ? view.festival : 0]);
+      const sig = JSON.stringify([owner && owner.color, owner && owner.pawn, pr && pr.rent, fest, mono, view.settings.salary, view.settings.jailFine, view.settings.travelFee, view.settings.taxPercent, view.settings.melenchon, i === 16 ? view.festival : 0]);
       if (sig !== t.sig) {
         t.sig = sig;
         this.drawTile(i, { owner, pr, fest, mono, view });
@@ -999,8 +1000,9 @@ export class Board3D {
     if (c.type === 'city' || c.type === 'resort' || c.type === 'tax') {
       const icon = c.type === 'city' ? c.icon : c.type === 'resort' ? c.emoji : '💸';
       const iy = body.y + body.h * 0.27;
-      emoji(g, icon, cx, iy, m * 0.36);
-      fitText(g, c.type === 'tax' ? 'IMPÔTS' : c.name.toUpperCase(), cx, body.y + body.h * 0.56, body.w * 0.9, m * 0.15, 900, c.type === 'resort' ? '#3b2a05' : '#1e1e33');
+      if (c.type === 'tax' && s.melenchon) drawMelenchon(g, cx, iy + m * 0.02, m * 0.46);
+      else emoji(g, icon, cx, iy, m * 0.36);
+      fitText(g, c.type === 'tax' ? (s.melenchon ? 'MÉLENCHON' : 'IMPÔTS') : c.name.toUpperCase(), cx, body.y + body.h * 0.56, body.w * 0.9, m * 0.15, 900, c.type === 'resort' ? '#3b2a05' : '#1e1e33');
       pill(g, c.type === 'tax' ? `${s.taxPercent} %` : priceTxt, cx, body.y + body.h * 0.8, m * 0.13, c.type === 'tax' ? '#c0392b' : priceBg);
     } else if (c.type === 'chance') {
       g.save();

@@ -104,6 +104,13 @@ const SFX = {
     noise(0.22, 0.35, 0.45, 600 + Math.random() * 900);
     noise(0.26, 0.5, 0.18, 3500);
   },
+  hop: () => {
+    // « Hop ! » : petit glissando joyeux puis tambour
+    tone(380, 0, 0.12, { type: 'square', gain: 0.12, slide: 500 });
+    tone(760, 0.13, 0.18, { type: 'square', gain: 0.12, slide: -200 });
+    noise(0.3, 0.25, 0.4, 250);
+    [523, 659, 784].forEach((f, i) => tone(f, 0.45 + i * 0.08, 0.2, { type: 'triangle', gain: 0.15 }));
+  },
   crumble: () => {
     for (let i = 0; i < 5; i++) noise(i * 0.06, 0.08, 0.25, 400 + Math.random() * 800);
   },

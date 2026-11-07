@@ -120,7 +120,7 @@ function createRoom(ident, settings) {
     code,
     name: `Salle de ${ident.name.replace(' (invité)', '')}`,
     host: ident.key,
-    settings: sanitize(settings),
+    settings: { ...sanitize(settings), melenchon: ident.role === 'admin' ? !!(settings && settings.melenchon) : false },
     state: 'lobby',
     seats: [],
     sockets: new Map(),
@@ -366,7 +366,10 @@ function attach(server) {
     socket.on('room:settings', (data, cb) => {
       const room = current();
       if (!isHost(room) || room.state !== 'lobby') return reply(cb, { error: 'Seul l\'hôte peut modifier les règles.' });
+      const before = room.settings.melenchon;
       room.settings = sanitize(data && data.settings, room.settings);
+      // Option « Mélenchon » : seul un administrateur peut la changer
+      if (ident.role !== 'admin') room.settings.melenchon = before;
       if (data && data.name) room.name = cleanText(data.name, 40) || room.name;
       while (room.seats.length > room.settings.maxPlayers) {
         const bot = [...room.seats].reverse().find((s) => s.isBot);

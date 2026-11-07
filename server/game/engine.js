@@ -432,8 +432,10 @@ class Game {
       case 'tax': {
         const worth = this.netWorth(p);
         const amount = Math.round((worth * this.settings.taxPercent) / 100);
-        this.emit({ t: 'tax', pid: p.id, cell: i, amount, percent: this.settings.taxPercent, worth, canPay: p.cash >= amount }, 1600);
-        this.say(`💸 ${p.name} paie ${fmt(amount)} d'impôts (${this.settings.taxPercent} % de sa fortune de ${fmt(worth)}).`, p.id);
+        const mel = !!this.settings.melenchon;
+        this.emit({ t: 'tax', pid: p.id, cell: i, amount, percent: this.settings.taxPercent, worth, canPay: p.cash >= amount, melenchon: mel }, mel ? 3200 : 1600);
+        if (mel) this.say(`🧓 Hop ! Mélenchon prend ${fmt(amount)} à ${p.name} (${this.settings.taxPercent} % de sa fortune).`, p.id);
+        else this.say(`💸 ${p.name} paie ${fmt(amount)} d'impôts (${this.settings.taxPercent} % de sa fortune de ${fmt(worth)}).`, p.id);
         return this.charge(p, amount, null, 'tax', () => this.endAction());
       }
       case 'chance':
