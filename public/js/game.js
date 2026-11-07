@@ -469,7 +469,7 @@ class RoomView {
     this.boardScale = h('div.board-scale', this.board, this.hud);
     this.host3d = h('div.board3d-host');
     this.fxLayer = h('div.fx-layer');
-    this.boardWrap = h('div.board-wrap', this.host3d, this.boardScale, this.fxLayer, this.tip);
+    this.boardWrap = h('div.board-wrap', this.boardScale);
 
     // Joueurs dans les 4 coins de l'écran, barre d'outils flottante en haut
     this.toolbar = h('div.toolbar');
@@ -488,7 +488,8 @@ class RoomView {
     this.pop = null;
     this.endOverlay = h('div.end-overlay', { hidden: true });
 
-    this.gameEl = h('div.game', this.boardWrap, this.playersEl, h('div.topbar', this.toolbar, this.popover));
+    // La scène 3D et les effets couvrent tout l'écran ; l'interface est incrustée par-dessus
+    this.gameEl = h('div.game', this.host3d, this.boardWrap, this.fxLayer, this.playersEl, h('div.topbar', this.toolbar, this.popover), this.tip);
     this.root.append(this.gameEl, this.endOverlay);
     if (this.view3d) this.enable3d();
     // Replace les pions dès que la taille du plateau change (vue 2D/3D, redimensionnement)
@@ -1077,7 +1078,7 @@ class RoomView {
     } else lines.push(h('div.muted', 'Cliquez pour plus d\'infos'));
     this.tip.innerHTML = '';
     this.tip.append(...lines);
-    const w = this.boardWrap.getBoundingClientRect();
+    const w = this.gameEl.getBoundingClientRect();
     let r;
     if (this.b3) {
       const c = this.b3.cellRect(i);
@@ -1358,7 +1359,7 @@ class RoomView {
           } },
           h('div.avatar', { style: { '--c': p.color } }, p.bankrupt ? '💀' : p.pawn),
           h('div.pcard-main',
-            h('div.pcard-name', h('span.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p)),
+            h('div.pcard-name', h('span.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
             h('div.pcard-cash', p.bankrupt ? 'FAILLITE' : fmt(cash)),
             h('div.pcard-sub', p.bankrupt ? (p.rank ? `Classement : #${p.rank}` : '') : `🏠 ${props} · fortune ${fmt(p.netWorth)}`, ...icons)
           ),

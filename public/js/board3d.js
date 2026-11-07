@@ -215,21 +215,25 @@ export class Board3D {
   }
 
   buildTable() {
-    // Table sous le plateau
-    const tc = makeCanvas(512, 512);
-    const g = tc.getContext('2d');
-    const grd = g.createRadialGradient(256, 256, 20, 256, 256, 256);
-    grd.addColorStop(0, '#243055');
-    grd.addColorStop(1, '#0d1226');
-    g.fillStyle = grd;
-    g.fillRect(0, 0, 512, 512);
-    const tableTex = new THREE.CanvasTexture(tc);
-    tableTex.colorSpace = THREE.SRGBColorSpace;
-    const table = new THREE.Mesh(new THREE.CircleGeometry(26, 64), new THREE.MeshStandardMaterial({ map: tableTex, roughness: 0.95 }));
-    table.rotation.x = -Math.PI / 2;
-    table.position.y = -0.02;
-    table.receiveShadow = true;
-    this.scene.add(table);
+    // Pas de table opaque : fond transparent, le plateau flotte sur le décor du jeu.
+    // Un plan invisible capte uniquement l'ombre, et un halo sombre ancre le plateau.
+    const catcher = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMaterial({ opacity: 0.32 }));
+    catcher.rotation.x = -Math.PI / 2;
+    catcher.position.y = -0.01;
+    catcher.receiveShadow = true;
+    this.scene.add(catcher);
+    const hc = makeCanvas(256, 256);
+    const hg = hc.getContext('2d');
+    const halo = hg.createRadialGradient(128, 128, 40, 128, 128, 128);
+    halo.addColorStop(0, 'rgba(0,0,0,.55)');
+    halo.addColorStop(0.6, 'rgba(0,0,0,.25)');
+    halo.addColorStop(1, 'rgba(0,0,0,0)');
+    hg.fillStyle = halo;
+    hg.fillRect(0, 0, 256, 256);
+    const haloMesh = new THREE.Mesh(new THREE.PlaneGeometry(17, 17), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hc), transparent: true, depthWrite: false }));
+    haloMesh.rotation.x = -Math.PI / 2;
+    haloMesh.position.y = -0.02;
+    this.scene.add(haloMesh);
 
     // Cadre bois + liseré doré
     const wood = new THREE.MeshStandardMaterial({ color: 0x6b4420, roughness: 0.55, metalness: 0.05 });
@@ -1543,19 +1547,45 @@ export class Board3D {
     // La densité de pixels peut changer (zoom du navigateur, écran externe)
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (this.renderer.getPixelRatio() !== dpr) this.renderer.setPixelRatio(dpr);
+    this.readSafeArea();
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     // Écran étroit (mobile portrait) : vue plus en surplomb pour remplir l'espace
-    const base = w / h < 1.2 ? 1.2 : 1.02;
+    const sa = this.sa || { top: 0, bottom: 0, left: 0, right: 0 };
+    const base = (w - sa.left - sa.right) / Math.max(1, h - sa.top - sa.bottom) < 1.2 ? 1.2 : 1.02;
     if (this.basePitch !== base) {
       this.basePitch = base;
       this.view.pitch = base;
     }
     this.fitCamera();
   }
-  /** Calcule la distance pour que tout le plateau tienne à l'écran. */
+  /** Marges occupées par l'interface (cartes, barre d'outils), lues dans le CSS. */
+  readSafeArea() {
+    const cs = getComputedStyle(this.container);
+    const v = (n) => {
+      const x = parseFloat(cs.getPropertyValue(n));
+      return Number.isFinite(x) ? x : 0;
+    };
+    this.sa = { top: v('--safe-top'), bottom: v('--safe-y'), left: v('--safe-x'), right: v('--safe-x') };
+  }
+
+  /**
+   * Cadre la caméra pour que tout le plateau tienne dans la zone libre de l'écran
+   * (la scène couvre tout l'écran, mais le plateau évite les cartes des joueurs).
+   */
   fitCamera() {
     const { yaw, pitch, zoom } = this.view;
+    const W = this.container.clientWidth || 1;
+    const H = this.container.clientHeight || 1;
+    const sa = this.sa || { top: 0, bottom: 0, left: 0, right: 0 };
+    const sw = Math.max(80, W - sa.left - sa.right);
+    const sh = Math.max(80, H - sa.top - sa.bottom);
+    // Décale le centre optique sur le centre de la zone libre
+    this.camera.setViewOffset(W, H, W / 2 - (sa.left + sw / 2), H / 2 - (sa.top + sh / 2), W, H);
+    const xL = -1 + (2 * sa.left) / W + 0.015;
+    const xR = 1 - (2 * sa.right) / W - 0.015;
+    const yT = 1 - (2 * sa.top) / H - 0.015;
+    const yB = -1 + (2 * sa.bottom) / H + 0.015;
     const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
     const corners = [];
     for (const x of [-5.45, 5.45]) for (const z of [-5.45, 5.45]) for (const y of [0, 0.5]) corners.push(new THREE.Vector3(x, y, z));
@@ -1567,12 +1597,15 @@ export class Board3D {
       this.camera.lookAt(this.homeTarget);
       this.camera.updateMatrixWorld();
       this.camera.updateProjectionMatrix();
-      let m = 0;
+      let fits = true;
       for (const c of corners) {
         const p = c.clone().project(this.camera);
-        m = Math.max(m, Math.abs(p.x), Math.abs(p.y));
+        if (p.x < xL || p.x > xR || p.y < yB || p.y > yT) {
+          fits = false;
+          break;
+        }
       }
-      if (m > 0.985) lo = d;
+      if (!fits) lo = d;
       else hi = d;
     }
     const d = hi / zoom;

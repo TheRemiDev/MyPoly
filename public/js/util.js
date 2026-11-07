@@ -151,7 +151,16 @@ export function closeModals() {
 
 // ------------------------------------------------------------------ badges
 /** Étiquettes affichées à côté d'un pseudo (VIP, STAFF, ADMIN, BOT, niveau). */
-export function roleTags(p, { level = true } = {}) {
+export function roleTags(p, { level = true, compact = false } = {}) {
+  if (compact) {
+    // Version icône (cartes de joueurs en partie) : le pseudo reste toujours lisible
+    const ico = [];
+    if (p.role === 'admin') ico.push(h('span.tag-ico.ico-admin', { title: 'Administrateur' }, '⚡'));
+    else if (p.role === 'staff') ico.push(h('span.tag-ico.ico-staff', { title: 'Staff' }, '🛡️'));
+    if (p.vip) ico.push(h('span.tag-ico.ico-vip', { title: 'VIP' }, '👑'));
+    if (p.isBot || p.role === 'bot') ico.push(h('span.tag-ico.ico-bot', { title: 'Bot' }, '🤖'));
+    return ico;
+  }
   const tags = [];
   if (p.role === 'admin') tags.push(h('span.tag.tag-admin', { title: 'Administrateur' }, '⚡ ADMIN'));
   else if (p.role === 'staff') tags.push(h('span.tag.tag-staff', { title: 'Membre du staff' }, '🛡️ STAFF'));
