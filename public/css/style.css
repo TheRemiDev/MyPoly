@@ -945,3 +945,61 @@ body.in-game { overflow: hidden; }
   .game { --safe-top: 128px; --safe-y: 78px; }
   .topbar { top: 76px; }
 }
+
+
+/* =====================================================================
+   INTÉGRATION « TOUT INCRUSTÉ »
+   ===================================================================== */
+.game {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 52%, rgba(38, 150, 160, .28), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 120%, rgba(166, 107, 255, .22), transparent 60%),
+    linear-gradient(180deg, #121633, #0b0e22);
+}
+.game .board3d-host { position: absolute; inset: 0; z-index: 0; }
+.game .fx-layer { position: absolute; inset: 0; z-index: 25; }
+.game .board-wrap { background: none !important; z-index: 1; }
+.game.webgl .board-wrap { pointer-events: none; }
+.game .tile-tip { z-index: 60; }
+
+/* Cartes des joueurs façon jeu : couleur du joueur, reflets, gros avatar */
+.pcard.corner {
+  padding: 10px 16px 10px 10px; gap: 12px; border-radius: 20px;
+  border: 3px solid color-mix(in srgb, var(--c) 75%, #fff);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 48%),
+    linear-gradient(135deg, color-mix(in srgb, var(--c) 72%, #1a1f45), color-mix(in srgb, var(--c) 35%, #0e1230));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5), 0 0 0 1px rgba(0, 0, 0, .25), inset 0 -4px 0 rgba(0, 0, 0, .18);
+  backdrop-filter: none;
+}
+.pcard.corner.c-tr, .pcard.corner.c-br { padding: 10px 10px 10px 16px; }
+.pcard.corner .avatar { width: 64px; height: 64px; font-size: 2.1rem; background: radial-gradient(circle at 32% 28%, #ffffff, #e9ecf7 70%); box-shadow: 0 0 0 4px var(--c), 0 0 0 7px rgba(255, 255, 255, .85), 0 8px 18px rgba(0, 0, 0, .45); }
+.pcard.corner .pcard-name { font-size: 1.02rem; color: #fff; text-shadow: 0 2px 3px rgba(0, 0, 0, .45); gap: 4px; }
+.pcard.corner .pcard-name > span:first-child { color: #fff; }
+.pcard.corner .pcard-name .name-vip { color: transparent; }
+.pcard.corner .pcard-cash { align-self: flex-start; margin-top: 3px; padding: 2px 12px 2px 8px; border-radius: 99px; background: rgba(0, 0, 0, .38); color: #fff; font-size: 1.35rem; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .15); }
+.pcard.corner .pcard-cash::before { content: '💰 '; font-size: .95rem; }
+.pcard.corner.c-tr .pcard-cash, .pcard.corner.c-br .pcard-cash { align-self: flex-end; }
+.pcard.corner .pcard-sub { color: rgba(255, 255, 255, .8); text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+.pcard.corner.turn { border-color: #fff; box-shadow: 0 0 0 3px var(--c), 0 0 34px color-mix(in srgb, var(--c) 75%, transparent), 0 10px 28px rgba(0, 0, 0, .5); }
+.pcard.corner.out { filter: grayscale(1) brightness(.7); }
+.pcard-turn { background: #fff; color: #1c2040; }
+.tag-ico { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; font-size: .72rem; background: rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .5); text-shadow: none; }
+.tag-ico.ico-vip { background: linear-gradient(135deg, #f7b733, #ffd166); box-shadow: 0 0 8px rgba(255, 209, 102, .8); }
+.tag-ico.ico-admin { background: linear-gradient(135deg, #7f00ff, #e100ff); }
+.tag-ico.ico-staff { background: linear-gradient(135deg, #e53935, #ff6b6b); }
+.pcard.corner .pcard-timer { background: #fff; opacity: .9; }
+
+/* Barre d'outils incrustée */
+.topbar .toolbar { background: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .04)), rgba(16, 20, 44, .82); border: 2px solid rgba(255, 255, 255, .18); border-radius: 16px; }
+.topbar .icon-btn { background: rgba(255, 255, 255, .08); border-color: transparent; }
+@media (max-aspect-ratio: 5/4) {
+  .pcard.corner { padding: 7px 10px 7px 7px; gap: 8px; border-width: 2px; border-radius: 16px; }
+  .pcard.corner.c-tr, .pcard.corner.c-br { padding: 7px 7px 7px 10px; }
+  .pcard.corner .avatar { width: 44px; height: 44px; font-size: 1.4rem; box-shadow: 0 0 0 3px var(--c), 0 0 0 5px rgba(255, 255, 255, .85); }
+  .pcard.corner .pcard-cash { font-size: 1.05rem; padding: 1px 10px 1px 6px; }
+}
+@media (max-height: 560px) and (min-aspect-ratio: 5/4) {
+  .pcard.corner .avatar { width: 44px; height: 44px; font-size: 1.4rem; }
+  .pcard.corner .pcard-cash { font-size: 1.05rem; }
+}
