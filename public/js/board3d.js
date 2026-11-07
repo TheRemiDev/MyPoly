@@ -11,7 +11,9 @@ const HALF = 5; // le plateau va de -5 à 5
 const TILE_H = 0.14;
 const BOARD_TOP = 0.2;
 const TOP = BOARD_TOP + TILE_H; // surface des cases
-const PX = 240; // résolution des textures (pixels par unité)
+// Résolution des textures (pixels par unité de plateau), adaptée à l'écran pour
+// que les textes des cases restent nets, y compris en zoom et sur écran Retina/4K.
+const PX = Math.round(Math.min(512, Math.max(320, (Math.min(screen.width, screen.height) * Math.min(window.devicePixelRatio || 1, 3)) / 3.6)));
 
 // ------------------------------------------------------------------ helpers
 function gridPos(i) {
@@ -161,7 +163,8 @@ export class Board3D {
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }));
     this.mobile = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.mobile ? 1.5 : 2));
+    // Densité de pixels réelle de l'écran (plafonnée à 2) : rendu net sur Retina et mobiles
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     r.toneMapping = THREE.NeutralToneMapping;
@@ -282,7 +285,7 @@ export class Board3D {
 
   buildCenter() {
     // Art du centre : océan, globe, boussole, logo
-    const S = 1400;
+    const S = 2048;
     const cv = makeCanvas(S, S);
     const g = cv.getContext('2d');
     const bg = g.createRadialGradient(S * 0.5, S * 0.45, 50, S * 0.5, S * 0.5, S * 0.75);
@@ -447,28 +450,29 @@ export class Board3D {
   }
 
   emojiSprite(e, scale, ring = null) {
-    const c = makeCanvas(160, 160);
+    const c = makeCanvas(256, 256);
     const g = c.getContext('2d');
     if (ring) {
       g.fillStyle = '#ffffff';
       g.beginPath();
-      g.arc(80, 80, 72, 0, Math.PI * 2);
+      g.arc(128, 128, 115, 0, Math.PI * 2);
       g.fill();
-      g.lineWidth = 12;
+      g.lineWidth = 19;
       g.strokeStyle = ring;
       g.stroke();
     }
-    emoji(g, e, 80, 86, ring ? 84 : 118);
+    emoji(g, e, 128, 138, ring ? 134 : 190);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = this.maxAniso;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
     s.scale.set(scale, scale, 1);
     return s;
   }
   textSprite(text, { bg = '#ff00aa', fg = '#fff', size = 64, scale = 0.6 } = {}) {
-    const c = makeCanvas(320, 120);
+    const c = makeCanvas(640, 240);
     const g = c.getContext('2d');
-    pill(g, text, 160, 60, size, bg, fg);
+    pill(g, text, 320, 120, size * 2, bg, fg);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
@@ -1536,6 +1540,9 @@ export class Board3D {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     if (!w || !h) return;
+    // La densité de pixels peut changer (zoom du navigateur, écran externe)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (this.renderer.getPixelRatio() !== dpr) this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     // Écran étroit (mobile portrait) : vue plus en surplomb pour remplir l'espace

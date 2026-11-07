@@ -10,7 +10,7 @@ const LEVEL_LABEL = ['Terrain', '1 maison', '2 maisons', '3 maisons', 'Hôtel'];
 
 const SETTINGS_UI = [
   { group: 'Partie', items: [
-    { key: 'maxPlayers', label: 'Joueurs max', type: 'select', options: [2, 3, 4, 5, 6].map((n) => [n, n + ' joueurs']) },
+    { key: 'maxPlayers', label: 'Joueurs max', type: 'select', options: [2, 3, 4].map((n) => [n, n + ' joueurs']) },
     { key: 'startMoney', label: 'Argent de départ', type: 'select', options: [1000, 1500, 2000, 2500, 3000, 4000, 5000].map((n) => [n, fmt(n)]) },
     { key: 'salary', label: 'Salaire au Départ', type: 'select', options: [0, 100, 200, 300, 400, 500].map((n) => [n, n ? fmt(n) : 'Aucun']) },
     { key: 'turnTime', label: 'Temps par décision', type: 'select', options: [[10, '10 s'], [15, '15 s'], [20, '20 s'], [30, '30 s'], [45, '45 s'], [60, '1 min'], [90, '1 min 30'], [0, 'Illimité']] },
@@ -141,7 +141,6 @@ class RoomView {
     this.rewards = null;
     this.highlightOwner = null;
     this.clockOffset = 0;
-    this.tab = 'log';
     this.unread = 0;
   }
 
@@ -413,9 +412,16 @@ class RoomView {
     }
     if (!m.system && m.key !== this.me) {
       Sound.play('chat');
-      if (this.mode === 'game' && this.tab !== 'chat') {
+      if (this.mode === 'game' && this.pop !== 'chat') {
         this.unread++;
-        this.renderTabs();
+        this.renderToolbar();
+        const card = this.playersEl && this.playersEl.querySelector(`[data-pid="${CSS.escape(m.key)}"]`);
+        if (card) {
+          card.querySelector('.chat-bubble')?.remove();
+          const b = h('div.chat-bubble', m.text.length > 90 ? m.text.slice(0, 88) + '…' : m.text);
+          card.append(b);
+          setTimeout(() => b.remove(), 5000);
+        }
       }
     }
   }
@@ -465,16 +471,24 @@ class RoomView {
     this.fxLayer = h('div.fx-layer');
     this.boardWrap = h('div.board-wrap', this.host3d, this.boardScale, this.fxLayer, this.tip);
 
+    // Joueurs dans les 4 coins de l'écran, barre d'outils flottante en haut
     this.toolbar = h('div.toolbar');
-    this.playersEl = h('div.players');
-    this.tabsEl = h('div.tabs.small');
+    this.playersEl = h('div.corners');
     this.logEl = h('div.log');
     this.chatBox = this.buildChat();
-    this.emoteBar = h('div.emotes', EMOTES.map((e) => h('button.emote', { onclick: () => store.socket.emit('game:emote', { emoji: e }) }, e)));
-    this.sidePanel = h('div.side-panel', this.logEl, this.chatBox);
+    this.emoteGrid = h('div.emote-grid', EMOTES.map((e) => h('button.emote', { onclick: () => {
+      store.socket.emit('game:emote', { emoji: e });
+      this.togglePop(null);
+    } }, e)));
+    this.popTitle = h('b');
+    this.popover = h('div.popover', { hidden: true },
+      h('div.pop-head', this.popTitle, h('button.icon-btn.pop-close', { title: 'Fermer', onclick: () => this.togglePop(null) }, '✕')),
+      h('div.pop-body', this.logEl, this.chatBox, this.emoteGrid)
+    );
+    this.pop = null;
     this.endOverlay = h('div.end-overlay', { hidden: true });
 
-    this.gameEl = h('div.game', this.boardWrap, h('div.side', this.toolbar, this.playersEl, this.tabsEl, this.sidePanel, this.emoteBar));
+    this.gameEl = h('div.game', this.boardWrap, this.playersEl, h('div.topbar', this.toolbar, this.popover));
     this.root.append(this.gameEl, this.endOverlay);
     if (this.view3d) this.enable3d();
     // Replace les pions dès que la taille du plateau change (vue 2D/3D, redimensionnement)
@@ -592,18 +606,26 @@ class RoomView {
     return null;
   }
 
+  /** Ouvre / ferme la petite fenêtre flottante (chat, journal ou émotes). */
+  togglePop(name) {
+    this.pop = name && this.pop !== name ? name : null;
+    this.renderTabs();
+    this.renderToolbar();
+  }
   renderTabs() {
-    this.tabsEl.innerHTML = '';
-    for (const [k, l] of [['log', '📜 Journal'], ['chat', '💬 Chat' + (this.unread ? ` (${this.unread})` : '')]]) {
-      this.tabsEl.append(h('button.tab' + (this.tab === k ? '.active' : ''), { onclick: () => {
-        this.tab = k;
-        if (k === 'chat') this.unread = 0;
-        this.renderTabs();
-      } }, l));
+    if (!this.popover) return;
+    const p = this.pop;
+    this.popover.hidden = !p;
+    this.popTitle.textContent = { chat: '💬 Discussion', log: '📜 Journal de la partie', emote: '😀 Réagir' }[p] || '';
+    this.logEl.hidden = p !== 'log';
+    this.chatBox.hidden = p !== 'chat';
+    this.emoteGrid.hidden = p !== 'emote';
+    if (p === 'chat') {
+      this.unread = 0;
+      this.chatBox._list.scrollTop = 1e9;
+      setTimeout(() => this.chatBox.querySelector('input') && this.chatBox.querySelector('input').focus(), 30);
     }
-    this.logEl.hidden = this.tab !== 'log';
-    this.chatBox.hidden = this.tab !== 'chat';
-    if (this.tab === 'chat') this.chatBox._list.scrollTop = 1e9;
+    if (p === 'log') this.logEl.scrollTop = 1e9;
   }
 
   renderToolbar() {
@@ -611,8 +633,11 @@ class RoomView {
     const me = this.player(this.me);
     this.toolbar.innerHTML = '';
     this.toolbar.append(
-      h('div.tb-code', { title: 'Copier le lien', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') }, '🔗 ', this.code),
+      h('div.tb-code', { title: 'Copier le lien d\'invitation', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') }, '🔗 ', this.code),
       h('div.tb-info', this.state ? `Tour ${this.state.round}` : ''),
+      h('button.icon-btn' + (this.pop === 'chat' ? '.on' : ''), { title: 'Discussion', onclick: () => this.togglePop('chat') }, '💬', this.unread ? h('span.tb-badge', String(this.unread)) : null),
+      h('button.icon-btn' + (this.pop === 'log' ? '.on' : ''), { title: 'Journal de la partie', onclick: () => this.togglePop('log') }, '📜'),
+      h('button.icon-btn' + (this.pop === 'emote' ? '.on' : ''), { title: 'Réagir', onclick: () => this.togglePop('emote') }, '😀'),
       h('button.icon-btn.view-btn', { title: this.b3 ? 'Passer au plateau 2D' : 'Passer au plateau 3D', onclick: () => this.toggleView() }, this.b3 ? '2D' : '3D'),
       h('button.icon-btn', { hidden: !this.b3, title: 'Recentrer la caméra (double-clic sur le plateau)', onclick: () => this.b3 && this.b3.resetView() }, '🎥'),
       h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
@@ -1308,7 +1333,12 @@ class RoomView {
     if (!st) return;
     const cur = currentOverride || st.current;
     this.playersEl.innerHTML = '';
-    for (const p of st.players) {
+    // Vous en bas à gauche, puis les autres dans l'ordre du jeu (sens horaire)
+    const list = st.players.slice();
+    const meIdx = list.findIndex((p) => p.id === this.me);
+    const ordered = meIdx >= 0 ? list.slice(meIdx).concat(list.slice(0, meIdx)) : list;
+    const slots = meIdx >= 0 ? ['bl', 'tl', 'tr', 'br'] : ['tl', 'tr', 'br', 'bl'];
+    for (const [k, p] of ordered.entries()) {
       const cash = this.disp.cash[p.id] ?? p.cash;
       const icons = [];
       if (p.jailed) icons.push(h('span', { title: `Sur l'Île (${p.jailTurns}/3)` }, '🏝️'));
@@ -1320,7 +1350,7 @@ class RoomView {
       else if (p.afk) icons.push(h('span', { title: 'Absent (joué automatiquement)' }, '💤'));
       const props = st.props.filter((x) => x && x.owner === p.id).length;
       this.playersEl.append(
-        h('div.pcard' + (p.id === cur ? '.turn' : '') + (p.bankrupt ? '.out' : '') + (p.id === this.me ? '.me' : '') + (p.vip ? '.vip' : '') + (this.highlightOwner === p.id ? '.hl' : ''),
+        h('div.pcard.corner.c-' + (slots[k] || 'tl') + (p.id === cur ? '.turn' : '') + (p.bankrupt ? '.out' : '') + (p.id === this.me ? '.me' : '') + (p.vip ? '.vip' : '') + (this.highlightOwner === p.id ? '.hl' : ''),
           { 'data-pid': p.id, style: { '--c': p.color }, onclick: () => {
             this.highlightOwner = this.highlightOwner === p.id ? null : p.id;
             this.renderCells();
@@ -1329,9 +1359,10 @@ class RoomView {
           h('div.avatar', { style: { '--c': p.color } }, p.bankrupt ? '💀' : p.pawn),
           h('div.pcard-main',
             h('div.pcard-name', h('span.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p)),
-            h('div.pcard-sub', p.bankrupt ? (p.rank ? `Faillite · #${p.rank}` : 'Faillite') : `${props} propriété${props > 1 ? 's' : ''} · fortune ${fmt(p.netWorth)}`, ...icons)
+            h('div.pcard-cash', p.bankrupt ? 'FAILLITE' : fmt(cash)),
+            h('div.pcard-sub', p.bankrupt ? (p.rank ? `Classement : #${p.rank}` : '') : `🏠 ${props} · fortune ${fmt(p.netWorth)}`, ...icons)
           ),
-          h('div.pcard-cash', p.bankrupt ? '—' : fmt(cash)),
+          p.id === cur && !st.over ? h('div.pcard-turn', p.id === this.me ? 'À VOUS !' : 'JOUE') : null,
           p.id === cur && !st.over ? h('div.pcard-timer') : null
         )
       );
