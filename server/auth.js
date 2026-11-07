@@ -157,7 +157,10 @@ router.put('/me/settings', requireAuth, (req, res) => {
     return res.json({ user: me(U.getUser(req.user.id)) });
   }
   const s = sanitize(body.settings);
-  if (req.user.role !== 'admin') delete s.melenchon;
+  if (req.user.role !== 'admin') {
+    delete s.melenchon;
+    delete s.politicalBoard;
+  }
   db.prepare('UPDATE users SET saved_settings = ? WHERE id = ?').run(JSON.stringify(s), req.user.id);
   res.json({ user: me(U.getUser(req.user.id)) });
 });

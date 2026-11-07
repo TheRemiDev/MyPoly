@@ -1003,7 +1003,7 @@ export class Board3D {
       // Taille réduite et remontée : la tête ne touche plus le nom de la case
       if (c.type === 'tax' && s.melenchon) drawMelenchon(g, cx, iy - m * 0.02, m * 0.34);
       else emoji(g, icon, cx, iy, m * 0.36);
-      fitText(g, c.type === 'tax' ? (s.melenchon ? 'MÉLENCHON' : 'IMPÔTS') : c.name.toUpperCase(), cx, body.y + body.h * 0.56, body.w * 0.9, m * 0.15, 900, c.type === 'resort' ? '#3b2a05' : '#1e1e33');
+      fitText(g, c.type === 'tax' ? (s.melenchon ? 'MÉLENCHON' : (this.meta.cornerNames && this.meta.cornerNames.tax) || 'IMPÔTS') : c.name.toUpperCase(), cx, body.y + body.h * 0.56, body.w * 0.9, m * 0.15, 900, c.type === 'resort' ? '#3b2a05' : '#1e1e33');
       pill(g, c.type === 'tax' ? `${s.taxPercent} %` : priceTxt, cx, body.y + body.h * 0.8, m * 0.13, c.type === 'tax' ? '#c0392b' : priceBg);
     } else if (c.type === 'chance') {
       g.save();
@@ -1025,11 +1025,11 @@ export class Board3D {
       g.stroke();
       fitText(g, '?', 0, 4, cw, ch * 0.7, 900, '#fff');
       g.restore();
-      fitText(g, 'CHANCE', cx, body.y + body.h * 0.82, body.w * 0.9, m * 0.15, 900, '#7a3d00');
+      fitText(g, (this.meta.cornerNames && this.meta.cornerNames.chance) || 'CHANCE', cx, body.y + body.h * 0.82, body.w * 0.9, m * 0.15, 900, '#7a3d00');
     } else {
       // Coins
       const icons = { start: '🏁', jail: '🏝️', festival: '🎪', travel: '✈️' };
-      const names = { start: 'DÉPART', jail: 'ÎLE DÉSERTE', festival: 'FESTIVAL', travel: 'AÉROPORT' };
+      const names = { start: 'DÉPART', jail: 'ÎLE DÉSERTE', festival: 'FESTIVAL', travel: 'AÉROPORT', ...(this.meta.cornerNames || {}) };
       const subs = {
         start: `+${fmt(s.salary)} au passage`,
         jail: `Amende ${fmt(s.jailFine)}`,

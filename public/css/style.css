@@ -1450,13 +1450,12 @@ body:not(.in-game) {
   .audit-item { grid-template-columns: 1fr; }
 }
 
-/* Compteur du mode Mélenchon */
-.mel-counter { position: absolute; z-index: 32; top: 62px; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 10px; padding: 5px 16px 5px 5px; border-radius: 99px;
-  background: linear-gradient(135deg, #d62828, #7e1f2b); border: 2px solid #fff; box-shadow: 0 8px 22px rgba(0, 0, 0, .45); pointer-events: auto; }
-.mel-counter img { width: 38px; height: 38px; border-radius: 50%; background: #ffe0e0; }
-.mel-counter div { display: flex; flex-direction: column; line-height: 1.1; }
-.mel-counter small { font-size: .7rem; font-weight: 700; color: #ffd5d9; text-transform: uppercase; letter-spacing: .04em; }
-.mel-counter b { font-size: 1.25rem; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
+/* Compteur du mode Mélenchon (dans la barre d'outils, dès le premier vol) */
+.mel-counter { order: -1; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 3px; border-radius: 10px; flex: none;
+  background: linear-gradient(135deg, #d62828, #7e1f2b); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35); }
+.mel-counter img { width: 28px; height: 28px; border-radius: 50%; background: #ffe0e0; }
+.mel-counter span { font-size: .72rem; font-weight: 700; color: #ffd5d9; }
+.mel-counter b { font-size: .95rem; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
 .mel-counter.bump { animation: melBump .6s cubic-bezier(.2, 1.6, .4, 1); }
-@keyframes melBump { 40% { scale: 1.18; } }
-@media (max-aspect-ratio: 5/4) { .mel-counter { top: auto; bottom: calc(var(--safe-y) + 50px); } }
+.mel-counter.appear { animation: pop .5s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes melBump { 40% { scale: 1.15; } }
