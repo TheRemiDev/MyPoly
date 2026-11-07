@@ -639,7 +639,7 @@ class Game {
           p.travel = false;
           if (this.settings.travelFee) this.money(p, -this.settings.travelFee, 'travel');
           this.say(`✈️ ${p.name} s'envole pour ${CELLS[to].name}.`, p.id);
-          this.emit({ t: 'fly', pid: p.id, to }, 300);
+          this.emit({ t: 'fly', pid: p.id, to }, 6500); // embarquement, vol et parachute côté client
           this.moveTo(p, to);
           return this.land(p);
         }

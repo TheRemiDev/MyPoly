@@ -521,6 +521,9 @@ class RoomView {
         onStep: () => Sound.play('step'),
         onDemolish: () => Sound.play('crumble'),
         onFirework: () => Sound.play('firework'),
+        onBoard: () => Sound.play('click'),
+        onTakeoff: () => Sound.play('fly'),
+        onDrop: () => Sound.play('card'),
       });
       this.gameEl.classList.add('webgl');
     } catch (e) {
@@ -918,7 +921,16 @@ class RoomView {
       }
       case 'fly':
         Sound.play('fly');
-        if (this.b3) this.b3.launchPlane();
+        if (this.b3 && !document.hidden) {
+          const c = this.meta.cells[ev.to];
+          this.announce({ icon: '✈️', title: `${p.name} prend l'avion`, text: `Destination : ${c.name}`, color: p.color, kind: 'info', ms: 4200 });
+          await this.b3.flyPawn(ev.pid, ev.to);
+          // Le déplacement case par case qui suit est remplacé par le vol
+          this.flown = { pid: ev.pid, to: ev.to };
+          this.disp.pos[ev.pid] = ev.to;
+          this.placePawns(false);
+          this.pulseCell(ev.to, p, 'land');
+        }
         return;
       case 'quake': {
         const c = this.meta.cells[ev.cell];
@@ -1231,6 +1243,11 @@ class RoomView {
 
   async animateMove(ev) {
     const p = this.player(ev.pid) || { id: ev.pid };
+    if (this.flown && this.flown.pid === ev.pid && this.flown.to === ev.to) {
+      this.flown = null;
+      this.disp.pos[ev.pid] = ev.to;
+      return;
+    }
     if (this.b3) {
       await this.b3.animateMove(ev);
       this.disp.pos[ev.pid] = ev.to;
