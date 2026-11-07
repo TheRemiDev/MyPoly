@@ -55,11 +55,34 @@ mypoly status      # état du service
 mypoly logs        # journaux en direct
 mypoly restart     # redémarrer
 mypoly update      # mettre à jour depuis Git (sauvegarde automatique avant)
+mypoly version     # version installée
 mypoly backup      # sauvegarde immédiate
 mypoly ssl         # (ré)obtenir le certificat HTTPS
 mypoly admin Pseudo                     # promouvoir un compte existant en admin
 mypoly admin Pseudo email motdepasse    # créer un compte admin
 ```
+
+### 🔄 Mettre à jour le jeu
+
+1. Prévenez les joueurs (panneau **/admin** → *Annonce globale*) : les parties en cours sont interrompues au redémarrage. Les comptes, statistiques et badges, eux, sont conservés.
+2. Sur le serveur :
+
+```bash
+sudo mypoly update
+```
+
+La commande sauvegarde la base, récupère la dernière version de la branche installée, met à jour les dépendances et redémarre le service. Elle affiche ensuite la version avant et après (`mypoly version` pour la consulter). Les navigateurs des joueurs se reconnectent tout seuls et reçoivent directement la nouvelle version.
+
+En cas de problème : `mypoly logs` pour lire les erreurs. Pour revenir en arrière :
+
+```bash
+sudo git -C /opt/mypoly reset --hard <ancien-commit>
+sudo chown -R mypoly:mypoly /opt/mypoly
+sudo -u mypoly -H bash -c 'cd /opt/mypoly && npm ci --omit=dev'
+sudo systemctl restart mypoly
+```
+
+Les sauvegardes de la base se trouvent dans `/var/backups/mypoly`.
 
 Le VIP s'attribue depuis le panneau **/admin** (+30 jours, à vie, ou retrait). Les rôles `staff` et `admin` s'y gèrent aussi : seul un admin peut changer les rôles.
 

@@ -387,15 +387,17 @@ case "\${1:-}" in
   stop)    systemctl stop ${APP_NAME} ;;
   start)   systemctl start ${APP_NAME} ;;
   update)
-    if [ -d "\$APP_DIR/.git" ]; then
-      git -C "\$APP_DIR" fetch --quiet origin && git -C "\$APP_DIR" reset --quiet --hard "origin/\$(git -C "\$APP_DIR" rev-parse --abbrev-ref HEAD)"
-    else
-      echo "Pas de dépôt Git : copiez la nouvelle version puis relancez deploy/install.sh"; exit 1
-    fi
+    [ -d "\$APP_DIR/.git" ] || { echo "Pas de dépôt Git : copiez la nouvelle version puis relancez deploy/install.sh"; exit 1; }
+    BR="\$(git -C "\$APP_DIR" rev-parse --abbrev-ref HEAD)"
+    OLD="\$(git -C "\$APP_DIR" rev-parse --short HEAD)"
+    echo "Sauvegarde de la base…"; /usr/local/sbin/mypoly-backup || true
+    git -C "\$APP_DIR" fetch --quiet origin "\$BR" && git -C "\$APP_DIR" reset --quiet --hard "origin/\$BR"
+    NEW="\$(git -C "\$APP_DIR" rev-parse --short HEAD)"
     chown -R ${APP_USER}:${APP_USER} "\$APP_DIR"
-    /usr/local/sbin/mypoly-backup || true
     run_app "npm ci --omit=dev --no-audit --no-fund --loglevel=error"
-    systemctl restart ${APP_NAME} && echo "MyPoly mis à jour et redémarré." ;;
+    systemctl restart ${APP_NAME}
+    echo "MyPoly mis à jour (\$BR : \$OLD → \$NEW) et redémarré." ;;
+  version) git -C "\$APP_DIR" log -1 --format='%h %ad %s' --date=short ;;
   backup)  /usr/local/sbin/mypoly-backup && ls -lh ${BACKUP_DIR} | tail -5 ;;
   admin)
     [ -n "\${2:-}" ] || { echo "Usage : mypoly admin <pseudo> [email] [motdepasse]"; exit 1; }
@@ -405,7 +407,7 @@ case "\${1:-}" in
     sed -i "s#^PUBLIC_URL=.*#PUBLIC_URL=https://${DOMAIN}#" "\$APP_DIR/.env"
     systemctl restart ${APP_NAME} && echo "HTTPS activé." ;;
   *)
-    echo "Usage : mypoly {status|logs|restart|start|stop|update|backup|admin <pseudo> [email] [mdp]|ssl}" ;;
+    echo "Usage : mypoly {status|logs|restart|start|stop|update|version|backup|admin <pseudo> [email] [mdp]|ssl}" ;;
 esac
 EOF
 chmod 755 /usr/local/bin/mypoly
