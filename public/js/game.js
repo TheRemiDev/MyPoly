@@ -456,7 +456,8 @@ class RoomView {
     this.actionPanel = h('div.action-panel');
     this.cardSlot = h('div.card-slot');
     this.centerInfo = h('div.center-info');
-    this.hud = h('div.board-hud', this.centerInfo, this.actionPanel, this.cardSlot);
+    this.feed = h('div.event-feed');
+    this.hud = h('div.board-hud', this.centerInfo, this.feed, this.actionPanel, this.cardSlot);
     this.tip = h('div.tile-tip', { hidden: true });
     this.boardScale = h('div.board-scale', this.board, this.hud);
     this.host3d = h('div.board3d-host');
@@ -493,6 +494,7 @@ class RoomView {
         onClick: (i) => this.onCellClick(i),
         onHover: (i) => (i >= 0 ? this.showTip(i) : this.hideTip()),
         onStep: () => Sound.play('step'),
+        onDemolish: () => Sound.play('crumble'),
       });
       this.gameEl.classList.add('webgl');
     } catch (e) {
@@ -517,6 +519,35 @@ class RoomView {
       this.showDice(this.state.dice, true);
     }
     this.renderToolbar();
+  }
+
+  /** Annonce en haut du plateau : qui fait quoi, en clair. */
+  announce({ icon, title, text, color = '#3fa7ff', kind = 'info', ms = 2800 }) {
+    if (!this.feed || document.hidden) return;
+    const card = h('div.feed-card.' + kind, { style: { '--c': color } }, h('div.feed-icon', icon), h('div.feed-body', h('div.feed-title', title), text ? h('div.feed-text', text) : null));
+    this.feed.prepend(card);
+    while (this.feed.children.length > 3) this.feed.lastChild.remove();
+    setTimeout(() => {
+      card.classList.add('out');
+      setTimeout(() => card.remove(), 450);
+    }, ms);
+  }
+
+  /** Étiquette qui jaillit au-dessus d'une case. */
+  cellLabel(i, text, bg = '#e74c3c', fg = '#fff') {
+    if (this.b3) return this.b3.label(i, text, bg, fg);
+    if (!this.cellEls || !this.cellEls[i]) return;
+    const c = this.cellCenter(i);
+    const el = h('div.board-pop', { style: { background: bg, color: fg } }, text);
+    el.style.left = c.x + 'px';
+    el.style.top = c.y + 'px';
+    this.pawnLayer.append(el);
+    setTimeout(() => el.remove(), 1900);
+  }
+
+  /** Recadre brièvement la caméra 3D sur une case. */
+  focusCell(i) {
+    if (this.b3 && !document.hidden) this.b3.focus(i);
   }
 
   /** Pièces qui volent entre deux points : { pawn }, { cell } ou { bank }. */
@@ -554,7 +585,7 @@ class RoomView {
       h('div.tb-code', { title: 'Copier le lien', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') }, '🔗 ', this.code),
       h('div.tb-info', this.state ? `Tour ${this.state.round}` : ''),
       h('button.icon-btn.view-btn', { title: this.b3 ? 'Passer au plateau 2D' : 'Passer au plateau 3D', onclick: () => this.toggleView() }, this.b3 ? '2D' : '3D'),
-      this.b3 ? h('button.icon-btn', { title: 'Recentrer la caméra (double-clic sur le plateau)', onclick: () => this.b3.resetView() }, '🎥') : null,
+      h('button.icon-btn', { hidden: !this.b3, title: 'Recentrer la caméra (double-clic sur le plateau)', onclick: () => this.b3 && this.b3.resetView() }, '🎥'),
       h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
       h('button.icon-btn', { title: 'Son', onclick: (e) => (e.target.textContent = Sound.toggle() ? '🔊' : '🔇') }, Sound.isEnabled() ? '🔊' : '🔇'),
       h('button.icon-btn', { title: 'Plein écran (F)', onclick: toggleFullscreen }, '⛶'),
@@ -680,67 +711,148 @@ class RoomView {
         this.renderPlayers();
         await sleep(120);
         return;
-      case 'buy':
-      case 'build': {
-        Sound.play(ev.t === 'buy' ? 'buy' : 'build');
+      case 'buy': {
+        const c = this.meta.cells[ev.cell];
+        Sound.play('buy');
+        this.announce({
+          icon: ev.level ? '🏗️' : c.type === 'resort' ? '🏖️' : '🏠',
+          title: `${p.name} achète ${c.name}`,
+          text: ev.level ? `Terrain + ${LEVEL_LABEL[ev.level].toLowerCase()}` : c.type === 'resort' ? 'Station balnéaire' : 'Terrain nu',
+          color: p.color,
+          kind: 'buy',
+        });
         await this.coins({ pawn: ev.pid }, { cell: ev.cell }, 5);
         this.patchProps(ev);
         this.pulseCell(ev.cell, p);
-        await sleep(350);
+        this.cellLabel(ev.cell, ev.level ? `+${ev.level} 🏠` : 'ACHETÉ !', p.color);
+        await sleep(450 + ev.level * 170);
+        return;
+      }
+      case 'build': {
+        const c = this.meta.cells[ev.cell];
+        const hotel = ev.level === 4;
+        Sound.play('build');
+        this.announce({
+          icon: hotel ? '🏨' : '🏗️',
+          title: hotel ? `${p.name} construit un HÔTEL !` : `${p.name} construit à ${c.name}`,
+          text: hotel ? `${c.name} devient imprenable` : `${LEVEL_LABEL[ev.level]} · loyer en hausse`,
+          color: p.color,
+          kind: 'gold',
+        });
+        await this.coins({ pawn: ev.pid }, { cell: ev.cell }, 5);
+        this.patchProps(ev);
+        this.pulseCell(ev.cell, p);
+        this.cellLabel(ev.cell, hotel ? 'HÔTEL !' : LEVEL_LABEL[ev.level].toUpperCase(), '#f7b733', '#3a2a00');
+        await sleep(hotel ? 1100 : 600);
         return;
       }
       case 'takeover': {
+        const c = this.meta.cells[ev.cell];
+        const from = this.player(ev.from);
         Sound.play('takeover');
+        this.announce({ icon: '🤝', title: `${p.name} rachète ${c.name}`, text: `à ${from ? from.name : '?'}`, color: p.color, kind: 'takeover' });
+        this.focusCell(ev.cell);
         await this.coins({ pawn: ev.pid }, { pawn: ev.from }, 8);
         this.patchProps(ev);
         this.pulseCell(ev.cell, p, 'takeover');
-        await sleep(600);
+        this.cellLabel(ev.cell, 'RACHETÉ !', '#a66bff');
+        await sleep(800);
         return;
       }
-      case 'rent':
-        this.pulseCell(ev.cell, this.player(ev.to), 'rent');
+      case 'rent': {
+        const to = this.player(ev.to);
+        this.pulseCell(ev.cell, to, 'rent');
         Sound.play('pay');
+        this.announce({ icon: '💸', title: `${p.name} paie ${fmt(ev.amount)}`, text: `de loyer à ${to ? to.name : '?'} (${this.meta.cells[ev.cell].name})`, color: p.color, kind: 'pay', ms: 2200 });
         await this.coins({ pawn: ev.pid }, { pawn: ev.to }, Math.min(10, 3 + Math.round(ev.amount / 150)));
         return;
-      case 'sell':
+      }
+      case 'sell': {
+        const c = this.meta.cells[ev.cell];
+        this.announce({
+          icon: '🏚️',
+          title: `${p.name} vend ${c.name}`,
+          text: `${ev.level === 4 ? 'Hôtel démoli' : ev.level ? `${LEVEL_LABEL[ev.level]} démolie${ev.level > 1 ? 's' : ''}` : 'Rendu à la banque'} · +${fmt(ev.value || 0)}`,
+          color: p.color,
+          kind: 'danger',
+        });
+        this.focusCell(ev.cell);
+        await sleep(this.b3 ? 450 : 150);
+        Sound.play('demolish');
         this.patchProps(ev);
-        this.pulseCell(ev.cell, null);
+        this.pulseCell(ev.cell, null, 'destroy');
+        this.cellLabel(ev.cell, 'VENDU', '#e74c3c');
+        await sleep(ev.level ? 1000 : 700);
         return;
+      }
       case 'card':
         Sound.play('card');
         await this.showCard(ev.card, p);
         return;
       case 'jail':
         Sound.play('jail');
+        this.announce({ icon: '🏝️', title: `${p.name} échoue sur l'Île déserte`, text: 'Double, amende ou 3 tours d\'attente', color: p.color, kind: 'info' });
         return;
-      case 'festival':
+      case 'festival': {
+        const c = this.meta.cells[ev.cell];
         Sound.play('festival');
+        this.announce({ icon: '🎉', title: `Festival à ${c.name} !`, text: `Organisé par ${p.name} · loyer ×${ev.mult}`, color: p.color, kind: 'fest' });
+        this.focusCell(ev.cell);
         this.patchProps(ev);
         this.pulseCell(ev.cell, p, 'festival');
-        await sleep(700);
+        this.cellLabel(ev.cell, `LOYER ×${ev.mult}`, '#ff2fb3');
+        await sleep(900);
         return;
+      }
       case 'fly':
         Sound.play('fly');
         return;
-      case 'quake':
+      case 'quake': {
+        const c = this.meta.cells[ev.cell];
         Sound.play('quake');
+        this.announce({ icon: '🌋', title: 'SÉISME !', text: `${c.name} (${p.name}) perd un niveau`, color: p.color, kind: 'danger' });
+        this.focusCell(ev.cell);
         if (this.b3) this.b3.shake(0.9);
         else {
           this.board.classList.add('shake');
           setTimeout(() => this.board.classList.remove('shake'), 900);
         }
+        await sleep(450);
+        Sound.play('demolish');
         this.patchProps(ev);
-        this.pulseCell(ev.cell, null, 'quake');
-        await sleep(800);
+        this.pulseCell(ev.cell, null, 'destroy');
+        this.cellLabel(ev.cell, '−1 NIVEAU', '#ff7f2a');
+        await sleep(950);
         return;
+      }
       case 'shield':
         Sound.play('buy');
+        this.announce({ icon: '🛡️', title: `Bouclier de ${p.name} !`, text: 'Le loyer est annulé', color: p.color, kind: 'buy' });
         return;
-      case 'bankrupt':
+      case 'bankrupt': {
+        const cells = ev.cells || [];
         Sound.play('bankrupt');
         this.flashBanner(`💥 ${p ? p.name : '?'} fait faillite !`);
+        this.announce({
+          icon: '💥',
+          title: `${p.name} fait faillite !`,
+          text: cells.length ? `${cells.length} propriété${cells.length > 1 ? 's' : ''} saisie${cells.length > 1 ? 's' : ''} et rendue${cells.length > 1 ? 's' : ''} à la banque` : 'Éliminé(e) de la partie',
+          color: p.color,
+          kind: 'danger',
+          ms: 3800,
+        });
         await sleep(900);
+        for (const { cell, level } of cells) {
+          if (cells.length <= 3) this.focusCell(cell);
+          Sound.play('demolish');
+          this.patchProps({ t: 'lose', cell });
+          this.pulseCell(cell, null, 'destroy');
+          this.cellLabel(cell, 'SAISI', '#e74c3c');
+          await sleep(level ? 450 : 320);
+        }
+        await sleep(500);
         return;
+      }
       case 'win':
         Sound.play('win');
         return;
@@ -849,8 +961,9 @@ class RoomView {
     if (ev.t === 'buy') Object.assign(pr, { owner: ev.pid, level: ev.level, rent: 0 });
     if (ev.t === 'build') pr.level = ev.level;
     if (ev.t === 'takeover') pr.owner = ev.pid;
-    if (ev.t === 'sell') Object.assign(pr, { owner: null, level: 0, rent: 0 });
-    if (ev.t === 'quake') pr.level = Math.max(0, pr.level - 1);
+    if (ev.t === 'sell' || ev.t === 'lose') Object.assign(pr, { owner: null, level: 0, rent: 0 });
+    if (ev.t === 'lose' && st.festival && st.festival.cell === ev.cell) st.festival = { cell: null, mult: 1 };
+    if (ev.t === 'quake') pr.level = ev.level != null ? ev.level : Math.max(0, pr.level - 1);
     if (ev.t === 'festival') st.festival = { cell: ev.cell, mult: ev.mult };
     this.renderCells();
   }
@@ -1218,7 +1331,7 @@ class RoomView {
         panel.append(
           h('div.panel-title', '✈️ Où voulez-vous aller ?'),
           h('div.hint', `Cliquez sur une case du plateau (billet : ${fmt(pend.fee)}).`),
-          h('button.btn.ghost', { onclick: act('skip') }, 'Rester au sol et lancer les dés')
+          h('button.btn.skip', { onclick: act('skip') }, '🎲 Rester au sol et lancer les dés')
         );
         break;
       case 'buy': {
@@ -1229,7 +1342,7 @@ class RoomView {
             h('button.btn.' + (o.level === 0 ? 'primary' : 'secondary'), { disabled: !o.affordable, onclick: act('buy', { level: o.level }) },
               h('span', c.type === 'resort' ? 'Acheter' : o.level === 0 ? 'Acheter le terrain' : `Terrain + ${LEVEL_LABEL[o.level].toLowerCase()}`), h('b', fmt(o.cost)))
           )),
-          h('button.btn.ghost', { onclick: act('skip') }, 'Ne pas acheter')
+          h('button.btn.skip', { onclick: act('skip') }, '✖ Ne pas acheter')
         );
         break;
       }
@@ -1239,7 +1352,7 @@ class RoomView {
           h('div.btn-col', (pend.options || []).map((o) =>
             h('button.btn.secondary', { disabled: !o.affordable, onclick: act('build', { level: o.level }) }, h('span', o.level === 4 ? '🏨 Construire un hôtel' : `🏠 Monter à ${LEVEL_LABEL[o.level].toLowerCase()}`), h('b', fmt(o.cost)))
           )),
-          h('button.btn.ghost', { onclick: act('skip') }, 'Ne rien construire')
+          h('button.btn.skip', { onclick: act('skip') }, '✖ Ne rien construire')
         );
         break;
       case 'takeover': {
@@ -1248,12 +1361,12 @@ class RoomView {
           this.propertyHeader(pend.cell),
           h('div.panel-title', `🤝 Racheter à ${owner ? owner.name : '?'} ?`),
           h('div.btn-col', h('button.btn.primary', { onclick: act('takeover') }, h('span', 'Racheter'), h('b', fmt(pend.price)))),
-          h('button.btn.ghost', { onclick: act('skip') }, 'Non merci')
+          h('button.btn.skip', { onclick: act('skip') }, '✖ Ne pas racheter')
         );
         break;
       }
       case 'festival':
-        panel.append(h('div.panel-title', '🎉 Organisez le Festival !'), h('div.hint', 'Cliquez sur une de vos propriétés pour multiplier son loyer.'), h('button.btn.ghost', { onclick: act('skip') }, 'Passer'));
+        panel.append(h('div.panel-title', '🎉 Organisez le Festival !'), h('div.hint', 'Cliquez sur une de vos propriétés pour multiplier son loyer.'), h('button.btn.skip', { onclick: act('skip') }, '✖ Passer'));
         break;
       case 'debt': {
         const owned = st.props.map((x, i) => (x && x.owner === this.me ? i : -1)).filter((i) => i >= 0);

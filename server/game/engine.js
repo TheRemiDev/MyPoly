@@ -354,24 +354,28 @@ class Game {
   }
   sell(p, i) {
     const v = this.sellValue(i);
+    const level = this.props[i].level;
     this.props[i] = { owner: null, level: 0 };
     if (this.festival.cell === i) this.festival = { cell: null, mult: 1 };
+    // Évènement émis avant le gain pour que l'animation de démolition précède l'argent
+    this.emit({ t: 'sell', pid: p.id, cell: i, level, value: v }, 1300);
     this.money(p, v, 'sell');
-    this.emit({ t: 'sell', pid: p.id, cell: i }, ANIM.small);
     this.say(`${p.name} vend ${CELLS[i].name} pour ${fmt(v)}.`, p.id);
   }
   bankrupt(p, creditor) {
     if (p.bankrupt) return;
     if (creditor && p.cash > 0 && !creditor.bankrupt) this.money(creditor, p.cash, 'bankrupt');
     p.cash = 0;
-    for (const i of this.owned(p)) {
+    const lost = this.owned(p).map((i) => ({ cell: i, level: this.props[i].level }));
+    for (const { cell: i } of lost) {
       this.props[i] = { owner: null, level: 0 };
       if (this.festival.cell === i) this.festival = { cell: null, mult: 1 };
     }
     p.bankrupt = true;
     p.jailed = false;
     p.stats.eliminated = ++this.eliminations;
-    this.emit({ t: 'bankrupt', pid: p.id }, 900);
+    // Les propriétés perdues sont détaillées pour animer leur démolition une à une
+    this.emit({ t: 'bankrupt', pid: p.id, to: creditor ? creditor.id : null, cells: lost }, 1800 + lost.length * 450);
     this.say(`💥 ${p.name} fait faillite !`, p.id);
     if (creditor) creditor.stats.knockouts = (creditor.stats.knockouts || 0) + 1;
     const alive = this.alive();
@@ -536,7 +540,7 @@ class Game {
           .filter((i) => this.props[i].level > 0)
           .sort((a, b) => this.props[b].level - this.props[a].level || CELLS[b].price - CELLS[a].price)[0];
         this.props[best].level--;
-        this.emit({ t: 'quake', pid: victim.id, cell: best }, 900);
+        this.emit({ t: 'quake', pid: victim.id, by: p.id, cell: best, level: this.props[best].level }, 1600);
         this.say(`🌋 ${CELLS[best].name} (${victim.name}) perd un niveau !`, victim.id);
         return this.endAction();
       }

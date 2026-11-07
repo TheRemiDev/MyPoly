@@ -85,6 +85,14 @@ const SFX = {
     tone(200, 0, 0.8, { slide: 500, gain: 0.08 });
   },
   error: () => tone(160, 0, 0.25, { type: 'square', gain: 0.1 }),
+  demolish: () => {
+    noise(0, 0.5, 0.55, 220);
+    noise(0.05, 0.35, 0.3, 900);
+    tone(140, 0, 0.5, { type: 'sawtooth', gain: 0.12, slide: -90 });
+  },
+  crumble: () => {
+    for (let i = 0; i < 5; i++) noise(i * 0.06, 0.08, 0.25, 400 + Math.random() * 800);
+  },
   chat: () => tone(1200, 0, 0.08, { gain: 0.08 }),
   tick: () => tone(1000, 0, 0.04, { type: 'square', gain: 0.05 }),
   quake: () => {
