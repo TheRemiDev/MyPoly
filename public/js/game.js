@@ -4,6 +4,7 @@ import { store, on, emit } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
 import { Board3D, webglAvailable } from './board3d.js';
+import { melenchonURL } from './melenchon.js';
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
 const LEVEL_LABEL = ['Terrain', '1 maison', '2 maisons', '3 maisons', 'Hôtel'];
@@ -166,6 +167,7 @@ class RoomView {
   }
 
   async init() {
+    if (location.hostname === 'localhost') window.__view = this; // débogage local
     document.body.classList.add('in-game');
     this.root = h('div.room-root', h('div.page.center', h('div.spinner'), h('p.muted', 'Connexion à la salle…')));
     this.app.append(this.root);
@@ -351,12 +353,17 @@ class RoomView {
     const editable = this.isHost;
     box.innerHTML = '';
     if (editable) box.append(h('div.presets', Object.entries(PRESETS).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
-    for (const g of SETTINGS_UI) {
+    const isAdmin = store.user && store.user.role === 'admin';
+    const groups = SETTINGS_UI.slice();
+    if (isAdmin || s.melenchon) {
+      groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' }] });
+    }
+    for (const g of groups) {
       const grp = h('div.set-group', h('div.set-group-title', g.group));
       for (const it of g.items) {
         let ctrl;
         if (it.type === 'toggle') {
-          ctrl = h('label.switch', h('input', { type: 'checkbox', checked: !!s[it.key], disabled: !editable, onchange: (e) => this.saveSettings({ [it.key]: e.target.checked }) }), h('span.slider'));
+          ctrl = h('label.switch', h('input', { type: 'checkbox', checked: !!s[it.key], disabled: !editable || (it.admin && !isAdmin), onchange: (e) => this.saveSettings({ [it.key]: e.target.checked }) }), h('span.slider'));
         } else {
           const opts = it.options.slice();
           if (!opts.some(([v]) => v === s[it.key])) opts.push([s[it.key], it.key === 'startMoney' || it.key === 'salary' ? fmt(s[it.key]) : String(s[it.key])]);
@@ -639,6 +646,33 @@ class RoomView {
     this.destCell = null;
   }
 
+  /** Animation de la case « Mélenchon » : la tête surgit et aspire les pièces du joueur. */
+  async melenchonShow(ev, p) {
+    if (document.hidden) return;
+    Sound.play('hop');
+    const coins = h('div.mel-coins');
+    for (let k = 0; k < 14; k++) {
+      const c = h('span.mel-coin', '$');
+      c.style.setProperty('--x', Math.round((Math.random() - 0.5) * 420) + 'px');
+      c.style.setProperty('--y', Math.round(160 + Math.random() * 160) + 'px');
+      c.style.setProperty('--d', k * 70 + 'ms');
+      coins.append(c);
+    }
+    const pop = h('div.mel-pop',
+      coins,
+      h('div.mel-head', h('img', { src: melenchonURL(), alt: 'Mélenchon' })),
+      h('div.mel-bubble', h('b', 'Hop !'), ' Mélenchon prend ta thune !'),
+      h('div.mel-amount', '−' + fmt(ev.amount), h('small', ' · ' + p.name))
+    );
+    this.gameEl.append(pop);
+    setTimeout(() => Sound.play('pay'), 900);
+    setTimeout(() => Sound.play('cash'), 1500);
+    await sleep(2900);
+    pop.classList.add('out');
+    setTimeout(() => pop.remove(), 450);
+    await sleep(250);
+  }
+
   /** Recadre brièvement la caméra 3D sur une case. */
   focusCell(i) {
     if (this.b3 && !document.hidden) this.b3.focus(i);
@@ -711,7 +745,7 @@ class RoomView {
         h('div', `${yes(s.takeover)} Rachat (×${s.takeoverMult}) · ${yes(s.buildOnPurchase)} Construction à l'achat · ${yes(s.firstRoundLimit)} 1er tour : 2 maisons max`),
         h('div', `${yes(s.festival)} Festival · ${yes(s.countryDoubleRent)} Pays complet ×2 · ${yes(s.doubleReplay)} Rejouer sur double`),
         h('div', `🏆 ${yes(s.tripleMonopoly)} Triple monopole · ${yes(s.lineMonopoly)} Ligne · ${yes(s.resortMonopoly)} Balnéaire`),
-        h('div', `🏝️ Amende ${fmt(s.jailFine)} · ✈️ Billet ${fmt(s.travelFee)} · 💸 Impôts ${s.taxPercent} %`),
+        h('div', `🏝️ Amende ${fmt(s.jailFine)} · ✈️ Billet ${fmt(s.travelFee)} · ${s.melenchon ? '🧓 Mélenchon' : '💸 Impôts'} ${s.taxPercent} %`),
         h('a', { href: '/rules', target: '_blank' }, 'Règles complètes →')
       ),
     });
@@ -979,6 +1013,13 @@ class RoomView {
         return;
       }
       case 'tax': {
+        if (ev.melenchon) {
+          this.announce({ icon: '🧓', title: `Mélenchon prend ${fmt(ev.amount)} à ${p.name}`, text: `${ev.percent} % de sa fortune`, color: p.color, kind: 'pay', ms: 3600 });
+          this.focusCell(ev.cell);
+          this.pulseCell(ev.cell, null, 'rent');
+          await this.melenchonShow(ev, p);
+          return;
+        }
         Sound.play('pay');
         this.announce({
           icon: '🏛️',
@@ -1068,7 +1109,11 @@ class RoomView {
       } else if (c.type === 'chance') {
         el.append(h('div.tile-body', h('div.chance-mini', h('span', '?')), h('div.tile-name', 'Chance')));
       } else if (c.type === 'tax') {
-        el.append(h('div.tile-body', h('div.tile-icon', '💸'), h('div.tile-name', 'Impôts'), h('div.tile-price', s.taxPercent + ' %')));
+        el.append(h('div.tile-body',
+          s.melenchon ? h('img.tile-face', { src: melenchonURL(), alt: '' }) : h('div.tile-icon', '💸'),
+          h('div.tile-name', s.melenchon ? 'Mélenchon' : 'Impôts'),
+          h('div.tile-price', s.taxPercent + ' %')
+        ));
       } else {
         const icons = { start: '🏁', jail: '🏝️', festival: '🎪', travel: '✈️' };
         const sub = {
