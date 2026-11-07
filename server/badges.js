@@ -31,6 +31,14 @@ const BADGES = [
   { id: 'c_avalanche', icon: '🌋', name: 'Avalanche', desc: 'Faire piocher 8 cartes ou plus d\'un coup', tier: 'gold', game: 'cartes' },
   { id: 'c_lynx', icon: '🐆', name: 'Œil de lynx', desc: 'Prendre 2 joueurs qui ont oublié de crier « Carton ! » dans une partie', tier: 'bronze', game: 'cartes' },
   { id: 'c_streak', icon: '🔥', name: 'Main brûlante', desc: '3 victoires de Carton ! d\'affilée', tier: 'silver', game: 'cartes' },
+  // Petits chevaux
+  { id: 'h_first_win', icon: '🐴', name: 'Premier galop', desc: 'Remporter une course de Petits chevaux', tier: 'bronze', game: 'chevaux' },
+  { id: 'h_wins_10', icon: '🏇', name: 'Jockey', desc: 'Remporter 10 courses de Petits chevaux', tier: 'silver', game: 'chevaux' },
+  { id: 'h_wins_50', icon: '🏆', name: 'Champion de l\'hippodrome', desc: 'Remporter 50 courses de Petits chevaux', tier: 'gold', game: 'chevaux' },
+  { id: 'h_hunter', icon: '💥', name: 'Chasseur', desc: 'Renvoyer 5 chevaux à l\'écurie dans une même course', tier: 'silver', game: 'chevaux' },
+  { id: 'h_lucky', icon: '🎲', name: 'Pluie de 6', desc: 'Faire 10 fois 6 dans une même course', tier: 'bronze', game: 'chevaux' },
+  { id: 'h_untouchable', icon: '🛡️', name: 'Intouchable', desc: 'Gagner une course sans perdre un seul cheval', tier: 'gold', game: 'chevaux' },
+  { id: 'h_streak', icon: '🔥', name: 'Au galop', desc: '3 victoires de Petits chevaux d\'affilée', tier: 'silver', game: 'chevaux' },
 ];
 
 /**
@@ -86,4 +94,20 @@ function evaluateCards(s, me, game, owned) {
   return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
 }
 
-module.exports = { BADGES, evaluate, evaluateCards };
+/** Badges des Petits chevaux. */
+function evaluateHorses(s, me, game, owned) {
+  const won = me.rank === 1;
+  const st = me.stats || {};
+  const checks = {
+    h_first_win: s.wins >= 1,
+    h_wins_10: s.wins >= 10,
+    h_wins_50: s.wins >= 50,
+    h_hunter: (st.captures || 0) >= 5,
+    h_lucky: (st.sixes || 0) >= 10,
+    h_untouchable: won && (st.captured || 0) === 0 && game.players.length >= 2,
+    h_streak: s.current_streak >= 3,
+  };
+  return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
+}
+
+module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses };

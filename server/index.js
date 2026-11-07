@@ -64,6 +64,7 @@ app.get('/api/meta', (_req, res) => {
     defaults: DEFAULTS,
     limits: LIMITS,
     cardDefaults: require('./cartes/settings').DEFAULTS,
+    horseDefaults: require('./chevaux/settings').DEFAULTS,
   });
 });
 
