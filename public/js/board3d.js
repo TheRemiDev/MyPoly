@@ -474,13 +474,22 @@ export class Board3D {
     return s;
   }
   textSprite(text, { bg = '#ff00aa', fg = '#fff', size = 64, scale = 0.6 } = {}) {
-    const c = makeCanvas(640, 240);
+    // La toile est dimensionnée d'après la largeur réelle du texte : rien n'est jamais rogné
+    const fs = size * 2;
+    const m = makeCanvas(8, 8).getContext('2d');
+    m.font = `900 ${fs}px ${FONT}`;
+    const W = Math.ceil(m.measureText(text).width + fs * 1.1 + fs * 0.7);
+    const H = Math.ceil(fs * 1.45 + fs * 0.7);
+    const c = makeCanvas(W, H);
     const g = c.getContext('2d');
-    pill(g, text, 320, 120, size * 2, bg, fg);
+    pill(g, text, W / 2, H / 2, fs, bg, fg);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = this.maxAniso;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
-    s.scale.set(scale * 2.67, scale, 1);
+    // « scale » = hauteur à l'écran (unités du plateau) ; la largeur suit le texte
+    const k = scale * (H / (fs * 1.875));
+    s.scale.set(k * (W / H), k, 1);
     return s;
   }
 
@@ -1110,7 +1119,10 @@ export class Board3D {
   // ------------------------------------------------------------ monopole
   /** Grand titre doré (sprite) : « MONOPOLE ! ». */
   bigTitle(text, color) {
-    const c = makeCanvas(1024, 300);
+    const m = makeCanvas(8, 8).getContext('2d');
+    m.font = `900 190px ${FONT}`;
+    const W = Math.ceil(m.measureText(text).width + 34 + 120);
+    const c = makeCanvas(W, 300);
     const g = c.getContext('2d');
     g.textAlign = 'center';
     g.textBaseline = 'middle';
@@ -1121,21 +1133,22 @@ export class Board3D {
     g.shadowOffsetY = 12;
     g.lineWidth = 34;
     g.strokeStyle = shade(color, -0.35);
-    g.strokeText(text, 512, 160);
+    g.strokeText(text, W / 2, 160);
     g.shadowColor = 'transparent';
     g.lineWidth = 14;
     g.strokeStyle = '#ffffff';
-    g.strokeText(text, 512, 160);
+    g.strokeText(text, W / 2, 160);
     const lg = g.createLinearGradient(0, 70, 0, 250);
     lg.addColorStop(0, '#fff6c9');
     lg.addColorStop(0.45, '#ffd166');
     lg.addColorStop(1, '#f39c12');
     g.fillStyle = lg;
-    g.fillText(text, 512, 160);
+    g.fillText(text, W / 2, 160);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false }));
     sp.renderOrder = 30;
+    sp.userData.aspect = W / 300;
     return sp;
   }
 
@@ -1234,11 +1247,28 @@ export class Board3D {
     sub.renderOrder = 31;
     const y = TOP + 1.05;
     title.position.set(sx, y, sz);
-    sub.position.set(sx, y - 0.78, sz);
-    const tw = 2.9;
-    const th = tw * (300 / 1024);
-    const sw = sub.scale.x;
-    const sh = sub.scale.y;
+    sub.position.set(sx, y - 0.78, sz); // repositionné plus bas une fois les tailles connues
+    let th = 0.85;
+    let tw = th * title.userData.aspect;
+    if (tw > 3.4) {
+      th *= 3.4 / tw;
+      tw = 3.4;
+    }
+    let sw = sub.scale.x;
+    let sh = sub.scale.y;
+    if (sw > 3.6) {
+      sh *= 3.6 / sw;
+      sw = 3.6;
+    }
+    const gap = th * 0.5 + sh * 0.5 + 0.08;
+    // Le sous-titre est placé sous le titre dans la direction « bas » de l'écran
+    // (et non en hauteur dans la scène) : écart constant quel que soit l'angle de caméra
+    const upV = new THREE.Vector3();
+    const placeSub = () => {
+      upV.setFromMatrixColumn(this.camera.matrixWorld, 1).normalize();
+      sub.position.copy(title.position).addScaledVector(upV, -gap);
+    };
+    placeSub();
     title.scale.set(0.01, 0.01, 1);
     sub.scale.set(0.01, 0.01, 1);
     this.scene.add(title, sub);
@@ -1250,7 +1280,7 @@ export class Board3D {
       const pop2 = t < 0.2 ? 0 : t < 0.32 ? ease.back((t - 0.2) / 0.12) : 1;
       sub.scale.set(sw * pop2, sh * pop2, 1);
       title.position.y = y + Math.sin(t * Math.PI * 3) * 0.05 + (t > 0.8 ? (t - 0.8) * 1.5 : 0);
-      sub.position.y = y - 0.78 + (t > 0.8 ? (t - 0.8) * 1.5 : 0);
+      placeSub();
       const fade = t > 0.82 ? 1 - (t - 0.82) / 0.18 : 1;
       title.material.opacity = fade;
       sub.material.opacity = fade;
