@@ -1,4 +1,19 @@
 // Utilitaires partagés de l'interface
+
+// Protection globale : append()/prepend()/replaceChildren() natifs convertissent null,
+// undefined et false en texte (« null » affiché à l'écran). Ici, ces valeurs sont
+// simplement ignorées, comme le fait déjà h(). Ce module est chargé avant tous les autres.
+for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+  for (const method of ['append', 'prepend', 'replaceChildren']) {
+    const native = proto[method];
+    if (!native || native.__mpSafe) continue;
+    const safe = function (...nodes) {
+      return native.apply(this, nodes.filter((n) => n !== null && n !== undefined && n !== false));
+    };
+    safe.__mpSafe = true;
+    proto[method] = safe;
+  }
+}
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
