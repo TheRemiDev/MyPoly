@@ -587,9 +587,24 @@ body.in-game:has(.lobby) { overflow: auto; }
 @keyframes banner { 0% { opacity: 0; scale: .5; } 15% { opacity: 1; scale: 1.08; } 25% { scale: 1; } 80% { opacity: 1; } 100% { opacity: 0; translate: -50% -80%; } }
 .view-btn { font-weight: 900; font-size: .8rem !important; }
 
+/* -------------------------------------------------- plateau 3D (WebGL) */
+.board3d-host { position: absolute; inset: 0; display: none; }
+.webgl .board3d-host { display: block; }
+.board3d-canvas { width: 100% !important; height: 100% !important; display: block; touch-action: none; outline: none; }
+.webgl .board { visibility: hidden; }
+.webgl .board-scale { pointer-events: none; }
+.webgl .center-info { top: 1.5%; }
+.toolbar { flex-wrap: wrap; }
+.webgl .board-wrap { padding: 0; background: radial-gradient(ellipse at 50% 55%, rgba(63, 167, 255, .16), transparent 62%), radial-gradient(ellipse at 50% 120%, rgba(166, 107, 255, .2), transparent 60%); }
+.fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 25; overflow: hidden; }
+.fx-float { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; }
+.fx-float.float-money { right: auto; font-size: clamp(14px, 1.8vw, 26px); text-shadow: 0 2px 0 rgba(0, 0, 0, .55), 0 0 10px rgba(0, 0, 0, .6); }
+.fx-emote { font-size: clamp(28px, 3.5vw, 52px); animation: emote 2.2s ease forwards; }
+
 /* Colonne latérale */
 .side { display: flex; flex-direction: column; gap: 10px; padding: 10px 10px 10px 0; min-height: 0; height: 100dvh; }
-.toolbar { display: flex; align-items: center; gap: 6px; }
+.toolbar { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.toolbar .icon-btn { width: 34px; height: 34px; flex: none; font-size: .95rem; }
 .tb-code { white-space: nowrap; font-weight: 900; letter-spacing: .12em; color: var(--gold); background: var(--panel); padding: 8px 12px; border-radius: 10px; cursor: pointer; }
 .tb-info { flex: 1; white-space: nowrap; color: var(--muted); font-weight: 700; font-size: .9rem; padding-left: 4px; }
 .players { display: flex; flex-direction: column; gap: 6px; }
