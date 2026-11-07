@@ -307,7 +307,19 @@ function attach(server) {
     socket.on('error', () => {});
 
     const reply = (cb, data) => typeof cb === 'function' && cb(data);
-    const current = () => (socket.data.room ? rooms.get(socket.data.room) : null);
+    const current = () => {
+      const r = socket.data.room ? rooms.get(socket.data.room) : null;
+      if (r) return r;
+      // Filet de sécurité (reconnexion…) : on retrouve la salle où cette connexion est inscrite
+      for (const room of rooms.values()) {
+        const set = room.sockets.get(ident.key);
+        if (set && set.has(socket.id)) {
+          socket.data.room = room.code;
+          return room;
+        }
+      }
+      return null;
+    };
     const isHost = (room) => room && room.host === ident.key;
 
     function joinSocketRoom(room) {
@@ -590,7 +602,8 @@ function attach(server) {
 
     socket.on('game:action', (data, cb) => {
       const room = current();
-      if (!room || !room.game || room.state !== 'playing') return reply(cb, { error: 'Aucune partie en cours.' });
+      if (!room) return reply(cb, { error: 'Connexion à la salle perdue : rechargez la page.', resync: true });
+      if (!room.game || room.state !== 'playing') return reply(cb, { error: 'La partie est terminée.' });
       const { type, ...rest } = data || {};
       const res = room.game.act(ident.key, String(type || ''), rest);
       reply(cb, res);

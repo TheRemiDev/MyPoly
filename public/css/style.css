@@ -1768,3 +1768,116 @@ body:not(.in-game) {
   .ct-seat .ct-carton-tag { font-size: .58rem; right: 4px; }
 }
 @media (max-width: 700px) { .ct-catch-long { display: none; } }
+.ct-catch { position: relative; overflow: hidden; }
+.ct-catch-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: #ffd166; transform-origin: left; animation: ctCatchBar linear forwards; }
+@keyframes ctCatchBar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* =====================================================================
+   CARTON ! — table de casino (refonte visuelle)
+   ===================================================================== */
+.cards-game {
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 38%, rgba(255, 236, 190, .10), transparent 70%),
+    radial-gradient(ellipse 120% 80% at 50% 120%, rgba(166, 107, 255, .18), transparent 60%),
+    radial-gradient(ellipse at 50% 50%, #161b3b 0%, #0b0e22 70%, #06081a 100%);
+}
+/* Rail en bois, liseré doré et tapis feutré */
+.ct-felt {
+  border: 22px solid transparent; border-radius: 999px;
+  margin: 70px max(26px, 4vw) 0;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E") padding-box,
+    radial-gradient(ellipse 70% 75% at 50% 42%, #24a596 0%, #158077 38%, #0e5c5a 72%, #093d41 100%) padding-box,
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, .05) 0 2px, transparent 2px 9px, rgba(0, 0, 0, .08) 9px 11px, transparent 11px 19px) border-box,
+    linear-gradient(180deg, #8a5228 0%, #5e3216 45%, #3d1e0b 100%) border-box;
+  box-shadow:
+    0 0 0 3px #2a1406,
+    0 0 0 6px #c9a14a,
+    0 0 0 8px #3a2108,
+    inset 0 0 0 3px #e2bd62,
+    inset 0 0 0 5px rgba(0, 0, 0, .45),
+    inset 0 18px 50px rgba(0, 0, 0, .55),
+    inset 0 -10px 40px rgba(0, 0, 0, .35),
+    0 40px 80px rgba(0, 0, 0, .6);
+}
+.ct-felt::before { inset: 0; border-radius: inherit; background:
+    radial-gradient(ellipse 55% 40% at 50% 30%, rgba(255, 255, 255, .10), transparent 70%),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .35) 100%); }
+/* Rail rembourré : reflet sur le bois */
+.ct-felt::after { content: ''; position: absolute; inset: -22px; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .22), transparent 30%, transparent 70%, rgba(0, 0, 0, .3));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; padding: 22px; }
+
+/* Anneau imprimé sur le tapis : tourne dans le sens du jeu */
+.ct-dir { width: calc(var(--pile) * 4.1); opacity: .5; color: #bff3e6; animation: ctSpin 30s linear infinite; }
+.ct-dir text { font-family: var(--font); }
+.ct-dir.ccw { animation-direction: reverse; }
+.ct-dir.ccw svg { transform: scaleX(-1); }
+.ct-dir.flip { animation: ctSpin 30s linear infinite, ctFlip .8s ease; }
+.ct-dir.ccw.flip { animation: ctSpin 30s linear infinite reverse, ctFlip .8s ease; }
+/* Halo de la couleur active sous la défausse */
+.ct-color { width: calc(var(--pile) * 3.1); background: radial-gradient(circle, color-mix(in srgb, var(--cc) 42%, transparent) 0%, color-mix(in srgb, var(--cc) 12%, transparent) 45%, transparent 68%);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--cc) 55%, transparent), 0 0 50px color-mix(in srgb, var(--cc) 30%, transparent); }
+.ct-color::after { bottom: 2px; padding: 3px 14px; border: 2px solid rgba(255, 255, 255, .85); font-size: .72rem; }
+/* Pioche : épaisseur visible */
+.ct-deck { filter: drop-shadow(0 14px 18px rgba(0, 0, 0, .45)); }
+.ct-deck::before { content: ''; position: absolute; inset: 0; transform: translate(5px, 6px); border-radius: calc(var(--pile) * .12);
+  background: repeating-linear-gradient(180deg, #f3e3b5 0 2px, #c9a14a 2px 3px); box-shadow: 0 0 0 1px rgba(0, 0, 0, .25); }
+.ct-deck-count { margin-top: 4px; padding: 2px 10px; border-radius: 99px; background: rgba(0, 0, 0, .35); color: #e6fff8; }
+/* Défausse en vrac */
+.ct-discard { filter: drop-shadow(0 12px 16px rgba(0, 0, 0, .4)); }
+.ct-discard .ccard { box-shadow: 0 2px 6px rgba(0, 0, 0, .35); transition: transform .3s; }
+.ct-discard .ccard:not(.top) { filter: brightness(.88); }
+.ct-discard.hit .ccard { animation: none; }
+.ct-discard.hit .ccard.top { animation: ctHit2 .35s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes ctHit2 { from { scale: 1.2; } }
+.ct-pending { right: calc(var(--pile) * -1.35); top: calc(var(--pile) * -.35); border-radius: 50%; width: calc(var(--pile) * .7); height: calc(var(--pile) * .7); min-width: 0; padding: 0; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, #ff8a93, #d62839 60%, #8f1022); border: 4px dashed #fff; font-size: calc(var(--pile) * .24); box-shadow: 0 0 0 4px #d62839, 0 10px 24px rgba(0, 0, 0, .5); }
+
+/* Sièges : plaque nominative sur le rail, éventail tourné vers le centre */
+.ct-seat { gap: 2px; }
+.ct-seat.s-t { flex-direction: column; }
+.ct-seat.s-l { flex-direction: row; }
+.ct-seat.s-r { flex-direction: row-reverse; }
+.ct-fan { width: 110px; height: 60px; }
+.ct-fan .ccard { --w: 36px; left: calc(50% - 18px); bottom: auto; top: 0; transform-origin: 50% -60%; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .4)); }
+.ct-seat.s-l .ct-fan, .ct-seat.s-r .ct-fan { width: 60px; height: 110px; }
+.ct-seat.s-l .ct-fan { transform: rotate(-90deg); }
+.ct-seat.s-r .ct-fan { transform: rotate(90deg); }
+.ct-seat.s-l .ct-fan .ccard, .ct-seat.s-r .ct-fan .ccard { top: 30px; }
+.ct-badge { flex-direction: column; min-width: 0; max-width: 150px; padding: 26px 12px 8px; gap: 4px; text-align: center; border-radius: 16px;
+  border: 2px solid color-mix(in srgb, var(--c) 55%, rgba(255, 255, 255, .25));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 32%, #1b2044), #12162f); margin-top: 26px; }
+.ct-badge .ct-avatar { position: absolute; top: -26px; left: 50%; translate: -50% 0; width: 48px; height: 48px; font-size: 1.55rem; box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--c), 0 6px 14px rgba(0, 0, 0, .5); }
+.ct-badge .ct-binfo { align-items: center; }
+.ct-badge .ct-name { justify-content: center; font-size: .86rem; max-width: 126px; }
+.ct-badge .ct-chips { justify-content: center; }
+.ct-badge.turn { transform: scale(1.08); }
+.ct-badge.turn .ct-avatar { animation: ctAvatarTurn 1.2s ease-in-out infinite; }
+@keyframes ctAvatarTurn { 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 7px var(--c), 0 0 26px var(--c); } }
+.ct-turn { top: auto; bottom: -10px; left: 50%; translate: -50% 0; white-space: nowrap; }
+.ct-timer { bottom: auto; top: 22px; left: 14px; right: 14px; height: 3px; }
+.ct-carton-tag { top: -6px; right: -12px; rotate: 10deg; }
+/* Ma fiche : en ligne, sous ma main */
+.ct-mebar .ct-badge.me { flex-direction: row; gap: 14px; max-width: none; min-width: 230px; padding: 7px 18px 7px 10px; margin-top: 0; text-align: left; }
+.ct-mebar .ct-badge.me .ct-avatar { position: relative; top: auto; left: auto; translate: none; width: 40px; height: 40px; font-size: 1.3rem; }
+.ct-mebar .ct-badge.me .ct-binfo { align-items: flex-start; }
+.ct-mebar .ct-badge.me .ct-name { justify-content: flex-start; max-width: none; }
+.ct-mebar .ct-badge.me .ct-turn { bottom: auto; top: -11px; }
+.ct-mebar .ct-badge.me .ct-timer { top: auto; bottom: 4px; }
+/* « Prendre » : à côté du joueur, pas sur les cartes */
+.ct-seat .ct-catch { position: absolute; top: 50%; left: calc(100% + 8px); translate: 0 -50%; white-space: nowrap; z-index: 6; }
+.ct-seat.s-r .ct-catch { left: auto; right: calc(100% + 8px); }
+/* Plateau sous ma main */
+.ct-me::before { content: ''; position: absolute; left: 50%; bottom: 0; translate: -50% 0; width: min(1100px, 96vw); height: 72%; border-radius: 50% 50% 0 0 / 60% 60% 0 0;
+  background: radial-gradient(ellipse at 50% 100%, rgba(63, 167, 255, .16), transparent 70%); pointer-events: none; z-index: -1; }
+.ct-hand .ccard { box-shadow: 0 8px 18px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(0, 0, 0, .08); }
+@media (max-width: 700px) {
+  .ct-felt { margin: 66px 8px 0; border-width: 12px; border-radius: 26% / 18%; }
+  .ct-felt::after { inset: -12px; padding: 12px; }
+  .ct-seat .ct-badge { padding: 20px 6px 5px; margin-top: 18px; max-width: 29vw; gap: 2px; border-radius: 14px; }
+  .ct-badge .ct-avatar { width: 34px; height: 34px; font-size: 1.05rem; top: -18px; }
+  .ct-timer { top: 16px; }
+  .ct-seat .ct-catch { position: static; translate: none; margin-top: 4px; }
+  .ct-pending { right: calc(var(--pile) * -.85); }
+}
