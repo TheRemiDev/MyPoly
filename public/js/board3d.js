@@ -447,10 +447,172 @@ export class Board3D {
       this.clouds.push(m);
     }
     // Avion qui traverse le ciel
-    this.planeSprite = this.emojiSprite('✈️', 0.7);
-    this.planeSprite.position.set(-9, 2.6, 1);
-    this.planeSprite.userData.t = 0;
-    this.scene.add(this.planeSprite);
+    this.buildAirport();
+  }
+
+  // ------------------------------------------------------------ aéroport
+  /** Petit avion de ligne en 3D (nez orienté vers +Z). */
+  makePlane(livery) {
+    const g = new THREE.Group();
+    const white = new THREE.MeshStandardMaterial({ color: 0xf7f8fc, roughness: 0.35, metalness: 0.15 });
+    const paint = new THREE.MeshStandardMaterial({ color: new THREE.Color(livery), roughness: 0.4, metalness: 0.1 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x1d3557, roughness: 0.15, metalness: 0.6 });
+    // Fuselage
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.5, 6, 14), white);
+    body.rotation.x = Math.PI / 2;
+    // Bande de couleur
+    const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.077, 0.077, 0.4, 14, 1, true), paint);
+    stripe.rotation.x = Math.PI / 2;
+    stripe.scale.set(1, 1, 0.35);
+    stripe.position.y = -0.02;
+    // Cockpit
+    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), glass);
+    cockpit.position.set(0, 0.035, 0.27);
+    cockpit.rotation.x = 0.5;
+    // Ailes en flèche
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, 0.09);
+    wingShape.lineTo(0.42, -0.06);
+    wingShape.lineTo(0.42, -0.12);
+    wingShape.lineTo(0, -0.07);
+    wingShape.closePath();
+    const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.018, bevelEnabled: false });
+    const wingR = new THREE.Mesh(wingGeo, white);
+    wingR.rotation.x = Math.PI / 2;
+    wingR.position.set(0, -0.02, 0.02);
+    const wingL = wingR.clone();
+    wingL.scale.x = -1;
+    // Réacteurs
+    const engGeo = new THREE.CylinderGeometry(0.035, 0.03, 0.12, 12);
+    const engR = new THREE.Mesh(engGeo, paint);
+    engR.rotation.x = Math.PI / 2;
+    engR.position.set(0.17, -0.06, 0.04);
+    const engL = engR.clone();
+    engL.position.x = -0.17;
+    // Empennage
+    const finShape = new THREE.Shape();
+    finShape.moveTo(0, 0);
+    finShape.lineTo(-0.16, 0);
+    finShape.lineTo(-0.2, 0.17);
+    finShape.lineTo(-0.12, 0.17);
+    finShape.closePath();
+    const fin = new THREE.Mesh(new THREE.ExtrudeGeometry(finShape, { depth: 0.015, bevelEnabled: false }), paint);
+    fin.rotation.y = -Math.PI / 2;
+    fin.position.set(0.0075, 0.04, -0.17);
+    const tailShape = new THREE.Shape();
+    tailShape.moveTo(0, 0.03);
+    tailShape.lineTo(0.15, -0.03);
+    tailShape.lineTo(0.15, -0.07);
+    tailShape.lineTo(0, -0.05);
+    tailShape.closePath();
+    const tailGeo = new THREE.ExtrudeGeometry(tailShape, { depth: 0.012, bevelEnabled: false });
+    const tailR = new THREE.Mesh(tailGeo, white);
+    tailR.rotation.x = Math.PI / 2;
+    tailR.position.set(0, 0.03, -0.27);
+    const tailL = tailR.clone();
+    tailL.scale.x = -1;
+    // Feux de navigation (rouge à gauche, vert à droite) qui clignotent
+    const navL = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3344 }));
+    navL.position.set(-0.42, -0.02, -0.08);
+    const navR = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: 0x33ff88 }));
+    navR.position.set(0.42, -0.02, -0.08);
+    const inner = new THREE.Group();
+    inner.add(body, stripe, cockpit, wingR, wingL, engR, engL, fin, tailR, tailL, navL, navR);
+    inner.traverse((o) => o.isMesh && (o.castShadow = true));
+    g.add(inner);
+    g.userData = { inner, navL, navR };
+    return g;
+  }
+
+  /** Avions qui décollent de l'Aéroport, font le tour du monde et y atterrissent. */
+  buildAirport() {
+    const ap = cellBox(24);
+    const y0 = TOP + 0.08;
+    // Point de stationnement (coin extérieur de la case Aéroport) et axe de piste vers l'extérieur
+    const park = new THREE.Vector3(ap.cx + 0.3, y0, ap.cz - 0.3);
+    const dir = new THREE.Vector3(1, 0, -1).normalize();
+    const P = (x, y, z) => new THREE.Vector3(x, y, z);
+    const takeoff = [park.clone(), park.clone().addScaledVector(dir, 0.7), P(5.6, 0.75, -5.6), P(7.2, 1.7, -6.0), P(7.8, 2.4, -1.0), P(5.6, 2.7, 4.6), P(0, 2.9, 7.6), P(-5.6, 2.7, 4.6), P(-7.8, 2.5, -1.0), P(-5.4, 2.4, -7.2), P(0.5, 2.2, -9.2), P(5.5, 1.9, -9.6), P(8.8, 1.5, -8.6), P(7.0, 0.9, -7.0), P(5.6, 0.45, -5.6), park.clone().addScaledVector(dir, 0.7), park.clone()];
+    takeoff.forEach((p) => (p.y = Math.max(p.y, y0)));
+    // Variante : petit tour au-dessus du plateau (passe au-dessus de la mer centrale)
+    const scenic = [park.clone(), park.clone().addScaledVector(dir, 0.7), P(5.6, 0.75, -5.6), P(7.4, 1.8, -4.5), P(6.8, 2.6, 2.0), P(2.0, 3.2, 3.4), P(-2.5, 3.3, 0.5), P(-1.5, 3.2, -4.0), P(2.5, 2.9, -7.6), P(7.6, 2.0, -9.0), P(8.8, 1.4, -8.4), P(7.0, 0.9, -7.0), P(5.6, 0.45, -5.6), park.clone().addScaledVector(dir, 0.7), park.clone()];
+    scenic.forEach((p) => (p.y = Math.max(p.y, y0)));
+    this.flightPaths = [takeoff, scenic].map((pts) => new THREE.CatmullRomCurve3(pts, false, 'centripetal'));
+    // Deux avions qui se relaient : l'un attend au parking pendant que l'autre fait son tour.
+    // Le suivant décolle quand le premier a fait 60 % de son vol, et chacun dure 16 s :
+    // la piste et le parking ne sont jamais occupés par deux avions à la fois.
+    this.flightDur = 16;
+    const liveries = ['#ff5a5f', '#3fa7ff'];
+    this.planes = liveries.map((c, k) => {
+      const obj = this.makePlane(c);
+      obj.position.copy(park);
+      obj.lookAt(park.clone().add(dir));
+      this.scene.add(obj);
+      const p = { obj, phase: 'wait', t: 0, park, dir, curve: null };
+      if (k === 1) this.startFlight(p, 0.3);
+      return p;
+    });
+  }
+
+  startFlight(p, t0 = 0) {
+    p.phase = 'flight';
+    p.t = t0;
+    p.curve = this.flightPaths[Math.floor(Math.random() * this.flightPaths.length)];
+  }
+
+  /** Quand un joueur prend l'avion, l'avion au parking décolle tout de suite si la piste le permet. */
+  launchPlane() {
+    if (!this.planes) return;
+    const parked = this.planes.find((x) => x.phase === 'wait');
+    const other = this.planes.find((x) => x !== parked);
+    if (parked && other && other.phase === 'flight' && other.t >= 0.25) this.startFlight(parked);
+  }
+
+  updatePlanes(dt, time) {
+    if (!this.planes) return;
+    for (const p of this.planes) {
+      const o = p.obj;
+      const other = this.planes.find((x) => x !== p);
+      const nav = (time * 2 + this.planes.indexOf(p)) % 1 < 0.15;
+      o.userData.navL.visible = o.userData.navR.visible = nav || p.phase !== 'flight';
+      if (p.phase === 'wait') {
+        if (other.phase === 'flight' && other.t >= 0.6) this.startFlight(p);
+        continue;
+      }
+      if (p.phase === 'flight') {
+        p.t += dt / this.flightDur;
+        const t = Math.min(1, p.t);
+        // Accélération sur la piste au décollage, freinage à l'atterrissage
+        const u = t < 0.08 ? 0.08 * Math.pow(t / 0.08, 2) : t > 0.92 ? 1 - 0.08 * Math.pow((1 - t) / 0.08, 2) : t;
+        const pos = p.curve.getPointAt(u);
+        const ahead = p.curve.getPointAt(Math.min(1, u + 0.004));
+        const ahead2 = p.curve.getPointAt(Math.min(1, u + 0.03));
+        o.position.copy(pos);
+        if (ahead.distanceToSquared(pos) > 1e-8) o.lookAt(ahead);
+        // Inclinaison dans les virages
+        const d1 = ahead.clone().sub(pos).setY(0).normalize();
+        const d2 = ahead2.clone().sub(ahead).setY(0).normalize();
+        const turn = d1.x * d2.z - d1.z * d2.x;
+        const inner = o.userData.inner;
+        inner.rotation.z += (Math.max(-0.6, Math.min(0.6, -turn * 18)) - inner.rotation.z) * Math.min(1, dt * 4);
+        if (t >= 1) {
+          p.phase = 'turn';
+          p.t = 0;
+          inner.rotation.z = 0;
+        }
+        continue;
+      }
+      if (p.phase === 'turn') {
+        // Demi-tour au parking pour être prêt au prochain décollage
+        p.t += dt / 1.4;
+        const t = Math.min(1, p.t);
+        const back = p.dir.clone().negate();
+        const a0 = Math.atan2(back.x, back.z);
+        o.position.copy(p.park);
+        o.rotation.set(0, a0 + Math.PI * ease.inOut(t), 0);
+        if (t >= 1) p.phase = 'wait';
+      }
+    }
   }
 
   emojiSprite(e, scale, ring = null) {
@@ -1903,11 +2065,7 @@ export class Board3D {
       c.position.x += c.userData.speed * dt;
       if (c.position.x > 6) c.position.x = -6;
     }
-    const pl = this.planeSprite;
-    pl.userData.t += dt;
-    const cycle = pl.userData.t % 24;
-    pl.visible = cycle < 9;
-    if (pl.visible) pl.position.set(-8 + (cycle / 9) * 16, 2.6, 1.5 - (cycle / 9) * 3);
+    this.updatePlanes(dt, time);
     // Tremblement
     let shakeOff = null;
     if (this.shakeT > 0) {

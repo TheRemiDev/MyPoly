@@ -902,6 +902,7 @@ class RoomView {
       }
       case 'fly':
         Sound.play('fly');
+        if (this.b3) this.b3.launchPlane();
         return;
       case 'quake': {
         const c = this.meta.cells[ev.cell];
