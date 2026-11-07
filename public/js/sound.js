@@ -114,6 +114,10 @@ const SFX = {
   crumble: () => {
     for (let i = 0; i < 5; i++) noise(i * 0.06, 0.08, 0.25, 400 + Math.random() * 800);
   },
+  alarm: () => [0, 1, 2].forEach((k) => {
+    tone(880, k * 0.32, 0.16, { type: 'square', gain: 0.07 });
+    tone(620, k * 0.32 + 0.16, 0.16, { type: 'square', gain: 0.07 });
+  }),
   chat: () => tone(1200, 0, 0.08, { gain: 0.08 }),
   tick: () => tone(1000, 0, 0.04, { type: 'square', gain: 0.05 }),
   quake: () => {

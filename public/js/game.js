@@ -5,6 +5,7 @@ import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
 import { Board3D, webglAvailable } from './board3d.js';
 import { melenchonURL } from './melenchon.js';
+import { drawLogo } from './logo.js';
 import { MusicPlayer } from './music.js';
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
@@ -166,6 +167,7 @@ class RoomView {
       cornerNames: theme.corners,
       cornerIcons: theme.cornerIcons,
       quips: theme.quips,
+      tagline: theme.tagline,
       cells: m.cells.map((c) => ({ ...c, ...(theme.cells[c.index] || {}) })),
       countries: m.countries.map((c) => ({ ...c, ...(theme.countries[c.id] || {}) })),
     };
@@ -551,7 +553,7 @@ class RoomView {
       h('div.compass', { html: COMPASS_SVG }),
       h('div.cloud.c1'), h('div.cloud.c2'), h('div.cloud.c3'),
       h('div.plane', h('span', '✈️')),
-      h('div.center-logo', 'My', h('span', 'Poly')),
+      this.logo2d(),
       h('div.dice', this.diceEls)
     );
     this.board.append(this.center);
@@ -774,6 +776,64 @@ class RoomView {
     pop.classList.add('out');
     setTimeout(() => pop.remove(), 450);
     await sleep(250);
+  }
+
+  /** Logo du centre en 2D : même dessin que la vue 3D, avec reflet animé. */
+  logo2d() {
+    const tag = this.meta.tagline || '';
+    if (!this.logoCache || this.logoCache.tag !== tag) {
+      const l = drawLogo({ tagline: tag || undefined, scale: 0.6 });
+      this.logoCache = { tag, src: l.canvas.toDataURL(), mask: l.mask.toDataURL() };
+    }
+    const { src, mask } = this.logoCache;
+    return h('div.center-logo', h('img', { src, alt: 'MyPoly' }), h('div.logo-shine', { style: { webkitMaskImage: `url(${mask})`, maskImage: `url(${mask})` } }));
+  }
+
+  /** Alerte pour tous : un joueur est à un pas d'une victoire par monopole. */
+  async threatShow(ev, p) {
+    const triple = ev.kind === 'triple';
+    const names = [...new Set((ev.missing || []).map((i) => this.meta.cells[i] && this.meta.cells[i].name).filter(Boolean))];
+    const owned = triple ? ev.countries.map((id) => this.meta.countries.find((c) => c.id === id)).filter(Boolean) : [];
+    const title = triple ? 'PRESQUE UN TRIPLE MONOPOLE !' : 'PRESQUE LE MONOPOLE BALNÉAIRE !';
+    const detail = triple
+      ? `${owned.map((c) => c.flag + ' ' + c.name).join('  +  ')} : encore un pays et c'est gagné !`
+      : `${ev.cells.length} stations sur ${ev.cells.length + ev.missing.length} : plus que ${names.join(', ')} et c'est gagné !`;
+    const isMe = p.id === this.me;
+    this.announce({ icon: '🚨', title: `${p.name} : ${triple ? 'presque un triple monopole' : 'presque le monopole balnéaire'} !`, text: detail, color: p.color, kind: 'danger', ms: 4500 });
+    // Cases concernées : celles du joueur clignotent, celles qui manquent sont marquées
+    if (this.b3 && !document.hidden) this.b3.alertCells(ev.cells, ev.missing || [], p.color);
+    else if (this.cellEls) {
+      ev.cells.forEach((i, k) => setTimeout(() => this.pulseCell(i, p, 'threat'), k * 90));
+      (ev.missing || []).forEach((i) => {
+        const el = this.cellEls[i];
+        if (!el) return;
+        el.classList.add('threat-miss');
+        setTimeout(() => el.classList.remove('threat-miss'), 4400);
+      });
+    }
+    if (document.hidden) return sleep(300);
+    const pop = h('div.threat-pop' + (isMe ? '.mine' : ''), { style: { '--c': p.color } },
+      h('div.threat-vignette'),
+      h('div.threat-card',
+        h('div.threat-tape', h('span', '⚠ ALERTE ⚠ ALERTE ⚠ ALERTE ⚠ ALERTE ⚠ ALERTE ⚠ ALERTE ⚠ ALERTE ⚠')),
+        h('div.threat-body',
+          h('div.threat-siren', '🚨'),
+          h('div.threat-who', h('span.threat-pawn', p.pawn), h('span', p.name)),
+          h('div.threat-title', title),
+          h('div.threat-detail', detail),
+          names.length && triple ? h('div.threat-missing', '🎯 À bloquer : ', names.slice(0, 6).join(' · ')) : null,
+          h('div.threat-hint', isMe ? 'Tout le monde vous a à l\'œil… 😏' : triple ? 'Rachetez ou bloquez ses pays avant qu\'il ne soit trop tard !' : 'Achetez ou rachetez la dernière station avant lui !')
+        ),
+        h('div.threat-tape.bottom', h('span', '⚠ DANGER ⚠ DANGER ⚠ DANGER ⚠ DANGER ⚠ DANGER ⚠ DANGER ⚠ DANGER ⚠'))
+      )
+    );
+    this.gameEl.append(pop);
+    Sound.play('alarm');
+    setTimeout(() => Sound.play('alarm'), 1100);
+    await sleep(4200);
+    pop.classList.add('out');
+    setTimeout(() => pop.remove(), 450);
+    await sleep(300);
   }
 
   /** Recadre brièvement la caméra 3D sur une case. */
@@ -1220,6 +1280,9 @@ class RoomView {
         }
         return;
       }
+      case 'threat':
+        await this.threatShow(ev, p);
+        return;
       case 'monopolyLost': {
         const ct = this.meta.countries.find((c) => c.id === ev.country);
         this.announce({ icon: '💔', title: `${p.name} perd son monopole`, text: `${ct.flag} ${ct.name} n'est plus complet`, color: p.color, kind: 'danger' });

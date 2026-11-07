@@ -94,6 +94,7 @@ const POLITIQUE = {
     crash: { icon: '📉', title: 'Programme appliqué', text: 'Leur programme économique est enfin appliqué. Résultat garanti : chacun perd 10 % de son argent liquide.' },
   },
   // Piques ajoutées aux notifications (une au hasard selon l'évènement)
+  tagline: 'LA RÉPUBLIQUE EST À VENDRE',
   quips: {
     buy: ['Propriété privée ? Pas pour longtemps.', 'Un capitaliste de plus. La ZAD est furieuse.', 'Achat signalé à la commission « Partage des richesses ».', 'Achat légal, mais moralement suspect.'],
     build: ['Permis accordé après seulement 4 ans de recours.', 'Le collectif riverain a déjà lancé une pétition.', 'Bétonisation ! Un militant s\'enchaîne au chantier.', 'Normes RE2045 respectées… pour l\'instant.'],
@@ -104,6 +105,7 @@ const POLITIQUE = {
     tax: ['Merci pour votre contribution « volontaire ».', 'Prélevé à la source, à la racine et aux branches.', 'L\'État vous remercie. Il en redemande déjà.'],
     festival: ['Merguez, sono et Internationale en boucle !', 'Rassemblement déclaré… à la préfecture d\'à côté.', 'Entrée gratuite, sortie payante.'],
     monopoly: ['Concentration capitaliste détectée !', 'Le monopole, c\'est bien quand c\'est l\'État.', 'Le Syndicat appelle déjà à la grève.'],
+    threat: ['Le Comité de vigilance anticapitaliste passe en alerte rouge.', 'Une motion de censure est déjà en préparation.', 'Les syndicats appellent à la grève générale préventive.', 'Le Conseil constitutionnel est saisi en urgence.'],
     sell: ['Vendu ! Le collectif squatte déjà.', 'Bradé au prix du marché « solidaire ».'],
     fly: ['Bilan carbone : catastrophique. Exil : magnifique.', 'Il part avant la prochaine taxe.'],
     quake: ['La CGT confirme : « mouvement reconductible ».', 'Tout est bloqué, même les ascenseurs.'],
