@@ -19,6 +19,19 @@ const CARDS = [
   { id: 'nearest_resort', icon: '🏖️', title: 'Vacances', text: 'Avancez jusqu\'à la prochaine station balnéaire.' },
   { id: 'go_top', icon: '🗼', title: 'Week-end de luxe', text: 'Avancez jusqu\'à Paris.' },
   { id: 'lottery', icon: '🎰', title: 'Loterie', text: 'Vous gagnez entre 10K et 300K (tirage aléatoire).' },
+  // --- Nouvelles cartes ---
+  { id: 'free_house', icon: '🏗️', title: 'Permis express', text: 'Une maison gratuite sur une de vos villes, tirée au hasard.' },
+  { id: 'tornado', icon: '🌪️', title: 'Tornade', text: 'Deux villes d\'un adversaire au hasard perdent une maison. Les hôtels résistent.' },
+  { id: 'coin_flip', icon: '🪙', title: 'Pile ou face', text: 'Pile : vous gagnez 200K. Face : vous payez 100K.' },
+  { id: 'robin', icon: '🏹', title: 'Robin des bois', text: 'Le joueur le plus riche donne 150K au plus pauvre.' },
+  { id: 'teleport', icon: '🌀', title: 'Téléporteur', text: 'Vous êtes téléporté vers une case au hasard (hors coins).' },
+  { id: 'forward5', icon: '⏩', title: 'Raccourci', text: 'Avancez de 5 cases.' },
+  { id: 'dividends', icon: '🏦', title: 'Dividendes', text: 'Recevez 25K par propriété que vous possédez.' },
+  { id: 'replay', icon: '🎲', title: 'Coup de pouce', text: 'Relancez les dés immédiatement !' },
+  { id: 'voucher', icon: '💌', title: 'Bon d\'achat', text: 'Votre prochain achat de terrain (avec maisons) est à moitié prix.' },
+  { id: 'black_cat', icon: '🐈‍⬛', title: 'Chat noir', text: 'Pas de chance : votre prochain loyer est doublé.' },
+  { id: 'patron', icon: '🎊', title: 'Mécène', text: 'Organisez gratuitement un Festival sur une de vos propriétés.' },
+  { id: 'crash', icon: '📉', title: 'Krach boursier', text: 'Chaque joueur perd 10 % de son argent liquide (vous compris).' },
 ];
 
 module.exports = { CARDS };
