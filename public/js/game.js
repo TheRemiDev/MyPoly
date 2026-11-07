@@ -485,7 +485,7 @@ class RoomView {
 
   get view3d() {
     if (!webglAvailable()) return false;
-    return storage('view3d') !== '0';
+    return storage('board3d') !== '0';
   }
   enable3d() {
     try {
@@ -508,7 +508,7 @@ class RoomView {
   }
   toggleView() {
     const to3d = !this.b3;
-    storage('view3d', to3d ? '1' : '0');
+    storage('board3d', to3d ? '1' : '0');
     if (to3d) this.enable3d();
     else this.disable3d();
     if (this.state) {
