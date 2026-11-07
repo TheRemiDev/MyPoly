@@ -37,7 +37,7 @@ function identify(socket) {
     return {
       key: 'u:' + user.id,
       userId: user.id,
-      name: user.username,
+      name: U.displayOf(user),
       role: user.role,
       vip: U.isVip(user),
       pawn: user.pawn,

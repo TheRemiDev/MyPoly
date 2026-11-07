@@ -149,14 +149,19 @@ class Game {
     return this.invested(i) * this.settings.takeoverMult;
   }
   /** Niveaux constructibles sur une ville possédée au moment d'une visite. */
+  /** Niveau maximum autorisé pendant le tour en cours (règle du 1er tour). */
+  levelCap() {
+    return this.settings.firstRoundLimit && this.round <= 1 ? 2 : 4;
+  }
   buildRange(i) {
     const c = CELLS[i];
     const s = this.props[i];
     if (c.type !== 'city') return null;
     if (s.level >= 4) return null;
     const min = s.level + 1;
-    const max = s.level === 3 ? 4 : 3;
-    return { min, max };
+    const max = Math.min(s.level === 3 ? 4 : 3, this.levelCap());
+    if (min > max) return null;
+    return { min, max, capped: max < (s.level === 3 ? 4 : 3) };
   }
 
   // ------------------------------------------------------------ win checks
@@ -428,8 +433,9 @@ class Game {
         this.say(`${p.name} n'a pas les moyens d'acheter ${c.name}.`, p.id);
         return this.endAction();
       }
-      const max = c.type === 'city' && this.settings.buildOnPurchase ? 3 : 0;
-      return this.setPhase('buy', { cell: i, max });
+      const full = c.type === 'city' && this.settings.buildOnPurchase ? 3 : 0;
+      const max = Math.min(full, this.levelCap());
+      return this.setPhase('buy', { cell: i, max, capped: max < full });
     }
     if (s.owner === p.id) {
       const range = this.buildRange(i);

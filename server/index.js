@@ -62,8 +62,8 @@ app.get('/api/meta', (_req, res) => {
   });
 });
 
-app.get('/api/profile/:username', (req, res) => {
-  const p = U.profile(String(req.params.username));
+app.get('/api/profile/:key', (req, res) => {
+  const p = U.profile(String(req.params.key));
   if (!p) return res.status(404).json({ error: 'Joueur introuvable.' });
   res.json(p);
 });

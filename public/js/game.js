@@ -21,6 +21,7 @@ const SETTINGS_UI = [
     { key: 'takeover', label: 'Rachat des propriétés', type: 'toggle', hint: 'Racheter la ville d\'un adversaire après lui avoir payé le loyer' },
     { key: 'takeoverMult', label: 'Prix du rachat', type: 'select', options: [[1, '×1 la valeur'], [2, '×2 la valeur'], [3, '×3 la valeur']] },
     { key: 'buildOnPurchase', label: 'Construire dès l\'achat', type: 'toggle', hint: 'Poser jusqu\'à 3 maisons en achetant le terrain' },
+    { key: 'firstRoundLimit', label: '1er tour : 2 maisons max', type: 'toggle', hint: 'Au premier tour, impossible de dépasser 2 maisons par ville' },
     { key: 'countryDoubleRent', label: 'Pays complet = loyer ×2', type: 'toggle' },
     { key: 'festival', label: 'Festival actif', type: 'toggle', hint: 'La case Festival multiplie le loyer d\'une propriété' },
     { key: 'doubleReplay', label: 'Rejouer sur un double', type: 'toggle' },
@@ -319,7 +320,7 @@ class RoomView {
       els.look.append(
         h('h3', 'Mon pion'),
         h('div.pick-grid.sm', pawns.map((p) => h('button.pick' + (p === mySeat.pawn ? '.on' : '') + (this.meta.vipPawns.includes(p) ? '.vip' : ''), { onclick: () => this.cmd('room:look', { pawn: p }) }, p))),
-        h('div.pick-grid.sm', colors.map((c) => h('button.pick.color' + (c === mySeat.color ? '.on' : '') + (used.has(c) ? '.taken' : ''), { style: { '--c': c }, disabled: used.has(c), onclick: () => this.cmd('room:look', { color: c }) })))
+        h('div.pick-grid.sm', colors.map((c) => h('button.pick.color' + (c === mySeat.color ? '.on' : '') + (used.has(c) ? '.taken' : '') + (this.meta.vipColors.includes(c) ? '.vip' : ''), { style: { '--c': c }, title: used.has(c) ? 'Couleur déjà prise par un autre joueur' : 'Choisir cette couleur', disabled: used.has(c), onclick: () => this.cmd('room:look', { color: c }) })))
       );
     }
 
@@ -603,7 +604,7 @@ class RoomView {
       body: h('div.rules-summary',
         h('div', `💰 Départ : ${fmt(s.startMoney)} · Salaire : ${fmt(s.salary)}`),
         h('div', `⏱️ ${s.turnTime ? s.turnTime + ' s par décision' : 'Temps illimité'}${s.gameDuration ? ` · partie de ${s.gameDuration} min` : ''}${s.maxRounds ? ` · ${s.maxRounds} tours max` : ''}`),
-        h('div', `${yes(s.takeover)} Rachat (×${s.takeoverMult}) · ${yes(s.buildOnPurchase)} Construction à l'achat`),
+        h('div', `${yes(s.takeover)} Rachat (×${s.takeoverMult}) · ${yes(s.buildOnPurchase)} Construction à l'achat · ${yes(s.firstRoundLimit)} 1er tour : 2 maisons max`),
         h('div', `${yes(s.festival)} Festival · ${yes(s.countryDoubleRent)} Pays complet ×2 · ${yes(s.doubleReplay)} Rejouer sur double`),
         h('div', `🏆 ${yes(s.tripleMonopoly)} Triple monopole · ${yes(s.lineMonopoly)} Ligne · ${yes(s.resortMonopoly)} Balnéaire`),
         h('div', `🏝️ Amende ${fmt(s.jailFine)} · ✈️ Billet ${fmt(s.travelFee)} · 💸 Impôts ${s.taxPercent} %`),
@@ -1342,6 +1343,7 @@ class RoomView {
             h('button.btn.' + (o.level === 0 ? 'primary' : 'secondary'), { disabled: !o.affordable, onclick: act('buy', { level: o.level }) },
               h('span', c.type === 'resort' ? 'Acheter' : o.level === 0 ? 'Acheter le terrain' : `Terrain + ${LEVEL_LABEL[o.level].toLowerCase()}`), h('b', fmt(o.cost)))
           )),
+          pend.capped ? h('div.cap-hint', '🔒 Premier tour : 2 maisons maximum') : null,
           h('button.btn.skip', { onclick: act('skip') }, '✖ Ne pas acheter')
         );
         break;
@@ -1352,6 +1354,7 @@ class RoomView {
           h('div.btn-col', (pend.options || []).map((o) =>
             h('button.btn.secondary', { disabled: !o.affordable, onclick: act('build', { level: o.level }) }, h('span', o.level === 4 ? '🏨 Construire un hôtel' : `🏠 Monter à ${LEVEL_LABEL[o.level].toLowerCase()}`), h('b', fmt(o.cost)))
           )),
+          pend.capped ? h('div.cap-hint', '🔒 Premier tour : 2 maisons maximum') : null,
           h('button.btn.skip', { onclick: act('skip') }, '✖ Ne rien construire')
         );
         break;

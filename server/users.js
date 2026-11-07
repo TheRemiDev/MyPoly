@@ -14,6 +14,33 @@ function isVip(u) {
 function isStaff(u) {
   return !!u && (u.role === 'staff' || u.role === 'admin');
 }
+/** Nom visible par les autres joueurs : pseudo d'affichage, sinon pseudo de connexion. */
+function displayOf(u) {
+  return (u && (u.display_name || u.username)) || '';
+}
+
+const RESERVED = ['admin', 'administrateur', 'administrator', 'staff', 'modo', 'moderateur', 'modérateur', 'moderator', 'mypoly', 'support', 'systeme', 'système', 'system', 'officiel', 'official'];
+const DISPLAY_RE = /^[\p{L}\p{N}](?:[\p{L}\p{N} _.'-]*[\p{L}\p{N}])?$/u;
+
+/**
+ * Valide un pseudo d'affichage. Retourne { value } (null = revenir au pseudo de connexion)
+ * ou { error }. Empêche l'usurpation : pas de nom déjà utilisé par un autre compte
+ * (pseudo de connexion ou d'affichage), ni de nom réservé au staff.
+ */
+function validateDisplayName(raw, user) {
+  const value = String(raw ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  if (!value) return { value: null };
+  if (value.length < 2 || value.length > 20) return { error: 'Le pseudo d\'affichage doit contenir entre 2 et 20 caractères.' };
+  if (!DISPLAY_RE.test(value)) return { error: 'Pseudo d\'affichage invalide : lettres, chiffres, espaces et _ - . \' uniquement (pas d\'émoji).' };
+  const flat = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_.'-]/g, '');
+  if (!isStaff(user) && RESERVED.some((r) => flat.includes(r.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) return { error: 'Ce pseudo d\'affichage est réservé.' };
+  const words = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/(^|[\s_.'-])(bot|invite)($|[\s_.'-])/.test(words)) return { error: 'Ce pseudo d\'affichage prête à confusion avec un invité ou un bot.' };
+  const taken = db.prepare('SELECT 1 FROM users WHERE id != ? AND (username = ? COLLATE NOCASE OR display_name = ? COLLATE NOCASE)').get(user ? user.id : 0, value, value);
+  if (taken) return { error: 'Ce pseudo est déjà utilisé par un autre joueur.' };
+  return { value: value === user?.username ? null : value };
+}
+
 function levelFromXp(xp) {
   return Math.floor(Math.sqrt((xp || 0) / 100)) + 1;
 }
@@ -21,6 +48,7 @@ function levelFromXp(xp) {
 const q = {
   byId: db.prepare('SELECT * FROM users WHERE id = ?'),
   byName: db.prepare('SELECT * FROM users WHERE username = ?'),
+  byIdPublic: db.prepare('SELECT * FROM users WHERE id = ?'),
   stats: db.prepare('SELECT * FROM stats WHERE user_id = ?'),
   badges: db.prepare('SELECT badge, earned_at FROM user_badges WHERE user_id = ? ORDER BY earned_at'),
   history: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
@@ -36,7 +64,7 @@ function publicUser(u) {
   if (!u) return null;
   return {
     id: u.id,
-    username: u.username,
+    name: displayOf(u),
     role: u.role,
     vip: isVip(u),
     vipUntil: u.vip_until,
@@ -50,8 +78,9 @@ function publicUser(u) {
   };
 }
 
-function profile(username) {
-  const u = q.byName.get(username);
+/** Profil public, par identifiant numérique (ou par pseudo de connexion pour les anciens liens). */
+function profile(key) {
+  const u = /^\d+$/.test(String(key)) ? q.byIdPublic.get(Number(key)) : q.byName.get(String(key));
   if (!u || u.banned) return null;
   const stats = q.stats.get(u.id) || {};
   const badges = q.badges.all(u.id);
@@ -147,7 +176,7 @@ function leaderboard(sort = 'rating', limit = 50) {
   const col = cols[sort] || cols.rating;
   return db
     .prepare(
-      `SELECT u.id, u.username, u.role, u.vip_until, u.pawn, u.color, u.xp, s.games, s.wins, s.rating, s.best_networth, s.best_streak,
+      `SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, s.games, s.wins, s.rating, s.best_networth, s.best_streak,
        CASE WHEN s.games > 0 THEN ROUND(100.0 * s.wins / s.games, 1) ELSE 0 END AS winrate
        FROM stats s JOIN users u ON u.id = s.user_id
        WHERE u.banned = 0 AND s.games > 0 ${sort === 'winrate' ? 'AND s.games >= 5' : ''}
@@ -157,4 +186,4 @@ function leaderboard(sort = 'rating', limit = 50) {
     .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
 }
 
-module.exports = { PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, leaderboard, BADGES };
+module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, leaderboard, BADGES };

@@ -2,6 +2,7 @@
    MyPoly — feuille de style
    ========================================================================== */
 :root {
+  color-scheme: dark;
   --bg: #0f1225;
   --bg2: #161a33;
   --panel: rgba(255, 255, 255, 0.06);
@@ -105,7 +106,14 @@ body.in-game #topbar { display: none; }
 }
 .input:focus { border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(63, 167, 255, .2); }
 .input.sm { padding: 6px 10px; border-radius: 9px; font-size: .9rem; width: auto; }
-select.input { cursor: pointer; }
+select.input {
+  cursor: pointer; -webkit-appearance: none; appearance: none;
+  padding-right: 32px; line-height: 1.2;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23c9cdf2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; background-size: 12px 8px;
+}
+select.input.sm { padding-right: 28px; background-position: right 9px center; min-width: 96px; }
+select.input:disabled { opacity: .75; cursor: default; }
 select.input option { background: var(--panel-solid); }
 textarea.input { resize: vertical; }
 .field { margin: 12px 0; display: flex; flex-direction: column; gap: 6px; }
@@ -266,8 +274,12 @@ textarea.input { resize: vertical; }
 .pick.vip { border-color: rgba(255, 209, 102, .6); }
 .pick.vip::after { content: '👑'; position: absolute; top: -8px; right: -8px; font-size: .7rem; }
 .pick.locked { filter: grayscale(.8); opacity: .5; }
-.pick.taken { opacity: .2; cursor: not-allowed; }
+.pick.taken { opacity: .45; cursor: not-allowed; filter: saturate(.6); }
+.pick.color.taken::before { content: ''; position: absolute; inset: 4px; background: linear-gradient(45deg, transparent 45%, rgba(255, 255, 255, .95) 45%, rgba(255, 255, 255, .95) 55%, transparent 55%); border-radius: 4px; }
+.pick.color { position: relative; }
 .vip-promo { border-color: rgba(255, 209, 102, .5); background: linear-gradient(135deg, rgba(255, 209, 102, .12), var(--panel)); }
+
+.block-hint { display: block; margin-top: 6px; line-height: 1.4; }
 
 /* -------------------------------------------------------------- admin */
 .table-wrap { overflow-x: auto; margin-top: 10px; }
@@ -301,7 +313,14 @@ textarea.input { resize: vertical; }
 .seat-name { flex: 1; font-weight: 800; min-width: 0; }
 .kick { color: #ff8a93; }
 @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } }
-.settings-form { display: flex; flex-direction: column; gap: 14px; max-height: 62dvh; overflow: auto; padding-right: 4px; }
+.settings-form { display: flex; flex-direction: column; gap: 14px; max-height: 62dvh; overflow-y: auto; overflow-x: hidden; padding-right: 14px; margin-right: -6px; }
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .22); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .35); }
+::-webkit-scrollbar-corner { background: transparent; }
+.set-row > :last-child { flex: none; }
 .presets { display: flex; gap: 6px; flex-wrap: wrap; }
 .set-group-title { font-weight: 900; color: var(--gold); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
@@ -631,6 +650,8 @@ body.in-game:has(.lobby) { overflow: auto; }
 .feed-card.danger { --k: #ff3b4f; animation: feedIn .5s cubic-bezier(.2, 1.4, .4, 1) both, feedDanger .9s ease .45s 2; }
 @keyframes feedDanger { 25%, 75% { translate: -0.8cqw 0; } 50% { translate: 0.8cqw 0; } }
 .feed-card.danger .feed-title { color: #ffd5d9; }
+
+.cap-hint { font-size: 1.3cqw; font-weight: 800; color: #ffe08a; background: rgba(20, 14, 0, .55); border: 0.15cqw solid rgba(255, 209, 102, .6); padding: 0.4cqw 1.2cqw; border-radius: 99px; }
 
 /* Boutons « passer » : bien visibles sur le plateau */
 .action-panel .btn.skip {

@@ -13,6 +13,7 @@ const routes = [
   [/^\/login$/, () => authPage('login')],
   [/^\/register$/, () => authPage('register')],
   [/^\/leaderboard$/, leaderboardPage],
+  [/^\/joueur\/(\d+)$/, (m) => profilePage(m[1])],
   [/^\/profile\/([^/]+)$/, (m) => profilePage(decodeURIComponent(m[1]))],
   [/^\/settings$/, settingsPage],
   [/^\/admin$/, adminPage],
@@ -66,9 +67,9 @@ function updateNav() {
   for (const a of document.querySelectorAll('#topbar .nav-links a')) a.classList.toggle('active', a.getAttribute('href') === location.pathname);
   if (u) {
     nav.append(
-      h('a.nav-profile', { href: '/profile/' + encodeURIComponent(u.username), 'data-link': true },
+      h('a.nav-profile', { href: '/joueur/' + u.id, 'data-link': true },
         h('span.avatar.sm', { style: { '--c': u.color } }, u.pawn),
-        h('span.' + (nameClass({ ...u, role: u.role }) || 'plain'), u.username),
+        h('span.' + (nameClass({ ...u, role: u.role }) || 'plain'), u.name),
         ...roleTags(u, { level: false })
       ),
       h('button.btn.ghost.sm', { onclick: logout, title: 'Déconnexion' }, '🚪')
@@ -174,7 +175,7 @@ async function homePage() {
         h('div.card.play-card',
           h('h2', '🎮 Jouer maintenant'),
           store.user
-            ? h('p.muted', 'Connecté en tant que ', h('b', store.user.username), '. Vos victoires et badges sont enregistrés !')
+            ? h('p.muted', 'Connecté en tant que ', h('b', store.user.name), '. Vos victoires et badges sont enregistrés !')
             : h('div.field', h('label', 'Pseudo invité'), nameInput, h('small.muted', 'Créez un compte pour enregistrer vos statistiques et badges.')),
           h('div.btn-row',
             h('button.btn.primary.lg', { onclick: () => create(0) }, '✨ Créer une salle privée'),
@@ -210,7 +211,7 @@ function authPage(mode) {
   const err = h('div.form-error');
   const fields = isLogin
     ? [['login', 'Pseudo ou e-mail', 'text', 'username'], ['password', 'Mot de passe', 'password', 'current-password']]
-    : [['username', 'Pseudo', 'text', 'username'], ['email', 'E-mail', 'email', 'email'], ['password', 'Mot de passe (8 caractères min.)', 'password', 'new-password']];
+    : [['username', 'Pseudo de connexion (privé)', 'text', 'username'], ['email', 'E-mail', 'email', 'email'], ['password', 'Mot de passe (8 caractères min.)', 'password', 'new-password']];
   const form = h('form.card.auth-card',
     { onsubmit: async (e) => {
       e.preventDefault();
@@ -222,7 +223,7 @@ function authPage(mode) {
         const res = await api('/auth/' + mode, { body });
         store.user = res.user;
         connectSocket();
-        toast(isLogin ? `Bon retour, ${res.user.username} !` : `Bienvenue sur MyPoly, ${res.user.username} ! 🎉`, 'success');
+        toast(isLogin ? `Bon retour, ${res.user.name} !` : `Bienvenue sur MyPoly, ${res.user.name} ! 🎉`, 'success');
         Sound.play('buy');
         const back = sessionStorage.getItem('mp_after_login');
         sessionStorage.removeItem('mp_after_login');
@@ -237,6 +238,13 @@ function authPage(mode) {
     h('h1', isLogin ? 'Connexion' : 'Créer un compte'),
     h('p.muted', isLogin ? 'Retrouvez vos statistiques, badges et votre classement.' : 'Gratuit. Statistiques, badges, classement et profil personnalisé.'),
     ...fields.map(([name, label, type, ac]) => h('div.field', h('label', label), h('input.input', { name, type, autocomplete: ac, required: true }))),
+    isLogin
+      ? null
+      : h('div.field',
+          h('label', 'Pseudo d\'affichage ', h('span.muted', '(facultatif)')),
+          h('input.input', { name: 'displayName', type: 'text', maxlength: 20, autocomplete: 'nickname', placeholder: 'Le nom que les autres joueurs verront' }),
+          h('small.muted', 'Modifiable à tout moment. Votre pseudo de connexion reste privé.')
+        ),
     err,
     h('button.btn.primary.lg.block', { type: 'submit' }, isLogin ? 'Se connecter' : 'Créer mon compte'),
     h('p.center.muted', isLogin ? 'Pas encore de compte ? ' : 'Déjà inscrit ? ', h('a', { href: isLogin ? '/register' : '/login', 'data-link': true }, isLogin ? 'Inscription' : 'Connexion'))
@@ -261,10 +269,10 @@ async function leaderboardPage() {
     players.forEach((p, i) => {
       const val = { rating: p.rating + ' pts', wins: p.wins + ' victoires', winrate: p.winrate + ' %', games: p.games + ' parties', best: fmt(p.best_networth), xp: p.xp + ' XP' }[sort];
       table.append(
-        h('a.lb-row' + (i < 3 ? '.top' + (i + 1) : ''), { href: '/profile/' + encodeURIComponent(p.username), 'data-link': true },
+        h('a.lb-row' + (i < 3 ? '.top' + (i + 1) : ''), { href: '/joueur/' + p.id, 'data-link': true },
           h('div.lb-rank', i < 3 ? ['🥇', '🥈', '🥉'][i] : '#' + (i + 1)),
           h('span.avatar', { style: { '--c': p.color } }, p.pawn),
-          h('div.lb-name', h('span.' + (nameClass(p) || 'plain'), p.username), ...roleTags(p)),
+          h('div.lb-name', h('span.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p)),
           h('div.lb-sub.muted', `${p.wins}V / ${p.games}P`),
           h('div.lb-val', val)
         )
@@ -276,12 +284,12 @@ async function leaderboardPage() {
 }
 
 // ------------------------------------------------------------------ profil
-async function profilePage(username) {
+async function profilePage(key) {
   const box = h('div.page.profile', h('div.muted', 'Chargement…'));
   app.append(box);
   let data;
   try {
-    data = await api('/profile/' + encodeURIComponent(username));
+    data = await api('/profile/' + encodeURIComponent(key));
   } catch (e) {
     box.innerHTML = '';
     box.append(h('div.empty', '😕 ' + e.message));
@@ -299,7 +307,7 @@ async function profilePage(username) {
     h('div.card.profile-head' + (u.vip ? '.vip' : ''),
       h('div.avatar.xl', { style: { '--c': u.color } }, u.pawn),
       h('div.profile-info',
-        h('h1', h('span.' + (nameClass(u) || 'plain'), u.username), ...roleTags(u, { level: false })),
+        h('h1', h('span.' + (nameClass(u) || 'plain'), u.name), ...roleTags(u, { level: false })),
         u.bio ? h('p.bio', u.bio) : null,
         h('div.xp', h('div.xp-label', `Niveau ${u.level}`, h('span.muted', ` · ${u.xp} XP`)), h('div.xp-bar', h('div', { style: { width: pct + '%' } }))),
         h('div.muted.small', `Membre depuis ${new Date(u.createdAt).toLocaleDateString('fr-FR')}`, u.vip && u.vipUntil ? ` · VIP jusqu'au ${new Date(u.vipUntil).toLocaleDateString('fr-FR')}` : u.vip ? ' · VIP à vie' : '')
@@ -370,11 +378,14 @@ function settingsPage() {
   }
   draw();
   const bio = h('textarea.input', { maxlength: 200, rows: 3, placeholder: 'Quelques mots sur vous…' }, u.bio || '');
+  const displayInput = h('input.input', { maxlength: 20, value: u.displayName || '', placeholder: u.username, autocomplete: 'nickname' });
+  const namePreview = h('b', u.name);
+  displayInput.addEventListener('input', () => (namePreview.textContent = displayInput.value.trim() || u.username));
   const cur = h('input.input', { type: 'password', autocomplete: 'current-password', placeholder: 'Mot de passe actuel' });
   const next = h('input.input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nouveau mot de passe' });
   async function save() {
     try {
-      const body = { pawn, color, bio: bio.value };
+      const body = { pawn, color, bio: bio.value, displayName: displayInput.value };
       if (next.value) Object.assign(body, { currentPassword: cur.value, newPassword: next.value });
       const res = await api('/auth/me', { method: 'PATCH', body });
       store.user = res.user;
@@ -389,7 +400,10 @@ function settingsPage() {
   app.append(
     h('div.page.narrow',
       h('h1.page-title', '⚙️ Personnalisation'),
-      h('div.card', h('div.settings-preview', preview, h('div', h('b', u.username), h('div', ...roleTags(u, { level: false })))),
+      h('div.card', h('div.settings-preview', preview, h('div', namePreview, h('div.small.muted', 'Connexion : @' + u.username), h('div', ...roleTags(u, { level: false })))),
+        h('h3', 'Pseudo d\'affichage'),
+        displayInput,
+        h('small.muted.block-hint', `C'est le nom que voient les autres joueurs (en partie, dans le chat, au classement). Laissez vide pour utiliser votre pseudo de connexion « ${u.username} », qui reste privé et sert uniquement à vous connecter.`),
         h('h3', 'Pion'), pawnGrid, h('h3', 'Couleur'), colorGrid, h('h3', 'Bio'), bio),
       h('div.card', h('h3', 'Changer de mot de passe'), cur, next),
       !vip ? h('div.card.vip-promo', h('h3', '👑 Devenez VIP'), h('p', 'Pions et couleurs exclusifs, pseudo doré, badge VIP visible en partie. Contactez le staff pour en savoir plus.')) : null,
@@ -415,7 +429,7 @@ function rulesPage() {
         <h3>🎲 Le tour de jeu</h3>
         <p>Lancez les deux dés (tirage 100 % aléatoire effectué par le serveur). Un double vous fait rejouer, mais 3 doubles d'affilée vous envoient sur l'Île déserte.</p>
         <h3>🏙️ Villes & constructions</h3>
-        <p>Sur une ville libre, achetez le terrain et construisez jusqu'à 3 maisons immédiatement. Revenez sur votre ville pour l'améliorer : l'hôtel (niveau 4) ne peut être construit que sur une ville ayant déjà 3 maisons. Posséder un pays entier double les loyers.</p>
+        <p>Sur une ville libre, achetez le terrain et construisez jusqu'à 3 maisons immédiatement. Au premier tour, vous ne pouvez pas dépasser 2 maisons par ville (règle désactivable). Revenez sur votre ville pour l'améliorer : l'hôtel (niveau 4) ne peut être construit que sur une ville ayant déjà 3 maisons. Posséder un pays entier double les loyers.</p>
         <h3>🤝 Rachat</h3>
         <p>Après avoir payé le loyer chez un adversaire, vous pouvez lui racheter sa ville (prix = ${s.takeoverMult} × sa valeur). Les hôtels ne peuvent pas être rachetés.</p>
         <h3>🏖️ Stations balnéaires</h3>
@@ -442,7 +456,7 @@ async function adminPage() {
   const usersBox = h('div.admin-users');
   const roomsBox = h('div.admin-rooms');
   const auditBox = h('div.admin-audit');
-  const search = h('input.input', { placeholder: 'Rechercher un joueur (pseudo, e-mail)…' });
+  const search = h('input.input', { placeholder: 'Rechercher un joueur (pseudo de connexion ou d\'affichage, e-mail)…' });
   const annText = h('input.input', { placeholder: 'Message à diffuser à tous les joueurs connectés…', maxlength: 300 });
 
   async function loadOverview() {
@@ -468,7 +482,7 @@ async function adminPage() {
       const roleSel = h('select.input.sm', { disabled: !isAdmin, onchange: (e) => patch(u.id, { role: e.target.value }, 'Rôle modifié') }, ['user', 'staff', 'admin'].map((r) => h('option', { value: r, selected: u.role === r }, r)));
       body.append(
         h('tr' + (u.banned ? '.banned' : ''),
-          h('td', h('a', { href: '/profile/' + encodeURIComponent(u.username), 'data-link': true }, u.username), u.banned ? h('span.tag.tag-ban', 'BANNI') : null),
+          h('td', h('a', { href: '/joueur/' + u.id, 'data-link': true }, u.display_name || u.username), u.display_name ? h('div.small.muted', '@' + u.username) : null, u.banned ? h('span.tag.tag-ban', 'BANNI') : null),
           h('td.muted', u.email),
           h('td', roleSel),
           h('td', u.vip ? (u.vip_until === 0 ? '♾️ À vie' : new Date(u.vip_until).toLocaleDateString('fr-FR')) : '—'),
@@ -484,6 +498,7 @@ async function adminPage() {
                   const reason = prompt('Raison du bannissement ?');
                   if (reason !== null) patch(u.id, { banned: true, reason }, 'Joueur banni');
                 } }, 'Bannir'),
+            u.display_name ? h('button.btn.sm.ghost', { title: 'Remettre le pseudo de connexion comme nom affiché', onclick: () => confirm(`Réinitialiser le pseudo d'affichage « ${u.display_name} » ?`) && patch(u.id, { resetDisplayName: true }, 'Pseudo d\'affichage réinitialisé') }, 'Réinit. pseudo') : null,
             isAdmin ? h('button.btn.sm.ghost', { onclick: () => confirm(`Réinitialiser les stats de ${u.username} ?`) && patch(u.id, { resetStats: true }, 'Stats réinitialisées') }, 'Reset stats') : null
           )
         )
