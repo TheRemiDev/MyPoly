@@ -18,6 +18,7 @@ export const CARD_SETTINGS_UI = [
     { key: 'stacking', label: 'Cumul des +2 / +4', type: 'toggle', hint: 'Répondre à un +2 par un +2 (ou un +4) : le suivant pioche tout' },
     { key: 'drawToPlay', label: 'Piocher jusqu\'à pouvoir jouer', type: 'toggle', hint: 'Sinon, on pioche une seule carte' },
     { key: 'sevenZero', label: 'Règle du 7 et du 0', type: 'toggle', hint: '7 : échange ta main avec un joueur · 0 : toutes les mains tournent' },
+    { key: 'noSpecialFinish', label: 'Finir sur un chiffre', type: 'toggle', hint: 'Interdit de poser sa dernière carte si c\'est une carte spéciale (Stop, Demi-tour, +2, Jokers) : il faut piocher' },
     { key: 'cartonPenalty', label: 'Pénalité « Carton ! » oublié', type: 'select', options: [[2, '+2 cartes'], [4, '+4 cartes']] },
   ] },
   { group: 'Salle', items: [
@@ -27,10 +28,10 @@ export const CARD_SETTINGS_UI = [
 ];
 
 export const CARD_PRESETS = {
-  '⚖️ Classique': { startCards: 7, turnTime: 20, targetScore: 0, stacking: true, drawToPlay: false, sevenZero: false, cartonPenalty: 2 },
-  '⚡ Éclair': { startCards: 5, turnTime: 10, targetScore: 0, stacking: true, drawToPlay: false, sevenZero: false, cartonPenalty: 2 },
-  '🌪️ Chaos': { startCards: 7, turnTime: 20, targetScore: 0, stacking: true, drawToPlay: true, sevenZero: true, cartonPenalty: 4 },
-  '🏆 Tournoi': { startCards: 7, turnTime: 30, targetScore: 200, stacking: true, drawToPlay: false, sevenZero: false, cartonPenalty: 2 },
+  '⚖️ Classique': { startCards: 7, turnTime: 20, targetScore: 0, stacking: true, drawToPlay: false, sevenZero: false, cartonPenalty: 2, noSpecialFinish: true },
+  '⚡ Éclair': { startCards: 5, turnTime: 10, targetScore: 0, stacking: true, drawToPlay: false, sevenZero: false, cartonPenalty: 2, noSpecialFinish: true },
+  '🌪️ Chaos': { startCards: 7, turnTime: 20, targetScore: 0, stacking: true, drawToPlay: true, sevenZero: true, cartonPenalty: 4, noSpecialFinish: false },
+  '🏆 Tournoi': { startCards: 7, turnTime: 30, targetScore: 200, stacking: true, drawToPlay: false, sevenZero: false, cartonPenalty: 2, noSpecialFinish: true },
 };
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
@@ -201,7 +202,8 @@ export class CardTable {
         ),
         h('p', '📣 Quand il ne te reste qu\'une carte, crie ', h('b', '« CARTON ! »'), ` (bouton ou touche C). Si tu oublies et qu'un adversaire te prend, tu pioches ${s.cartonPenalty} cartes !`),
         h('div', `🃏 ${s.startCards} cartes au départ · ⏱️ ${s.turnTime ? s.turnTime + ' s par coup' : 'temps illimité'} · ${s.targetScore ? `🏆 premier à ${s.targetScore} points` : '🏁 une seule manche'}`),
-        h('div', `${yes(s.stacking)} Cumul des +2/+4 · ${yes(s.drawToPlay)} Pioche jusqu'à pouvoir jouer · ${yes(s.sevenZero)} Règle du 7 et du 0`),
+        h('div', `${yes(s.stacking)} Cumul des +2/+4 · ${yes(s.drawToPlay)} Pioche jusqu'à pouvoir jouer · ${yes(s.sevenZero)} Règle du 7 et du 0 · ${yes(s.noSpecialFinish)} Finir sur un chiffre`),
+        s.noSpecialFinish ? h('div.muted', '🚫 Ta dernière carte doit être un chiffre : impossible de finir sur Stop, Demi-tour, +2 ou un Joker (il faut piocher).') : null,
         s.targetScore ? h('div.muted', 'Points : le gagnant de la manche marque la valeur des cartes restées en main chez les autres (chiffres = valeur, Stop/Demi-tour/+2 = 20, Jokers = 50).') : null,
         h('div.muted', 'Raccourcis : D piocher · P passer · C crier « Carton ! »')
       ),
@@ -461,7 +463,9 @@ export class CardTable {
         el.append(h('div.ct-hint.warn', st.playable.length ? `💥 +${st.pendingDraw} pour vous ! Contrez avec un ${st.pendingType === '+4' ? '+4' : '+2 ou +4'}… ou piochez` : `💥 Vous devez piocher ${st.pendingDraw} cartes`),
           h('button.btn.danger.ct-btn', { onclick: () => this.draw() }, `Piocher ${st.pendingDraw} cartes`));
       } else if (!st.playable.length) {
-        el.append(h('div.ct-hint', 'Aucune carte jouable…'), h('button.btn.primary.ct-btn.pulse', { onclick: () => this.draw() }, '🂠 Piocher (D)'));
+        const last = st.hand.length === 1 ? st.hand[0] : null;
+        const blocked = last && st.settings.noSpecialFinish && !/^\d$/.test(last.v);
+        el.append(h('div.ct-hint' + (blocked ? '.warn' : ''), blocked ? '🚫 Interdit de finir sur une carte spéciale : piochez !' : 'Aucune carte jouable…'), h('button.btn.primary.ct-btn.pulse', { onclick: () => this.draw() }, '🂠 Piocher (D)'));
       } else {
         el.append(h('div.ct-hint', 'À vous ! Posez une carte'), h('button.btn.ghost.ct-btn', { onclick: () => this.draw() }, '🂠 Piocher'));
       }

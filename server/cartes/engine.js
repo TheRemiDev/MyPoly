@@ -118,7 +118,16 @@ class CardGame {
     }
     return i;
   }
-  playable(card) {
+  /** Carte spéciale : tout sauf les chiffres. */
+  isSpecial(card) {
+    return !/^\d$/.test(card.v);
+  }
+  /** Règle « pas de fin sur une carte spéciale » : la dernière carte en main doit être un chiffre. */
+  blockedFinish(card, p) {
+    return !!(this.settings.noSpecialFinish && p && p.hand.length === 1 && p.hand[0].id === card.id && this.isSpecial(card));
+  }
+  playable(card, p = null) {
+    if (this.blockedFinish(card, p)) return false;
     if (this.pendingDraw > 0) {
       // Cumul : +2 sur +2, +4 sur +2 ou +4
       if (card.v === '+4') return true;
@@ -257,6 +266,7 @@ class CardGame {
     if (idx === -1) return { error: 'Carte introuvable.' };
     const card = p.hand[idx];
     if (this.phase === 'drawn' && card.id !== this.drawnCard) return { error: 'Vous ne pouvez jouer que la carte piochée.' };
+    if (this.blockedFinish(card, p)) return { error: 'Interdit de finir sur une carte spéciale : piochez !' };
     if (!this.playable(card)) return { error: 'Cette carte ne peut pas être posée.' };
     if (card.c === 'w' && !COLORS.includes(color)) return { error: 'Choisissez une couleur.' };
     let swapWith = null;
@@ -371,11 +381,11 @@ class CardGame {
       const one = this.drawCards(p, 1);
       if (!one.length) break;
       got.push(one[0]);
-      if (!this.settings.drawToPlay || this.playable(one[0]) || got.length >= 30) break;
+      if (!this.settings.drawToPlay || this.playable(one[0], p) || got.length >= 30) break;
     }
     this.emit({ t: 'draw', pid: p.id, n: got.length, cards: got }, 450 + got.length * 140);
     const last = got[got.length - 1];
-    if (last && this.playable(last)) {
+    if (last && this.playable(last, p)) {
       this.phase = 'drawn';
       this.drawnCard = last.id;
       if (got.length > 1) this.say(`${p.name} pioche ${got.length} cartes.`, p.id);
@@ -514,10 +524,10 @@ class CardGame {
   botDecide(p) {
     if (this.phase === 'drawn') {
       const card = p.hand.find((c) => c.id === this.drawnCard);
-      if (card && this.playable(card) && R.int(1, 10) <= 9) return this.botPlay(p, card);
+      if (card && this.playable(card, p) && R.int(1, 10) <= 9) return this.botPlay(p, card);
       return { type: 'pass' };
     }
-    const options = p.hand.filter((c) => this.playable(c));
+    const options = p.hand.filter((c) => this.playable(c, p));
     if (!options.length) return { type: 'draw' };
     const next = this.players[this.nextIndex()];
     const threat = next.hand.length <= 2;
@@ -529,6 +539,7 @@ class CardGame {
       if ((c.v === '+4' || c.v === '+2') && threat) s += 6;
       if (/^\d$/.test(c.v)) s += Number(c.v) / 3; // se débarrasser des grosses cartes
       if (c.c === this.color) s += 1;
+      if (this.settings.noSpecialFinish && p.hand.length === 2 && this.isSpecial(c)) s += 15; // ne pas garder une spéciale pour la fin
       if (this.settings.sevenZero && c.v === '7') {
         const best = this.active.filter((q) => q !== p).sort((a, b) => a.hand.length - b.hand.length)[0];
         s += best && best.hand.length < p.hand.length - 1 ? 7 : -8;
@@ -664,7 +675,7 @@ class CardGame {
       drawnCard: me && me === this.cur ? this.drawnCard : null,
       hand: me && !me.out ? me.hand : null,
       playable: me && me === this.cur && !this.over && this.phase !== 'roundEnd'
-        ? me.hand.filter((c) => (this.phase === 'drawn' ? c.id === this.drawnCard : true) && this.playable(c)).map((c) => c.id)
+        ? me.hand.filter((c) => (this.phase === 'drawn' ? c.id === this.drawnCard : true) && this.playable(c, me)).map((c) => c.id)
         : [],
       players: this.players.map((p) => ({
         id: p.id,
@@ -693,7 +704,7 @@ class CardGame {
       serverNow: Date.now(),
       over: this.over,
       winner: this.winner,
-      settings: { targetScore: this.settings.targetScore, stacking: this.settings.stacking, sevenZero: this.settings.sevenZero },
+      settings: { targetScore: this.settings.targetScore, stacking: this.settings.stacking, sevenZero: this.settings.sevenZero, noSpecialFinish: this.settings.noSpecialFinish },
     };
   }
 

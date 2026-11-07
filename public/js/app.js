@@ -640,7 +640,8 @@ function rulesPage() {
               .map(([c, t, d]) => h('div.ct-rule', cardEl({ id: 0, ...c }, '.tiny'), h('div', h('b', t), h('small', d))))
           ),
           h('p', '📣 Avec ta dernière carte en main, crie ', h('b', '« CARTON ! »'), ' (bouton ou touche C). Si tu oublies, n\'importe quel adversaire peut te prendre : tu pioches 2 cartes.'),
-          h('p.muted', 'Réglables : cartes au départ, chrono, cumul des +2/+4, pioche jusqu\'à pouvoir jouer, règle du 7 (échange de main) et du 0 (les mains tournent), partie en une manche ou en points.')
+          h('p', '🚫 Ta dernière carte doit être un ', h('b', 'chiffre'), ' : impossible de finir sur un Stop, un Demi-tour, un +2 ou un Joker. Si c\'est tout ce qu\'il te reste, tu dois piocher.'),
+          h('p.muted', 'Réglables : cartes au départ, chrono, cumul des +2/+4, fin sur un chiffre obligatoire, pioche jusqu\'à pouvoir jouer, règle du 7 (échange de main) et du 0 (les mains tournent), partie en une manche ou en points.')
         ),
         h('div.rule-tip', '💡 Garde tes Jokers pour la fin : ils se posent sur n\'importe quoi.')
       ),
