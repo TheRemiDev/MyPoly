@@ -49,6 +49,7 @@ app.get('/api/meta', (_req, res) => {
   res.set('Cache-Control', 'public, max-age=300');
   res.json({
     cells: board.CELLS,
+    themes: require('./game/themes').THEMES,
     countries: board.COUNTRIES,
     sides: board.SIDES,
     resortRent: board.RESORT_RENT,

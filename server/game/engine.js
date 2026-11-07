@@ -1,6 +1,7 @@
 'use strict';
 const { CELLS, OWNABLE, RESORTS, COUNTRY_CELLS, SIDES, RESORT_RENT, CORNERS, COUNTRIES } = require('./board');
 const { CARDS } = require('./cards');
+const { THEMES } = require('./themes');
 const R = require('./random');
 const Bot = require('./bot');
 
@@ -132,17 +133,35 @@ class Game {
   ownsCountry(pid, country) {
     return COUNTRY_CELLS[country].every((i) => this.props[i].owner === pid);
   }
+  /** Thème de plateau actif (habillage), ou null. */
+  get theme() {
+    return this.settings.politicalBoard ? THEMES.politique : null;
+  }
+  cellName(i) {
+    const t = this.theme && this.theme.cells[i];
+    return (t && t.name) || CELLS[i].name;
+  }
+  countryInfo(id) {
+    const ct = COUNTRIES.find((c) => c.id === id);
+    const t = this.theme && this.theme.countries[id];
+    return t ? { ...ct, ...t } : ct;
+  }
+  themedCard(card) {
+    const t = this.theme && this.theme.cards[card.id];
+    return t ? { ...card, ...t } : card;
+  }
+
   /** Pays d'une ville et indication de monopole (null si ce n'est pas une ville). */
   countryOf(i) {
     return CELLS[i].type === 'city' ? CELLS[i].country : null;
   }
   announceMonopoly(p, country) {
-    const ct = COUNTRIES.find((c) => c.id === country);
+    const ct = this.countryInfo(country);
     this.emit({ t: 'monopoly', pid: p.id, country, cells: COUNTRY_CELLS[country] }, 3000);
     this.say(`👑 MONOPOLE ! ${p.name} possède tout le pays ${ct.flag} ${ct.name}${this.settings.countryDoubleRent ? ' : loyers ×2' : ''} !`, p.id);
   }
   announceMonopolyLost(p, country) {
-    const ct = COUNTRIES.find((c) => c.id === country);
+    const ct = this.countryInfo(country);
     this.emit({ t: 'monopolyLost', pid: p.id, country, cells: COUNTRY_CELLS[country] }, 600);
     this.say(`💔 ${p.name} perd son monopole ${ct.flag} ${ct.name}.`, p.id);
   }
@@ -401,7 +420,7 @@ class Game {
     this.emit({ t: 'sell', pid: p.id, cell: i, level, value: v }, 1300);
     this.money(p, v, 'sell');
     if (hadMono) this.announceMonopolyLost(p, country);
-    this.say(`${p.name} vend ${CELLS[i].name} pour ${fmt(v)}.`, p.id);
+    this.say(`${p.name} vend ${this.cellName(i)} pour ${fmt(v)}.`, p.id);
   }
   bankrupt(p, creditor) {
     if (p.bankrupt) return;
@@ -470,7 +489,7 @@ class Game {
     const s = this.props[i];
     if (!s.owner) {
       if (p.cash < (p.voucher ? Math.round(c.price / 2) : c.price)) {
-        this.say(`${p.name} n'a pas les moyens d'acheter ${c.name}.`, p.id);
+        this.say(`${p.name} n'a pas les moyens d'acheter ${this.cellName(i)}.`, p.id);
         return this.endAction();
       }
       const full = c.type === 'city' && this.settings.buildOnPurchase ? 3 : 0;
@@ -500,7 +519,7 @@ class Game {
       rent *= 2;
       this.say(`🐈‍⬛ Le chat noir porte malheur : loyer doublé !`, p.id);
     }
-    this.say(`${p.name} paie ${fmt(rent)} de loyer à ${owner.name} (${c.name}).`, p.id);
+    this.say(`${p.name} paie ${fmt(rent)} de loyer à ${owner.name} (${this.cellName(i)}).`, p.id);
     this.emit({ t: 'rent', pid: p.id, to: owner.id, cell: i, amount: rent }, ANIM.small);
     this.charge(p, rent, owner, 'rent', () => this.afterRent(p, i));
   }
@@ -518,7 +537,7 @@ class Game {
   drawCard(p) {
     if (!this.deck.length) this.deck = R.shuffle(CARDS.map((c) => c.id));
     const id = this.deck.pop();
-    const card = CARDS.find((c) => c.id === id);
+    const card = this.themedCard(CARDS.find((c) => c.id === id));
     p.stats.cards++;
     this.emit({ t: 'card', pid: p.id, card }, ANIM.card);
     this.say(`${p.name} tire « ${card.title} » : ${card.text}`, p.id);
@@ -594,7 +613,7 @@ class Game {
           .sort((a, b) => this.props[b].level - this.props[a].level || CELLS[b].price - CELLS[a].price)[0];
         this.props[best].level--;
         this.emit({ t: 'quake', pid: victim.id, by: p.id, cell: best, level: this.props[best].level }, 1600);
-        this.say(`🌋 ${CELLS[best].name} (${victim.name}) perd un niveau !`, victim.id);
+        this.say(`🌋 ${this.cellName(best)} (${victim.name}) perd un niveau !`, victim.id);
         return this.endAction();
       }
       case 'nearest_resort': {
@@ -618,7 +637,7 @@ class Game {
         this.props[i].level++;
         p.stats.built++;
         this.emit({ t: 'build', pid: p.id, cell: i, level: this.props[i].level }, 900);
-        this.say(`🏗️ Une maison gratuite pour ${p.name} à ${CELLS[i].name} !`, p.id);
+        this.say(`🏗️ Une maison gratuite pour ${p.name} à ${this.cellName(i)} !`, p.id);
         return this.endAction();
       }
       case 'tornado': {
@@ -633,7 +652,7 @@ class Game {
         for (const i of cells) {
           this.props[i].level--;
           this.emit({ t: 'quake', pid: victim.id, by: p.id, cell: i, level: this.props[i].level, tornado: true }, 1400);
-          this.say(`🌪️ ${CELLS[i].name} (${victim.name}) perd une maison !`, victim.id);
+          this.say(`🌪️ ${this.cellName(i)} (${victim.name}) perd une maison !`, victim.id);
         }
         return this.endAction();
       }
@@ -664,7 +683,7 @@ class Game {
         for (let i = 0; i < N; i++) if (i % 8 !== 0 && i !== p.pos) choices.push(i);
         const to = R.pick(choices);
         this.moveTo(p, to, false);
-        this.say(`🌀 ${p.name} est téléporté à ${CELLS[to].name} !`, p.id);
+        this.say(`🌀 ${p.name} est téléporté à ${this.cellName(to)} !`, p.id);
         return this.land(p);
       }
       case 'forward5':
@@ -759,7 +778,7 @@ class Game {
           if (p.cash < this.settings.travelFee) return { error: 'Fonds insuffisants.' };
           p.travel = false;
           if (this.settings.travelFee) this.money(p, -this.settings.travelFee, 'travel');
-          this.say(`✈️ ${p.name} s'envole pour ${CELLS[to].name}.`, p.id);
+          this.say(`✈️ ${p.name} s'envole pour ${this.cellName(to)}.`, p.id);
           this.emit({ t: 'fly', pid: p.id, to }, 6500); // embarquement, vol et parachute côté client
           this.moveTo(p, to);
           return this.land(p);
@@ -783,7 +802,7 @@ class Game {
         p.stats.bought++;
         if (level) p.stats.built += level;
         this.emit({ t: 'buy', pid: p.id, cell: i, level }, 500);
-        this.say(`${p.name} achète ${c.name}${level ? ` avec ${level} maison${level > 1 ? 's' : ''}` : ''} (${fmt(cost)}).`, p.id);
+        this.say(`${p.name} achète ${this.cellName(i)}${level ? ` avec ${level} maison${level > 1 ? 's' : ''}` : ''} (${fmt(cost)}).`, p.id);
         if (c.type === 'city' && this.ownsCountry(p.id, c.country)) this.announceMonopoly(p, c.country);
         return this.endAction();
       }
@@ -800,7 +819,7 @@ class Game {
         p.stats.built += level - s.level;
         s.level = level;
         this.emit({ t: 'build', pid: p.id, cell: i, level }, 500);
-        this.say(`${p.name} construit ${level === 4 ? 'un hôtel' : `jusqu'à ${level} maison${level > 1 ? 's' : ''}`} à ${CELLS[i].name} (${fmt(cost)}).`, p.id);
+        this.say(`${p.name} construit ${level === 4 ? 'un hôtel' : `jusqu'à ${level} maison${level > 1 ? 's' : ''}`} à ${this.cellName(i)} (${fmt(cost)}).`, p.id);
         return this.endAction();
       }
       case 'takeover': {
@@ -819,7 +838,7 @@ class Game {
         this.emit({ t: 'takeover', pid: p.id, from: owner.id, cell: i }, 700);
         if (ownerHadMono) this.announceMonopolyLost(owner, country);
         if (country && this.ownsCountry(p.id, country)) this.announceMonopoly(p, country);
-        this.say(`🤝 ${p.name} rachète ${CELLS[i].name} à ${owner.name} pour ${fmt(price)} !`, p.id);
+        this.say(`🤝 ${p.name} rachète ${this.cellName(i)} à ${owner.name} pour ${fmt(price)} !`, p.id);
         const w = this.monopolyWin(p);
         if (w) return this.finish(p, w);
         const range = this.buildRange(i);
@@ -837,7 +856,7 @@ class Game {
         if (this.festival.cell === i) this.festival.mult = Math.min(5, this.festival.mult + 1);
         else this.festival = { cell: i, mult: 2 };
         this.emit({ t: 'festival', pid: p.id, cell: i, mult: this.festival.mult }, 800);
-        this.say(`🎉 ${p.name} organise le Festival à ${CELLS[i].name} : loyer x${this.festival.mult} !`, p.id);
+        this.say(`🎉 ${p.name} organise le Festival à ${this.cellName(i)} : loyer x${this.festival.mult} !`, p.id);
         return this.endAction();
       }
       case 'debt': {

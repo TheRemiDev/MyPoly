@@ -153,8 +153,20 @@ class RoomView {
     this.unread = 0;
   }
 
+  /** Données du plateau, habillées par le thème choisi (plateau politique…). */
   get meta() {
-    return store.meta;
+    const theme = this.room && this.room.settings && this.room.settings.politicalBoard && store.meta.themes ? store.meta.themes.politique : null;
+    if (!theme) return store.meta;
+    if (this.themedMeta && this.themedMeta.src === store.meta) return this.themedMeta;
+    const m = store.meta;
+    this.themedMeta = {
+      ...m,
+      src: m,
+      cornerNames: theme.corners,
+      cells: m.cells.map((c) => ({ ...c, ...(theme.cells[c.index] || {}) })),
+      countries: m.countries.map((c) => ({ ...c, ...(theme.countries[c.id] || {}) })),
+    };
+    return this.themedMeta;
   }
   get me() {
     return store.key;
@@ -418,8 +430,9 @@ class RoomView {
     if (editable) box.append(h('div.presets', Object.entries(PRESETS).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
     const groups = SETTINGS_UI.slice();
-    if (isAdmin || s.melenchon) {
-      groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' }] });
+    if (isAdmin || s.melenchon || s.politicalBoard) {
+      groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' },
+        { key: 'politicalBoard', label: 'Plateau politique', type: 'toggle', admin: true, hint: 'Plateau satirique : ZAD, Syndicat, Ministère des Taxes, Exil fiscal… et cartes Chance assorties' }] });
     }
     for (const g of groups) {
       const grp = h('div.set-group', h('div.set-group-title', g.group));
@@ -783,6 +796,7 @@ class RoomView {
     if (!this.toolbar) return;
     const me = this.player(this.me);
     this.toolbar.innerHTML = '';
+    if (this.melCounter) this.toolbar.append(this.melCounter);
     this.toolbar.append(
       h('div.tb-code', { title: 'Copier le lien d\'invitation', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') }, '🔗 ', this.code),
       h('div.tb-info', this.state ? `Tour ${this.state.round}` : ''),
@@ -1173,11 +1187,11 @@ class RoomView {
       } else if (c.type === 'resort') {
         el.append(h('div.sea'), h('div.tile-body', h('div.tile-icon', c.emoji), h('div.tile-name', c.name), h('div.tile-price', priceTxt)));
       } else if (c.type === 'chance') {
-        el.append(h('div.tile-body', h('div.chance-mini', h('span', '?')), h('div.tile-name', 'Chance')));
+        el.append(h('div.tile-body', h('div.chance-mini', h('span', '?')), h('div.tile-name', this.meta.cornerNames ? this.meta.cornerNames.chance : 'Chance')));
       } else if (c.type === 'tax') {
         el.append(h('div.tile-body',
           s.melenchon ? h('img.tile-face', { src: melenchonURL(), alt: '' }) : h('div.tile-icon', '💸'),
-          h('div.tile-name', s.melenchon ? 'Mélenchon' : 'Impôts'),
+          h('div.tile-name', s.melenchon ? 'Mélenchon' : this.meta.cornerNames ? this.meta.cornerNames.tax : 'Impôts'),
           h('div.tile-price', s.taxPercent + ' %')
         ));
       } else {
@@ -1190,7 +1204,7 @@ class RoomView {
         };
         el.append(
           h('div.corner-art', h('div.corner-glow'), h('div.corner-icon', icons[c.type])),
-          h('div.corner-ribbon', c.type === 'start' ? '◀ DÉPART' : c.name.toUpperCase()),
+          h('div.corner-ribbon', this.meta.cornerNames ? this.meta.cornerNames[c.type] : c.type === 'start' ? '◀ DÉPART' : c.name.toUpperCase()),
           h('div.corner-sub', sub[c.type])
         );
       }
@@ -1616,28 +1630,33 @@ class RoomView {
   }
 
   // ---------------------------------------------------------------- centre
-  /** Compteur « Mélenchon a volé … » (mode Mélenchon uniquement). */
+  /**
+   * Compteur « Mélenchon a volé … » : intégré à la barre d'outils, il n'apparaît
+   * qu'à partir du premier vol.
+   */
   renderMelCounter(animateTo) {
     const s = this.room && this.room.settings;
-    if (!s || !s.melenchon || !this.gameEl) {
+    const target = animateTo != null ? animateTo : (this.state && this.state.melenchonLoot) || 0;
+    if (!s || !s.melenchon || !this.toolbar || target <= 0) {
       if (this.melCounter) this.melCounter.remove();
       this.melCounter = null;
+      this.melShown = 0;
       return;
     }
-    if (!this.melCounter) {
-      this.melValue = h('b', fmt(0));
+    const isNew = !this.melCounter;
+    if (isNew) {
+      this.melValue = h('b', fmt(target));
       this.melCounter = h('div.mel-counter', { title: 'Total prélevé par Mélenchon pendant cette partie' },
-        h('img', { src: melenchonURL(), alt: '' }), h('div', h('small', 'Mélenchon a volé'), this.melValue));
-      this.gameEl.append(this.melCounter);
+        h('img', { src: melenchonURL(), alt: '' }), h('span', 'a volé'), this.melValue);
       this.melShown = 0;
     }
-    const target = animateTo != null ? animateTo : (this.state && this.state.melenchonLoot) || 0;
+    if (!this.melCounter.isConnected) this.toolbar.prepend(this.melCounter);
     if (target === this.melShown) return;
     const from = this.melShown;
     const t0 = performance.now();
     this.melCounter.classList.remove('bump');
     void this.melCounter.offsetWidth;
-    this.melCounter.classList.add('bump');
+    this.melCounter.classList.add(isNew ? 'appear' : 'bump');
     const step = (now) => {
       const t = Math.min(1, (now - t0) / 900);
       const v = Math.round(from + (target - from) * (1 - Math.pow(1 - t, 3)));
