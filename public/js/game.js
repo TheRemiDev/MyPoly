@@ -969,7 +969,7 @@ class RoomView {
       case 'quake': {
         const c = this.meta.cells[ev.cell];
         Sound.play('quake');
-        this.announce({ icon: '🌋', title: 'SÉISME !', text: `${c.name} (${p.name}) perd un niveau`, color: p.color, kind: 'danger' });
+        this.announce({ icon: ev.tornado ? '🌪️' : '🌋', title: ev.tornado ? 'TORNADE !' : 'SÉISME !', text: `${c.name} (${p.name}) perd une maison`, color: p.color, kind: 'danger' });
         this.focusCell(ev.cell);
         if (this.b3) this.b3.shake(0.9);
         else {
@@ -1470,6 +1470,8 @@ class RoomView {
       if (p.jailed) chips.push(h('span.pc-chip.warn', { title: 'Sur l\'Île déserte' }, `🏝️ ${p.jailTurns}/3`));
       if (p.travel) chips.push(h('span.pc-chip', { title: 'Vol au prochain tour' }, '✈️'));
       if (p.shield) chips.push(h('span.pc-chip.good', { title: 'Bouclier : prochain loyer annulé' }, '🛡️'));
+      if (p.voucher) chips.push(h('span.pc-chip.good', { title: 'Bon d\'achat : prochain achat à moitié prix' }, '💌'));
+      if (p.curse) chips.push(h('span.pc-chip.warn', { title: 'Chat noir : prochain loyer doublé' }, '🐈‍⬛'));
       if (p.coupon) chips.push(h('span.pc-chip.good', { title: 'Coupon : prochain loyer -50 %' }, '🏷️'));
       if (p.jailCards) chips.push(h('span.pc-chip.good', { title: 'Gilet de sauvetage' }, '🛟' + (p.jailCards > 1 ? '×' + p.jailCards : '')));
       if (!p.isBot && !p.connected) chips.push(h('span.pc-chip.off', { title: 'Déconnecté (joué automatiquement)' }, '📡'));
@@ -1619,6 +1621,7 @@ class RoomView {
             h('button.btn.' + (o.level === 0 ? 'primary' : 'secondary'), { disabled: !o.affordable, onclick: act('buy', { level: o.level }) },
               h('span', c.type === 'resort' ? 'Acheter' : o.level === 0 ? 'Acheter le terrain' : `Terrain + ${LEVEL_LABEL[o.level].toLowerCase()}`), h('b', fmt(o.cost)))
           )),
+          pend.voucher ? h('div.cap-hint', '💌 Bon d\'achat : tout est à moitié prix !') : null,
           pend.capped ? h('div.cap-hint', '🔒 Premier tour : 2 maisons maximum') : null,
           h('button.btn.skip', { onclick: act('skip') }, '✖ Ne pas acheter')
         );

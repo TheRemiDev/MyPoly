@@ -42,6 +42,8 @@ class Game {
       travel: false,
       shield: false,
       coupon: false,
+      voucher: false,
+      curse: false,
       connected: true,
       afk: false,
       rank: 0,
@@ -236,6 +238,13 @@ class Game {
       const w = this.monopolyWin(p);
       if (w) return this.finish(p, w);
     }
+    if (!p.bankrupt && this.extraRoll && !p.jailed) {
+      this.extraRoll = false;
+      this.say(`🎲 ${p.name} relance les dés !`, p.id);
+      this.setPhase('roll', { replay: true });
+      return;
+    }
+    this.extraRoll = false;
     if (!p.bankrupt && this.rolledDouble && this.settings.doubleReplay && !p.jailed) {
       this.rolledDouble = false;
       this.say(`${p.name} a fait un double et rejoue !`, p.id);
@@ -451,7 +460,7 @@ class Game {
     const c = CELLS[i];
     const s = this.props[i];
     if (!s.owner) {
-      if (p.cash < c.price) {
+      if (p.cash < (p.voucher ? Math.round(c.price / 2) : c.price)) {
         this.say(`${p.name} n'a pas les moyens d'acheter ${c.name}.`, p.id);
         return this.endAction();
       }
@@ -476,6 +485,11 @@ class Game {
       p.coupon = false;
       rent = Math.round(rent / 2);
       this.say(`🏷️ Coupon utilisé : loyer réduit de moitié.`, p.id);
+    }
+    if (p.curse) {
+      p.curse = false;
+      rent *= 2;
+      this.say(`🐈‍⬛ Le chat noir porte malheur : loyer doublé !`, p.id);
     }
     this.say(`${p.name} paie ${fmt(rent)} de loyer à ${owner.name} (${c.name}).`, p.id);
     this.emit({ t: 'rent', pid: p.id, to: owner.id, cell: i, amount: rent }, ANIM.small);
@@ -584,6 +598,100 @@ class Game {
       case 'go_top':
         this.moveTo(p, 31);
         return this.land(p);
+      case 'free_house': {
+        const cap = Math.min(3, this.levelCap());
+        const mine = this.owned(p).filter((i) => CELLS[i].type === 'city' && this.props[i].level < cap);
+        if (!mine.length) {
+          this.say('Aucune ville où construire : le permis est perdu.', p.id);
+          return this.endAction();
+        }
+        const i = R.pick(mine);
+        this.props[i].level++;
+        p.stats.built++;
+        this.emit({ t: 'build', pid: p.id, cell: i, level: this.props[i].level }, 900);
+        this.say(`🏗️ Une maison gratuite pour ${p.name} à ${CELLS[i].name} !`, p.id);
+        return this.endAction();
+      }
+      case 'tornado': {
+        const hit = (i) => this.props[i].level > 0 && this.props[i].level < 4;
+        const targets = others.filter((o) => this.owned(o).some(hit));
+        if (!targets.length) {
+          this.say('La tornade passe sans rien abîmer (les hôtels résistent).');
+          return this.endAction();
+        }
+        const victim = R.pick(targets);
+        const cells = R.shuffle(this.owned(victim).filter(hit)).slice(0, 2);
+        for (const i of cells) {
+          this.props[i].level--;
+          this.emit({ t: 'quake', pid: victim.id, by: p.id, cell: i, level: this.props[i].level, tornado: true }, 1400);
+          this.say(`🌪️ ${CELLS[i].name} (${victim.name}) perd une maison !`, victim.id);
+        }
+        return this.endAction();
+      }
+      case 'coin_flip': {
+        if (R.int(0, 1) === 0) {
+          this.say(`🪙 Pile ! ${p.name} gagne 200K.`, p.id);
+          this.money(p, 200, 'card');
+          return this.endAction();
+        }
+        this.say(`🪙 Face… ${p.name} paie 100K.`, p.id);
+        return this.charge(p, 100, null, 'card', () => this.endAction());
+      }
+      case 'robin': {
+        const alive = this.alive();
+        if (alive.length < 2) return this.endAction();
+        const byWorth = alive.slice().sort((a, b) => this.netWorth(b) - this.netWorth(a));
+        const rich = byWorth[0];
+        const poor = byWorth[byWorth.length - 1];
+        const amount = Math.min(150, Math.max(0, rich.cash));
+        if (!amount || rich === poor) return this.endAction();
+        this.transfer(rich, poor, amount, 'card');
+        this.say(`🏹 ${rich.name} donne ${fmt(amount)} à ${poor.name} !`, p.id);
+        if (this.over) return;
+        return this.endAction();
+      }
+      case 'teleport': {
+        const choices = [];
+        for (let i = 0; i < N; i++) if (i % 8 !== 0 && i !== p.pos) choices.push(i);
+        const to = R.pick(choices);
+        this.moveTo(p, to, false);
+        this.say(`🌀 ${p.name} est téléporté à ${CELLS[to].name} !`, p.id);
+        return this.land(p);
+      }
+      case 'forward5':
+        this.moveBy(p, 5);
+        return this.land(p);
+      case 'dividends': {
+        const n = this.owned(p).length;
+        if (!n) {
+          this.say('Aucune propriété : pas de dividendes.', p.id);
+          return this.endAction();
+        }
+        this.money(p, 25 * n, 'card');
+        this.say(`🏦 ${p.name} touche ${fmt(25 * n)} de dividendes (${n} propriété${n > 1 ? 's' : ''}).`, p.id);
+        return this.endAction();
+      }
+      case 'replay':
+        this.extraRoll = true;
+        return this.endAction();
+      case 'voucher':
+        p.voucher = true;
+        return this.endAction();
+      case 'black_cat':
+        p.curse = true;
+        return this.endAction();
+      case 'patron':
+        if (this.settings.festival && this.owned(p).length) return this.setPhase('festival');
+        this.say('Aucune propriété : le mécène repart bredouille.', p.id);
+        return this.endAction();
+      case 'crash': {
+        for (const o of this.alive()) {
+          const loss = Math.round(o.cash * 0.1);
+          if (loss > 0) this.money(o, -loss, 'card');
+        }
+        this.say('📉 Krach boursier : chacun perd 10 % de ses liquidités.');
+        return this.endAction();
+      }
     }
     this.endAction();
   }
@@ -654,8 +762,13 @@ class Game {
         const i = pend.cell;
         const c = CELLS[i];
         const level = Math.max(0, Math.min(pend.max, Number(d.level) || 0));
-        const cost = c.price + (level ? this.buildCost(i, 0, level) : 0);
+        let cost = c.price + (level ? this.buildCost(i, 0, level) : 0);
+        if (p.voucher) cost = Math.round(cost / 2);
         if (p.cash < cost) return { error: 'Fonds insuffisants.' };
+        if (p.voucher) {
+          p.voucher = false;
+          this.say(`💌 Bon d'achat utilisé : moitié prix !`, p.id);
+        }
         this.money(p, -cost, 'buy');
         this.props[i] = { owner: p.id, level };
         p.stats.bought++;
@@ -916,9 +1029,11 @@ class Game {
       const lo = this.phase === 'buy' ? 0 : pending.min;
       pending.options = [];
       for (let l = lo; l <= pending.max; l++) {
-        const cost = (from === -1 ? CELLS[i].price : 0) + this.buildCost(i, Math.max(0, from), l);
+        let cost = (from === -1 ? CELLS[i].price : 0) + this.buildCost(i, Math.max(0, from), l);
+        if (from === -1 && p.voucher) cost = Math.round(cost / 2);
         pending.options.push({ level: l, cost, affordable: p.cash >= cost });
       }
+      if (this.phase === 'buy' && p.voucher) pending.voucher = true;
     }
     if (this.phase === 'takeover') pending.owner = this.props[pending.cell].owner;
     if (this.phase === 'jail') pending.fine = this.settings.jailFine;
@@ -954,6 +1069,8 @@ class Game {
         travel: q.travel,
         shield: q.shield,
         coupon: q.coupon,
+        voucher: q.voucher,
+        curse: q.curse,
         connected: q.connected,
         afk: q.afk,
         rank: q.rank,
