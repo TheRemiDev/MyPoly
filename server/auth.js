@@ -60,11 +60,11 @@ function requireStaff(req, res, next) {
 const USERNAME_RE = /^[a-zA-Z0-9_\-.]{3,20}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-async function createUser({ username, email, password, role = 'user' }) {
+async function createUser({ username, email, password, role = 'user', displayName = null }) {
   const hash = await bcrypt.hash(password, 12);
   const info = db
-    .prepare('INSERT INTO users (username, email, password_hash, role, pawn, color, created_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(username, email, hash, role, U.PAWNS[Math.floor(Math.random() * U.PAWNS.length)], U.COLORS[Math.floor(Math.random() * U.COLORS.length)], Date.now(), Date.now());
+    .prepare('INSERT INTO users (username, email, password_hash, role, pawn, color, created_at, last_seen, display_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(username, email, hash, role, U.PAWNS[Math.floor(Math.random() * U.PAWNS.length)], U.COLORS[Math.floor(Math.random() * U.COLORS.length)], Date.now(), Date.now(), displayName);
   db.prepare('INSERT OR IGNORE INTO stats (user_id) VALUES (?)').run(info.lastInsertRowid);
   return U.getUser(info.lastInsertRowid);
 }
@@ -73,13 +73,21 @@ const router = express.Router();
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Trop de tentatives, réessayez plus tard.' } });
 
 router.post('/register', authLimiter, async (req, res) => {
-  const { username, email, password } = req.body || {};
+  const { username, email, password, displayName } = req.body || {};
   if (!USERNAME_RE.test(username || '')) return res.status(400).json({ error: 'Pseudo invalide (3 à 20 caractères : lettres, chiffres, _ - .).' });
   if (!EMAIL_RE.test(email || '') || email.length > 120) return res.status(400).json({ error: 'Adresse e-mail invalide.' });
   if (typeof password !== 'string' || password.length < 8 || password.length > 128) return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
-  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) return res.status(409).json({ error: 'Ce pseudo est déjà pris.' });
+  if (db.prepare('SELECT 1 FROM users WHERE username = ? OR display_name = ? COLLATE NOCASE').get(username, username)) return res.status(409).json({ error: 'Ce pseudo est déjà pris.' });
+  const dn = U.validateDisplayName(displayName, { id: 0, username, role: 'user' });
+  if (dn.error) return res.status(400).json({ error: dn.error });
   if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return res.status(409).json({ error: 'Cette adresse e-mail est déjà utilisée.' });
-  const u = await createUser({ username, email, password });
+  let u;
+  try {
+    u = await createUser({ username, email, password, displayName: dn.value });
+  } catch (e) {
+    if (String(e.message).includes('UNIQUE')) return res.status(409).json({ error: 'Ce pseudo est déjà utilisé.' });
+    throw e;
+  }
   setCookie(res, sign(u));
   res.json({ user: me(u) });
 });
@@ -105,7 +113,7 @@ router.get('/me', (req, res) => {
 
 router.patch('/me', requireAuth, async (req, res) => {
   const u = req.user;
-  const { pawn, color, bio, currentPassword, newPassword } = req.body || {};
+  const { pawn, color, bio, currentPassword, newPassword, displayName } = req.body || {};
   const vip = U.isVip(u) || U.isStaff(u);
   const updates = {};
   if (pawn !== undefined) {
@@ -117,18 +125,31 @@ router.patch('/me', requireAuth, async (req, res) => {
     updates.color = color;
   }
   if (bio !== undefined) updates.bio = String(bio).slice(0, 200);
+  if (displayName !== undefined) {
+    const dn = U.validateDisplayName(displayName, u);
+    if (dn.error) return res.status(400).json({ error: dn.error });
+    if ((dn.value || null) !== (u.display_name || null)) {
+      updates.display_name = dn.value;
+      db.prepare('INSERT INTO audit_log (actor_id, action, target_id, details, created_at) VALUES (?, ?, ?, ?, ?)').run(u.id, 'display_name', u.id, JSON.stringify({ from: U.displayOf(u), to: dn.value || u.username }), Date.now());
+    }
+  }
   if (newPassword) {
     if (!(await bcrypt.compare(String(currentPassword || ''), u.password_hash))) return res.status(400).json({ error: 'Mot de passe actuel incorrect.' });
     if (String(newPassword).length < 8) return res.status(400).json({ error: 'Nouveau mot de passe trop court.' });
     updates.password_hash = await bcrypt.hash(String(newPassword), 12);
   }
   const keys = Object.keys(updates);
-  if (keys.length) db.prepare(`UPDATE users SET ${keys.map((k) => `${k} = @${k}`).join(', ')} WHERE id = @id`).run({ ...updates, id: u.id });
+  try {
+    if (keys.length) db.prepare(`UPDATE users SET ${keys.map((k) => `${k} = @${k}`).join(', ')} WHERE id = @id`).run({ ...updates, id: u.id });
+  } catch (e) {
+    if (String(e.message).includes('UNIQUE')) return res.status(409).json({ error: 'Ce pseudo est déjà utilisé par un autre joueur.' });
+    throw e;
+  }
   res.json({ user: me(U.getUser(u.id)) });
 });
 
 function me(u) {
-  return { ...U.publicUser(u), email: u.email, staff: U.isStaff(u) };
+  return { ...U.publicUser(u), username: u.username, displayName: u.display_name || null, email: u.email, staff: U.isStaff(u) };
 }
 
 module.exports = { router, attachUser, requireAuth, requireStaff, userFromToken, parseCookie, createUser, COOKIE, me };

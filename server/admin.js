@@ -26,9 +26,9 @@ router.get('/users', (req, res) => {
   const q = String(req.query.q || '').trim();
   const rows = db
     .prepare(
-      `SELECT u.id, u.username, u.email, u.role, u.vip_until, u.banned, u.ban_reason, u.created_at, u.last_seen, u.xp, s.games, s.wins
+      `SELECT u.id, u.username, u.display_name, u.email, u.role, u.vip_until, u.banned, u.ban_reason, u.created_at, u.last_seen, u.xp, s.games, s.wins
        FROM users u LEFT JOIN stats s ON s.user_id = u.id
-       WHERE u.username LIKE @q OR u.email LIKE @q ORDER BY u.id DESC LIMIT 100`
+       WHERE u.username LIKE @q OR u.email LIKE @q OR u.display_name LIKE @q ORDER BY u.id DESC LIMIT 100`
     )
     .all({ q: `%${q}%` });
   res.json({ users: rows.map((r) => ({ ...r, vip: U.isVip(r) })) });
@@ -74,6 +74,10 @@ router.patch('/users/:id', (req, res) => {
     db.prepare('UPDATE users SET xp = 0 WHERE id = ?').run(target.id);
     audit(actor, 'reset_stats', target.id);
   }
+  if (body.resetDisplayName) {
+    db.prepare('UPDATE users SET display_name = NULL WHERE id = ?').run(target.id);
+    audit(actor, 'reset_display_name', target.id, { was: target.display_name });
+  }
   if (body.grantBadge) {
     if (!U.BADGES.find((b) => b.id === body.grantBadge)) return res.status(400).json({ error: 'Badge inconnu.' });
     db.prepare('INSERT OR IGNORE INTO user_badges (user_id, badge, earned_at) VALUES (?, ?, ?)').run(target.id, body.grantBadge, Date.now());
@@ -97,7 +101,7 @@ router.post('/announce', (req, res) => {
 });
 router.get('/audit', (_req, res) => {
   const rows = db
-    .prepare('SELECT a.*, u.username actor, t.username target FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN users t ON t.id = a.target_id ORDER BY a.id DESC LIMIT 100')
+    .prepare('SELECT a.*, u.username || COALESCE(\' (\' || u.display_name || \')\', \'\') actor, t.username || COALESCE(\' (\' || t.display_name || \')\', \'\') target FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN users t ON t.id = a.target_id ORDER BY a.id DESC LIMIT 100')
     .all();
   res.json({ entries: rows });
 });
