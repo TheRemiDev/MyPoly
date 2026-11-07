@@ -1,6 +1,6 @@
 'use strict';
 const db = require('./db');
-const { BADGES, evaluate } = require('./badges');
+const { BADGES, evaluate, evaluateCards } = require('./badges');
 
 const PAWNS = ['🎩', '🚗', '🐕', '🚀', '🐱', '⛵', '🎸', '🦖', '🐧', '🍀', '⚽', '🎯'];
 const VIP_PAWNS = ['👑', '💎', '🦄', '🐉', '🦁', '🛸', '🔥', '⭐'];
@@ -83,9 +83,10 @@ function profile(key) {
   const u = /^\d+$/.test(String(key)) ? q.byIdPublic.get(Number(key)) : q.byName.get(String(key));
   if (!u || u.banned) return null;
   const stats = q.stats.get(u.id) || {};
+  const cards = cardStats.get(u.id) || null;
   const badges = q.badges.all(u.id);
   const history = q.history.all(u.id).map((h) => ({ ...h, players: JSON.parse(h.players) }));
-  return { user: publicUser(u), stats, badges, history };
+  return { user: publicUser(u), stats, cards, badges, history };
 }
 
 const insertGame = db.prepare(`INSERT INTO games (room_code, started_at, ended_at, duration, rounds, win_type, winner_name, winner_user_id, settings, players)
@@ -171,7 +172,58 @@ const recordGame = db.transaction((room, result, settings) => {
   return { gameId, rewards };
 });
 
+/** Enregistre une partie de « Carton ! » : historique, statistiques de cartes, XP et badges. */
+const ensureCardStats = db.prepare('INSERT OR IGNORE INTO card_stats (user_id) VALUES (?)');
+const cardStats = db.prepare('SELECT * FROM card_stats WHERE user_id = ?');
+const recordCardGame = db.transaction((room, result, settings) => {
+  const now = Date.now();
+  const winner = result.players.find((p) => p.rank === 1);
+  const gameId = insertGame.run({
+    room_code: room,
+    started_at: now - result.duration * 1000,
+    ended_at: now,
+    duration: result.duration,
+    rounds: result.rounds,
+    win_type: 'cartes',
+    winner_name: winner ? winner.name : null,
+    winner_user_id: winner ? winner.userId : null,
+    settings: JSON.stringify({ ...settings, kind: 'cartes' }),
+    players: JSON.stringify(result.players.map((p) => ({ name: p.name, rank: p.rank, bot: p.isBot, userId: p.userId, netWorth: p.score }))),
+  }).lastInsertRowid;
+  const rewards = {};
+  for (const me of result.players) {
+    if (!me.userId) continue;
+    const uid = me.userId;
+    ensureCardStats.run(uid);
+    const old = cardStats.get(uid);
+    const won = me.rank === 1;
+    const streak = won ? old.current_streak + 1 : 0;
+    const st = me.stats || {};
+    db.prepare(`UPDATE card_stats SET games = games + 1, wins = wins + ?, rounds_won = rounds_won + ?, cards_played = cards_played + ?, plus4 = plus4 + ?,
+      cartons = cartons + ?, catches = catches + ?, caught = caught + ?, best_hit = MAX(best_hit, ?), current_streak = ?, best_streak = MAX(best_streak, ?),
+      play_seconds = play_seconds + ? WHERE user_id = ?`).run(
+      won ? 1 : 0, st.roundsWon || 0, st.played || 0, st.plus4 || 0, st.cartons || 0, st.catches || 0, st.caught || 0, st.maxHit || 0, streak, streak, result.duration, uid
+    );
+    insertGP.run(gameId, uid, me.rank, me.score || 0, 0);
+    const xp = 15 + (won ? 60 : 0) + (st.catches || 0) * 5;
+    addXp.run(xp, uid);
+    const owned = new Set(q.badges.all(uid).map((b) => b.badge));
+    const newBadges = evaluateCards(cardStats.get(uid), me, result, owned);
+    for (const b of newBadges) insertBadge.run(uid, b, now);
+    rewards[uid] = { xp, ratingDelta: null, badges: newBadges.map((id) => BADGES.find((b) => b.id === id)) };
+  }
+  return { gameId, rewards };
+});
+
 function leaderboard(sort = 'rating', limit = 50) {
+  if (sort === 'cartes') {
+    return db
+      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, c.games, c.wins, c.best_streak,
+        CASE WHEN c.games > 0 THEN ROUND(100.0 * c.wins / c.games, 1) ELSE 0 END AS winrate
+        FROM card_stats c JOIN users u ON u.id = c.user_id WHERE u.banned = 0 AND c.games > 0 ORDER BY c.wins DESC, winrate DESC LIMIT ?`)
+      .all(limit)
+      .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
+  }
   const cols = { rating: 's.rating', wins: 's.wins', games: 's.games', xp: 'u.xp', winrate: 'winrate', best: 's.best_networth' };
   const col = cols[sort] || cols.rating;
   return db
@@ -186,4 +238,4 @@ function leaderboard(sort = 'rating', limit = 50) {
     .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
 }
 
-module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, leaderboard, BADGES };
+module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, leaderboard, BADGES };
