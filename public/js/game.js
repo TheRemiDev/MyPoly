@@ -597,6 +597,30 @@ class RoomView {
     }
   }
 
+  /** Met en surbrillance, pour tous, la case où le joueur va atterrir. */
+  markDest(i, color) {
+    this.clearDest();
+    this.destCell = i;
+    Sound.play('tick');
+    if (this.b3) return this.b3.markTarget(i, color);
+    const el = this.cellEls && this.cellEls[i];
+    if (!el) return;
+    el.style.setProperty('--dest', color);
+    el.classList.add('dest');
+    const c = this.cellCenter(i);
+    this.destMarker = h('div.dest-marker', { style: { left: c.x + 'px', top: c.y - c.hgt / 2 + 'px', '--dest': color } }, h('span', '▼'));
+    this.pawnLayer.append(this.destMarker);
+  }
+  clearDest() {
+    if (this.destCell == null) return;
+    if (this.b3) this.b3.clearTarget();
+    const el = this.cellEls && this.cellEls[this.destCell];
+    if (el) el.classList.remove('dest');
+    if (this.destMarker) this.destMarker.remove();
+    this.destMarker = null;
+    this.destCell = null;
+  }
+
   /** Recadre brièvement la caméra 3D sur une case. */
   focusCell(i) {
     if (this.b3 && !document.hidden) this.b3.focus(i);
@@ -701,6 +725,12 @@ class RoomView {
       const fast = document.hidden || this.queue.length > 2;
       this.renderActions(null); // masque les actions pendant l'animation
       if (!fast) {
+        events.forEach((ev, k) => {
+          if (ev.t !== 'dice') return;
+          const mv = events.slice(k + 1).find((x) => x.t === 'move' && x.pid === ev.pid);
+          // Seulement si le déplacement suit directement le lancer (pas une téléportation)
+          if (mv && !mv.teleport && mv.steps > 0) ev.dest = mv.to;
+        });
         for (const ev of events) {
           try {
             await this.playEvent(ev, state);
@@ -708,6 +738,7 @@ class RoomView {
             console.error(e);
           }
         }
+        this.clearDest();
       } else {
         for (const ev of events) if (ev.t === 'log') this.addLog(ev);
       }
@@ -759,9 +790,11 @@ class RoomView {
       case 'dice':
         Sound.play('dice');
         await this.showDice(ev.d);
+        if (ev.dest != null) this.markDest(ev.dest, p ? p.color : '#ffffff');
         return;
       case 'move':
         await this.animateMove(ev);
+        if (this.destCell === ev.to) this.clearDest();
         return;
       case 'money':
         this.disp.cash[ev.pid] = (this.disp.cash[ev.pid] ?? 0) + ev.delta;

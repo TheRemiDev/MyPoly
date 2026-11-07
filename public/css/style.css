@@ -1130,3 +1130,10 @@ body.in-game { overflow: hidden; }
 /* Minuteur du joueur actif : contenu dans la fiche, se vide vers le centre du médaillon */
 .pcard.corner .pcard-timer { width: auto !important; transition: transform .25s linear; transform-origin: left center; }
 .pcard.corner.c-tr .pcard-timer, .pcard.corner.c-br .pcard-timer { transform-origin: right center; }
+
+/* Case d'arrivée du lancer (plateau 2D) */
+.cell.dest { --dest: #fff; z-index: 6; animation: destPulse .8s ease-in-out infinite; }
+@keyframes destPulse { 0%, 100% { box-shadow: 0 0 0 0.45cqw var(--dest), 0 0 2cqw var(--dest); transform: translateY(-0.3cqw); } 50% { box-shadow: 0 0 0 0.75cqw var(--dest), 0 0 4cqw var(--dest); transform: translateY(-0.7cqw); } }
+.dest-marker { position: absolute; z-index: 99999; translate: -50% -100%; pointer-events: none; animation: destBob .6s ease-in-out infinite alternate; }
+.dest-marker span { display: block; font-size: 4.4cqw; line-height: 1; color: var(--dest); -webkit-text-stroke: 0.35cqw #fff; paint-order: stroke fill; filter: drop-shadow(0 0.4cqw 0.5cqw rgba(0, 0, 0, .45)); }
+@keyframes destBob { to { translate: -50% -130%; } }
