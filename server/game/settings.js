@@ -12,6 +12,7 @@ const DEFAULTS = {
   takeover: true, // rachat des propriétés adverses
   takeoverMult: 2, // prix du rachat = valeur investie x mult
   buildOnPurchase: true, // construire des maisons dès l'achat du terrain
+  firstRoundLimit: true, // 1er tour : 2 maisons maximum par ville
   countryDoubleRent: true, // loyer x2 si un pays complet est possédé
   tripleMonopoly: true, // victoire en possédant 3 pays complets
   lineMonopoly: true, // victoire en possédant tout un côté du plateau
