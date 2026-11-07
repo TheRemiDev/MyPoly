@@ -472,6 +472,7 @@ class RoomView {
     this.cardSlot = h('div.card-slot');
     this.centerInfo = h('div.center-info');
     this.feed = h('div.event-feed');
+    this.notifStacks = Object.fromEntries(['tl', 'tr', 'bl', 'br', 'mid'].map((k) => [k, h('div.notif-stack.ns-' + k)]));
     this.hud = h('div.board-hud', this.centerInfo, this.feed, this.actionPanel, this.cardSlot);
     this.tip = h('div.tile-tip', { hidden: true });
     this.boardScale = h('div.board-scale', this.board, this.hud);
@@ -497,7 +498,7 @@ class RoomView {
     this.endOverlay = h('div.end-overlay', { hidden: true });
 
     // La scène 3D et les effets couvrent tout l'écran ; l'interface est incrustée par-dessus
-    this.gameEl = h('div.game', this.host3d, this.boardWrap, this.fxLayer, this.playersEl, h('div.topbar', this.toolbar, this.popover), this.tip);
+    this.gameEl = h('div.game', this.host3d, this.boardWrap, this.fxLayer, ...Object.values(this.notifStacks), this.playersEl, h('div.topbar', this.toolbar, this.popover), this.tip);
     this.root.append(this.gameEl, this.endOverlay);
     if (this.view3d) this.enable3d();
     // Replace les pions dès que la taille du plateau change (vue 2D/3D, redimensionnement)
@@ -547,14 +548,28 @@ class RoomView {
   }
 
   /** Annonce en haut du plateau : qui fait quoi, en clair. */
-  announce({ icon, title, text, color = '#3fa7ff', kind = 'info', ms = 2800 }) {
-    if (!this.feed || document.hidden) return;
-    const card = h('div.feed-card.' + kind, { style: { '--c': color } }, h('div.feed-icon', icon), h('div.feed-body', h('div.feed-title', title), text ? h('div.feed-text', text) : null));
-    this.feed.prepend(card);
-    while (this.feed.children.length > 3) this.feed.lastChild.remove();
+  /**
+   * Notification de jeu : elle sort de la fiche du joueur concerné (dans son coin),
+   * sans jamais recouvrir le plateau. Sur écran étroit, elle s'affiche au centre en bas.
+   */
+  announce({ icon, title, text, color = '#3fa7ff', kind = 'info', ms = 2800, pid = this.evPid }) {
+    if (!this.notifStacks || document.hidden) return;
+    const narrow = matchMedia('(max-aspect-ratio: 5/4)').matches;
+    const cardEl = pid && this.playersEl ? this.playersEl.querySelector(`[data-pid="${CSS.escape(pid)}"]`) : null;
+    const corner = cardEl ? ['tl', 'tr', 'bl', 'br'].find((k) => cardEl.classList.contains('c-' + k)) : null;
+    const slot = !narrow && corner ? corner : 'mid';
+    const stack = this.notifStacks[slot];
+    const n = h('div.notif.' + kind + (slot !== 'mid' && slot[1] === 'r' ? '.right' : ''),
+      { style: { '--c': color, '--life': ms + 'ms' } },
+      h('div.notif-icon', icon),
+      h('div.notif-body', h('div.notif-title', title), text ? h('div.notif-text', text) : null),
+      h('div.notif-life')
+    );
+    stack.prepend(n);
+    while (stack.children.length > (slot === 'mid' ? 1 : 3)) stack.lastChild.remove();
     setTimeout(() => {
-      card.classList.add('out');
-      setTimeout(() => card.remove(), 450);
+      n.classList.add('out');
+      setTimeout(() => n.remove(), 420);
     }, ms);
   }
 
@@ -775,6 +790,7 @@ class RoomView {
 
   async playEvent(ev, st) {
     const p = ev.pid ? st.players.find((x) => x.id === ev.pid) : null;
+    this.evPid = ev.pid || null; // joueur concerné : la notification s'affiche près de sa fiche
     switch (ev.t) {
       case 'log':
         this.addLog(ev);
