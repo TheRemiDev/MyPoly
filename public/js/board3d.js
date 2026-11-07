@@ -109,6 +109,48 @@ function fitText(ctx, text, cx, cy, maxW, size, weight = 900, color = '#1e1e33',
   }
   ctx.fillText(text, cx, cy);
 }
+/**
+ * Texte qui tient entièrement dans une boîte (largeur ET hauteur), sur 1 ou 2 lignes,
+ * en choisissant la plus grande taille possible : il ne déborde jamais sur l'icône.
+ */
+function fitBox(ctx, text, cx, cy, maxW, maxH, maxSize, weight = 900, color = '#1e1e33') {
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const widthAt = (t, s) => {
+    ctx.font = `${weight} ${s}px ${FONT}`;
+    return ctx.measureText(t).width;
+  };
+  // Une ligne
+  let s1 = Math.min(maxSize, maxH / 1.15);
+  while (s1 > 7 && widthAt(text, s1) > maxW) s1 -= 1;
+  // Deux lignes (coupure au milieu des mots)
+  const parts = text.split(/\s+/);
+  let s2 = 0;
+  let l1 = '';
+  let l2 = '';
+  if (parts.length > 1) {
+    let best = null;
+    for (let k = 1; k < parts.length; k++) {
+      const a = parts.slice(0, k).join(' ');
+      const b = parts.slice(k).join(' ');
+      const w = Math.max(widthAt(a, 100), widthAt(b, 100));
+      if (!best || w < best.w) best = { a, b, w };
+    }
+    l1 = best.a;
+    l2 = best.b;
+    s2 = Math.min(maxSize, maxH / 2.25);
+    while (s2 > 7 && Math.max(widthAt(l1, s2), widthAt(l2, s2)) > maxW) s2 -= 1;
+  }
+  if (s2 > s1 * 1.15) {
+    ctx.font = `${weight} ${s2}px ${FONT}`;
+    ctx.fillText(l1, cx, cy - s2 * 0.56);
+    ctx.fillText(l2, cx, cy + s2 * 0.56);
+  } else {
+    ctx.font = `${weight} ${s1}px ${FONT}`;
+    ctx.fillText(text, cx, cy);
+  }
+}
 function emoji(ctx, e, cx, cy, size) {
   ctx.font = `${size}px ${FONT}`;
   ctx.textAlign = 'center';
@@ -998,13 +1040,33 @@ export class Board3D {
     const priceTxt = owner && pr.rent ? fmt(pr.rent) : c.price ? fmt(c.price) : '';
     const priceBg = owner ? shade(owner.color, -0.22) : '#262640';
     if (c.type === 'city' || c.type === 'resort' || c.type === 'tax') {
-      const icon = c.type === 'city' ? c.icon : c.type === 'resort' ? c.emoji : '💸';
-      const iy = body.y + body.h * 0.27;
-      // Taille réduite et remontée : la tête ne touche plus le nom de la case
-      if (c.type === 'tax' && s.melenchon) drawMelenchon(g, cx, iy - m * 0.02, m * 0.34);
-      else emoji(g, icon, cx, iy, m * 0.36);
-      fitText(g, c.type === 'tax' ? (s.melenchon ? 'MÉLENCHON' : (this.meta.cornerNames && this.meta.cornerNames.tax) || 'IMPÔTS') : c.name.toUpperCase(), cx, body.y + body.h * 0.56, body.w * 0.9, m * 0.15, 900, c.type === 'resort' ? '#3b2a05' : '#1e1e33');
-      pill(g, c.type === 'tax' ? `${s.taxPercent} %` : priceTxt, cx, body.y + body.h * 0.8, m * 0.13, c.type === 'tax' ? '#c0392b' : priceBg);
+      const icon = c.type === 'city' ? c.icon : c.type === 'resort' ? c.emoji : (this.meta.cornerIcons && this.meta.cornerIcons.tax) || '💸';
+      const label = c.type === 'tax' ? (s.melenchon ? 'MÉLENCHON' : (this.meta.cornerNames && this.meta.cornerNames.tax) || 'IMPÔTS') : c.name.toUpperCase();
+      const nameColor = c.type === 'resort' ? '#3b2a05' : '#1e1e33';
+      const price = c.type === 'tax' ? `${s.taxPercent} %` : priceTxt;
+      const pBg = c.type === 'tax' ? '#c0392b' : priceBg;
+      const drawIcon = (x, y, size) => {
+        if (c.type === 'tax' && s.melenchon) drawMelenchon(g, x, y, size * 1.05);
+        else emoji(g, icon, x, y, size);
+      };
+      // Zones séparées (icône / nom / prix) : rien ne se chevauche
+      if (body.w > body.h * 1.12) {
+        // Case large (colonnes gauche et droite) : icône à gauche, texte à droite
+        // L'icône va côté extérieur (là où se rangent les pions), le texte côté intérieur
+        const iconSize = Math.min(body.h * 0.42, body.w * 0.26);
+        const outerRight = side === 'left';
+        drawIcon(outerRight ? body.x + body.w * 0.81 : body.x + body.w * 0.19, body.y + body.h * 0.5, iconSize);
+        const tx = outerRight ? body.x + body.w * 0.04 : body.x + body.w * 0.36;
+        const tw = body.w * 0.6;
+        fitBox(g, label, tx + tw / 2, body.y + body.h * 0.36, tw, body.h * 0.44, m * 0.17, 900, nameColor);
+        pill(g, price, tx + tw / 2, body.y + body.h * 0.76, Math.min(m * 0.13, body.h * 0.11), pBg);
+      } else {
+        // Case haute (rangées haut et bas) : icône, puis nom, puis prix
+        const iconSize = Math.min(body.h * 0.25, body.w * 0.36);
+        drawIcon(cx, body.y + body.h * 0.2, iconSize);
+        fitBox(g, label, cx, body.y + body.h * 0.53, body.w * 0.9, body.h * 0.28, m * 0.15, 900, nameColor);
+        pill(g, price, cx, body.y + body.h * 0.83, Math.min(m * 0.13, body.h * 0.085), pBg);
+      }
     } else if (c.type === 'chance') {
       g.save();
       g.translate(cx, body.y + body.h * 0.4);
@@ -1182,7 +1244,7 @@ export class Board3D {
   placeBuilding(i, level, color, f) {
     const a = this.bandAnchor(i);
     const obj = level === 4 ? this.makeHotel(color) : this.makeHouse(color);
-    obj.userData.base = level === 4 ? 1.1 : 1.0;
+    obj.userData.base = level === 4 ? 0.85 : 0.8;
     obj.scale.setScalar(obj.userData.base);
     const p = a.a.clone().lerp(a.b, f);
     obj.position.set(p.x, TOP, p.z);
@@ -1776,8 +1838,8 @@ export class Board3D {
     }
     g.traverse((o) => o.isMesh && (o.castShadow = true));
     // Étiquette emoji au-dessus du pion
-    const label = this.emojiSprite(p.pawn, 0.32, p.color);
-    label.position.y = 0.84;
+    const label = this.emojiSprite(p.pawn, 0.3, p.color);
+    label.position.y = 0.8;
     label.renderOrder = 10;
     g.add(label);
     // Anneau du joueur actif
@@ -1786,8 +1848,8 @@ export class Board3D {
     ring.position.y = 0.012;
     g.add(ring);
     g.userData = { ring, label, head, body };
-    g.scale.setScalar(0.85);
-    g.userData.baseScale = 0.85;
+    g.scale.setScalar(0.74);
+    g.userData.baseScale = 0.74;
     g.position.y = TOP;
     this.scene.add(g);
     return g;
@@ -2261,7 +2323,7 @@ export class Board3D {
       const k = (time * 0.9) % 1;
       ring.material.opacity = pw.current ? 0.85 * (1 - k) : 0;
       ring.scale.setScalar(pw.current ? 0.8 + k * 0.8 : 1);
-      label.position.y = 0.84 + (pw.current ? Math.sin(time * 4) * 0.05 : 0);
+      label.position.y = 0.8 + (pw.current ? Math.sin(time * 4) * 0.05 : 0);
     }
     // Repère de la case d'arrivée
     if (this.targetFx) {
