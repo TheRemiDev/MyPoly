@@ -1079,6 +1079,57 @@ export class Board3D {
     }).then(() => this.scene.remove(sp));
   }
 
+  // ------------------------------------------------------------ case d'arrivée
+  /** Faisceau, anneau et flèche sur la case où le pion va atterrir. */
+  markTarget(i, color) {
+    this.clearTarget(true);
+    const b = cellBox(i);
+    const col = new THREE.Color(color);
+    const r = Math.min(b.w, b.d) * 0.46;
+    const g = new THREE.Group();
+    const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide };
+    const solid = { transparent: true, depthWrite: false, side: THREE.DoubleSide };
+    // Faisceau de lumière (léger) + anneau plein à la couleur du joueur, bien lisible sur toutes les cases
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r, 2.6, 40, 1, true), new THREE.MeshBasicMaterial({ color: col, opacity: 0.16, ...add }));
+    beam.position.y = 1.3;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.74, r, 56), new THREE.MeshBasicMaterial({ color: col, opacity: 1, ...solid }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.025;
+    const rim = new THREE.Mesh(new THREE.RingGeometry(r, r * 1.08, 56), new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 1, ...solid }));
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.026;
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(r * 0.95, r * 1.08, 56), new THREE.MeshBasicMaterial({ color: col, opacity: 0.8, ...solid }));
+    ring2.rotation.x = -Math.PI / 2;
+    ring2.position.y = 0.03;
+    // Grande flèche cerclée de blanc qui rebondit au-dessus de la case
+    const arrow = new THREE.Group();
+    const arrowMat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.55, roughness: 0.3 });
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.42, 4), arrowMat);
+    head.rotation.x = Math.PI;
+    const outline = new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }));
+    outline.rotation.x = Math.PI;
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.26, 0.13), arrowMat);
+    shaft.position.y = 0.32;
+    arrow.add(outline, head, shaft);
+    arrow.traverse((o) => o.isMesh && (o.castShadow = true));
+    g.add(rim);
+    g.add(beam, ring, ring2, arrow);
+    g.position.set(b.cx, TOP, b.cz);
+    g.scale.setScalar(0.01);
+    this.scene.add(g);
+    this.targetFx = { g, i, beam, ring, ring2, arrow, color: col, born: performance.now() };
+    this.tiles[i].target = col;
+    this.tween(380, (t) => g.scale.setScalar(Math.max(0.01, ease.back(t))));
+  }
+  clearTarget(instant = false) {
+    const fx = this.targetFx;
+    if (!fx) return;
+    this.targetFx = null;
+    if (this.tiles[fx.i]) this.tiles[fx.i].target = null;
+    if (instant) return this.scene.remove(fx.g);
+    this.tween(260, (t) => fx.g.scale.setScalar(Math.max(0.01, 1 - t))).then(() => this.scene.remove(fx.g));
+  }
+
   /** Recadre brièvement la caméra sur une case pour montrer l'action. */
   focus(i, hold = 700, zoom = 1.55) {
     const b = cellBox(i);
@@ -1762,7 +1813,7 @@ export class Board3D {
     // Cases : survol, sélection, flash, rebond
     for (let i = 0; i < this.tiles.length; i++) {
       const t = this.tiles[i];
-      const target = (this.hover === i ? 0.07 : 0) + (t.picked ? 0.2 : t.selectable ? 0.05 + Math.sin(time * 5) * 0.04 : 0);
+      const target = (this.hover === i ? 0.07 : 0) + (t.target ? 0.12 : t.picked ? 0.2 : t.selectable ? 0.05 + Math.sin(time * 5) * 0.04 : 0);
       t.lift += (target - t.lift) * Math.min(1, dt * 12);
       t.bump = Math.max(0, t.bump - dt * 5);
       t.group.position.y = BOARD_TOP + t.lift - Math.sin(t.bump * Math.PI) * 0.05;
@@ -1771,6 +1822,9 @@ export class Board3D {
         t.flashT = Math.max(0, t.flashT - dt * 1.6);
         m.emissive.copy(t.flash);
         m.emissiveIntensity = t.flashT * 0.6;
+      } else if (t.target) {
+        m.emissive.copy(t.target);
+        m.emissiveIntensity = 0.35 + (Math.sin(time * 7) + 1) * 0.18;
       } else if (t.picked) {
         m.emissive.set(0xff4757);
         m.emissiveIntensity = 0.25 + (Math.sin(time * 6) + 1) * 0.1;
@@ -1809,6 +1863,17 @@ export class Board3D {
       ring.material.opacity = pw.current ? 0.85 * (1 - k) : 0;
       ring.scale.setScalar(pw.current ? 0.8 + k * 0.8 : 1);
       label.position.y = 0.84 + (pw.current ? Math.sin(time * 4) * 0.05 : 0);
+    }
+    // Repère de la case d'arrivée
+    if (this.targetFx) {
+      const fx = this.targetFx;
+      const k = (time * 1.4) % 1;
+      fx.arrow.position.y = 0.62 + Math.abs(Math.sin(time * 5)) * 0.18;
+      fx.arrow.rotation.y = Math.PI / 4 + time * 1.5;
+      fx.ring2.scale.setScalar(1 + k * 0.6);
+      fx.ring2.material.opacity = 0.85 * (1 - k);
+      fx.beam.material.opacity = 0.16 + Math.sin(time * 5) * 0.06;
+      fx.g.position.y = TOP + (this.tiles[fx.i] ? this.tiles[fx.i].lift : 0);
     }
     // Décor
     this.waterTex.offset.x = (time * 0.02) % 1;
