@@ -1003,3 +1003,126 @@ body.in-game { overflow: hidden; }
   .pcard.corner .avatar { width: 44px; height: 44px; font-size: 1.4rem; }
   .pcard.corner .pcard-cash { font-size: 1.05rem; }
 }
+
+
+/* =====================================================================
+   FICHES JOUEURS (coins de l'écran)
+   ===================================================================== */
+@property --spin { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.pcard.corner {
+  isolation: isolate; overflow: visible; cursor: pointer;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 92px; padding: 10px 16px 10px 10px;
+  background: none !important; border: none !important; box-shadow: none !important;
+  border-radius: 24px; transition: transform .25s cubic-bezier(.2, 1.4, .4, 1), filter .3s;
+}
+.pcard.corner.c-tr, .pcard.corner.c-br { flex-direction: row-reverse; padding: 10px 10px 10px 16px; }
+.pcard.corner:hover { transform: translateY(-2px); }
+/* Face de la fiche : couleur du joueur, motif, reflet */
+.pc-face {
+  position: absolute; inset: 0; z-index: -1; border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .28) 0%, rgba(255, 255, 255, .06) 42%, rgba(0, 0, 0, 0) 43%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, .055) 0 10px, rgba(255, 255, 255, 0) 10px 20px),
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--c) 92%, #fff) 0%, var(--c) 38%, color-mix(in srgb, var(--c) 55%, #0b0e22) 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, .45),
+    inset 0 -5px 0 rgba(0, 0, 0, .22),
+    0 3px 0 color-mix(in srgb, var(--c) 45%, #000),
+    0 14px 30px rgba(0, 0, 0, .5);
+}
+/* Joueur actif : bordure lumineuse tournante */
+.pcard.corner.turn { transform: scale(1.05); }
+.pcard.corner.turn::before {
+  content: ''; position: absolute; inset: -5px; z-index: -2; border-radius: 28px;
+  background: conic-gradient(from var(--spin), #fff, var(--c), #ffd166, var(--c), #fff);
+  animation: pcSpin 2.2s linear infinite;
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--c) 80%, #fff));
+}
+@keyframes pcSpin { to { --spin: 360deg; } }
+.pcard.corner.hl .pc-face { box-shadow: inset 0 0 0 3px #fff, 0 0 0 3px #fff, 0 14px 30px rgba(0, 0, 0, .5); }
+.pcard.corner.out { filter: grayscale(1) brightness(.75); }
+/* Médaillon */
+.pc-avatar { position: relative; flex: none; width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 35% 28%, #ffffff, #eef0fa 60%, #d4d8ec);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 80%, #fff), 0 0 0 8px rgba(255, 255, 255, .9), 0 0 0 9px rgba(0, 0, 0, .15), 0 10px 18px rgba(0, 0, 0, .45); }
+.pc-pawn { font-size: 2.35rem; line-height: 1; filter: drop-shadow(0 3px 2px rgba(0, 0, 0, .25)); }
+.pcard.corner.turn .pc-pawn { animation: pcBob 1.2s ease-in-out infinite; }
+@keyframes pcBob { 50% { transform: translateY(-4px) rotate(-6deg); } }
+.pc-crown { position: absolute; top: -16px; left: 50%; translate: -50% 0; rotate: -12deg; font-size: 1.35rem; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.pc-medal { position: absolute; bottom: -8px; right: -8px; font-size: 1.3rem; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.c-tr .pc-medal, .c-br .pc-medal { right: auto; left: -8px; }
+/* Contenu */
+.pc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.c-tr .pc-body, .c-br .pc-body { align-items: flex-end; }
+.pc-name { display: flex; align-items: center; gap: 5px; max-width: 100%; white-space: nowrap; overflow: hidden; }
+.pc-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 900; font-size: 1.05rem; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, .3), 0 0 8px rgba(0, 0, 0, .25); letter-spacing: .01em; }
+.pc-name-text.name-vip { color: transparent; }
+.pc-cash { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 3px 14px 3px 4px; border-radius: 99px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .45), rgba(0, 0, 0, .28)); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .18), inset 0 2px 4px rgba(0, 0, 0, .3); transition: box-shadow .3s; }
+.c-tr .pc-cash, .c-br .pc-cash { align-self: flex-end; }
+.pc-coin { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: .9rem; color: #7a5200;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #ffd166 45%, #d19a1a); box-shadow: 0 0 0 2px #b07d0a, 0 2px 4px rgba(0, 0, 0, .35); }
+.pc-cash-value { font-weight: 900; font-size: 1.5rem; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 rgba(0, 0, 0, .35); line-height: 1.15; }
+.pc-cash.up { box-shadow: inset 0 0 0 2px #7ef0ac, 0 0 16px rgba(46, 204, 113, .8); }
+.pc-cash.up .pc-cash-value { color: #b9ffd4; }
+.pc-cash.down { box-shadow: inset 0 0 0 2px #ff8a93, 0 0 16px rgba(255, 71, 87, .8); }
+.pc-cash.down .pc-cash-value { color: #ffd0d4; }
+.pc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.c-tr .pc-chips, .c-br .pc-chips { justify-content: flex-end; }
+.pc-chip { font-size: .72rem; font-weight: 800; color: #fff; padding: 2px 8px; border-radius: 99px; background: rgba(0, 0, 0, .28); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18); white-space: nowrap; }
+.pc-chip.good { background: rgba(46, 204, 113, .35); }
+.pc-chip.warn { background: rgba(255, 159, 67, .45); }
+.pc-chip.off { background: rgba(0, 0, 0, .45); color: #ffb3b9; }
+/* Bandeau « À VOUS ! / JOUE » */
+.pcard.corner .pcard-turn { top: -13px; z-index: 3; padding: 3px 12px; font-size: .74rem; border-radius: 99px; background: #fff; color: #1c2040; box-shadow: 0 0 0 2px var(--c), 0 4px 12px rgba(0, 0, 0, .4); animation: pcRibbon 1.2s ease-in-out infinite; }
+@keyframes pcRibbon { 50% { transform: translateY(-2px) scale(1.06); } }
+.pcard.corner .pcard-timer { left: 22px; right: 22px; bottom: 6px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .9); box-shadow: 0 0 6px rgba(255, 255, 255, .8); }
+.pc-stamp { position: absolute; left: 50%; top: 50%; translate: -50% -50%; rotate: -12deg; z-index: 4; padding: 2px 14px; border: 3px solid #ff4757; border-radius: 8px; color: #ff4757; font-weight: 900; font-size: 1.3rem; letter-spacing: .12em; background: rgba(255, 255, 255, .85); box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
+/* Écrans étroits / mobiles */
+@media (max-aspect-ratio: 5/4) {
+  .pcard.corner { min-height: 0; padding: 7px 10px 7px 7px; gap: 8px; border-radius: 18px; }
+  .pcard.corner.c-tr, .pcard.corner.c-br { padding: 7px 7px 7px 10px; }
+  .pc-face { border-radius: 18px; }
+  .pcard.corner.turn::before { border-radius: 22px; inset: -4px; }
+  .pc-avatar { width: 46px; height: 46px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 80%, #fff), 0 0 0 5px rgba(255, 255, 255, .9), 0 6px 12px rgba(0, 0, 0, .4); }
+  .pc-pawn { font-size: 1.5rem; }
+  .pc-crown { font-size: 1rem; top: -12px; }
+  .pc-medal { font-size: 1rem; bottom: -6px; right: -6px; }
+  .pc-name-text { font-size: .9rem; }
+  .pc-coin { width: 20px; height: 20px; font-size: .72rem; }
+  .pc-cash { padding: 2px 10px 2px 3px; gap: 5px; }
+  .pc-cash-value { font-size: 1.1rem; }
+  .pc-chips { display: none; }
+  .pcard.corner .pcard-turn { font-size: .62rem; top: -10px; padding: 2px 9px; }
+}
+@media (max-height: 560px) and (min-aspect-ratio: 5/4) {
+  .pcard.corner { min-height: 0; padding: 7px 10px 7px 7px; }
+  .pc-avatar { width: 48px; height: 48px; }
+  .pc-pawn { font-size: 1.55rem; }
+  .pc-cash-value { font-size: 1.1rem; }
+  .pc-chips .pc-chip:nth-child(2) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .pcard.corner.turn::before { animation: none; } }
+
+/* Fiches de couleur claire : fond assombri pour garder un texte blanc lisible */
+.pcard.corner.light .pc-face {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, .05) 42%, rgba(0, 0, 0, 0) 43%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, .05) 0 10px, rgba(255, 255, 255, 0) 10px 20px),
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--c) 60%, #5a6290) 0%, color-mix(in srgb, var(--c) 42%, #353b66) 45%, color-mix(in srgb, var(--c) 25%, #151935) 100%);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 85%, #fff), inset 0 -5px 0 rgba(0, 0, 0, .22), 0 3px 0 rgba(0, 0, 0, .45), 0 14px 30px rgba(0, 0, 0, .5);
+}
+/* Pseudo VIP sur les fiches : blanc à halo doré (lisible sur toutes les couleurs) */
+.pc-name-text.name-vip { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: #fff; -webkit-text-fill-color: #fff; animation: none;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .35), 0 0 10px rgba(255, 209, 102, .95), 0 0 2px #ffd166; }
+.pc-name-text.name-staff { color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, .35), 0 0 10px rgba(255, 107, 117, .9); }
+/* Le bandeau du joueur actif ne doit jamais sortir de l'écran */
+@media (max-aspect-ratio: 5/4) {
+  .pcard.corner.c-tl, .pcard.corner.c-tr { top: 16px; }
+}
+.pcard.corner.c-tl, .pcard.corner.c-tr { top: 18px; }
+@media (max-aspect-ratio: 5/4) {
+  .game { --safe-top: 140px; }
+  .topbar { top: 88px; }
+}

@@ -125,6 +125,14 @@ const COMPASS_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true">
   <text x="50" y="5" font-size="7" text-anchor="middle" fill="rgba(255,215,120,.8)" font-weight="700">N</text>
 </svg>`;
 
+/** Couleur claire (blanc, jaune…) : la fiche du joueur utilise alors un fond plus sombre. */
+function isLight(hex) {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || '');
+  if (!m) return false;
+  const [r, g, b] = [m[1], m[2], m[3]].map((x) => parseInt(x, 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.62;
+}
+
 class RoomView {
   constructor(app, code) {
     this.app = app;
@@ -1329,45 +1337,91 @@ class RoomView {
   }
 
   // --------------------------------------------------------------- joueurs
+  /** Fiches des joueurs dans les 4 coins de l'écran. */
   renderPlayers(currentOverride) {
     const st = this.state;
     if (!st) return;
     const cur = currentOverride || st.current;
     this.playersEl.innerHTML = '';
+    this.cashShown ||= {};
     // Vous en bas à gauche, puis les autres dans l'ordre du jeu (sens horaire)
     const list = st.players.slice();
     const meIdx = list.findIndex((p) => p.id === this.me);
     const ordered = meIdx >= 0 ? list.slice(meIdx).concat(list.slice(0, meIdx)) : list;
     const slots = meIdx >= 0 ? ['bl', 'tl', 'tr', 'br'] : ['tl', 'tr', 'br', 'bl'];
+    // Classement en direct par fortune (joueurs encore en jeu)
+    const ranking = st.players.filter((p) => !p.bankrupt).sort((a, b) => b.netWorth - a.netWorth).map((p) => p.id);
+    const medals = ['🥇', '🥈', '🥉'];
     for (const [k, p] of ordered.entries()) {
       const cash = this.disp.cash[p.id] ?? p.cash;
-      const icons = [];
-      if (p.jailed) icons.push(h('span', { title: `Sur l'Île (${p.jailTurns}/3)` }, '🏝️'));
-      if (p.travel) icons.push(h('span', { title: 'Vol au prochain tour' }, '✈️'));
-      if (p.shield) icons.push(h('span', { title: 'Bouclier : prochain loyer annulé' }, '🛡️'));
-      if (p.coupon) icons.push(h('span', { title: 'Coupon : prochain loyer -50%' }, '🏷️'));
-      if (p.jailCards) icons.push(h('span', { title: 'Gilet de sauvetage' }, '🛟' + (p.jailCards > 1 ? '×' + p.jailCards : '')));
-      if (!p.isBot && !p.connected) icons.push(h('span', { title: 'Déconnecté (joué automatiquement)' }, '📡'));
-      else if (p.afk) icons.push(h('span', { title: 'Absent (joué automatiquement)' }, '💤'));
+      const chips = [];
+      if (p.jailed) chips.push(h('span.pc-chip.warn', { title: 'Sur l\'Île déserte' }, `🏝️ ${p.jailTurns}/3`));
+      if (p.travel) chips.push(h('span.pc-chip', { title: 'Vol au prochain tour' }, '✈️'));
+      if (p.shield) chips.push(h('span.pc-chip.good', { title: 'Bouclier : prochain loyer annulé' }, '🛡️'));
+      if (p.coupon) chips.push(h('span.pc-chip.good', { title: 'Coupon : prochain loyer -50 %' }, '🏷️'));
+      if (p.jailCards) chips.push(h('span.pc-chip.good', { title: 'Gilet de sauvetage' }, '🛟' + (p.jailCards > 1 ? '×' + p.jailCards : '')));
+      if (!p.isBot && !p.connected) chips.push(h('span.pc-chip.off', { title: 'Déconnecté (joué automatiquement)' }, '📡'));
+      else if (p.afk) chips.push(h('span.pc-chip.off', { title: 'Absent (joué automatiquement)' }, '💤'));
       const props = st.props.filter((x) => x && x.owner === p.id).length;
-      this.playersEl.append(
-        h('div.pcard.corner.c-' + (slots[k] || 'tl') + (p.id === cur ? '.turn' : '') + (p.bankrupt ? '.out' : '') + (p.id === this.me ? '.me' : '') + (p.vip ? '.vip' : '') + (this.highlightOwner === p.id ? '.hl' : ''),
-          { 'data-pid': p.id, style: { '--c': p.color }, onclick: () => {
-            this.highlightOwner = this.highlightOwner === p.id ? null : p.id;
-            this.renderCells();
-            this.renderPlayers();
-          } },
-          h('div.avatar', { style: { '--c': p.color } }, p.bankrupt ? '💀' : p.pawn),
-          h('div.pcard-main',
-            h('div.pcard-name', h('span.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
-            h('div.pcard-cash', p.bankrupt ? 'FAILLITE' : fmt(cash)),
-            h('div.pcard-sub', p.bankrupt ? (p.rank ? `Classement : #${p.rank}` : '') : `🏠 ${props} · fortune ${fmt(p.netWorth)}`, ...icons)
-          ),
-          p.id === cur && !st.over ? h('div.pcard-turn', p.id === this.me ? 'À VOUS !' : 'JOUE') : null,
-          p.id === cur && !st.over ? h('div.pcard-timer') : null
-        )
+      const rank = ranking.indexOf(p.id);
+      const isTurn = p.id === cur && !st.over;
+      const cashEl = h('span.pc-cash-value');
+      const card = h('div.pcard.corner.c-' + (slots[k] || 'tl') + (isLight(p.color) ? '.light' : '') + (isTurn ? '.turn' : '') + (p.bankrupt ? '.out' : '') + (p.id === this.me ? '.me' : '') + (p.vip ? '.vip' : '') + (this.highlightOwner === p.id ? '.hl' : ''),
+        { 'data-pid': p.id, style: { '--c': p.color }, title: 'Cliquez pour voir ses propriétés sur le plateau', onclick: () => {
+          this.highlightOwner = this.highlightOwner === p.id ? null : p.id;
+          this.renderCells();
+          this.renderPlayers();
+        } },
+        h('div.pc-face'),
+        h('div.pc-avatar',
+          h('span.pc-pawn', p.bankrupt ? '💀' : p.pawn),
+          p.vip && !p.bankrupt ? h('span.pc-crown', '👑') : null,
+          !p.bankrupt && rank >= 0 && rank < 3 && st.players.length > 1 ? h('span.pc-medal', { title: `${rank + 1}${rank ? 'e' : 'er'} par fortune` }, medals[rank]) : null
+        ),
+        h('div.pc-body',
+          h('div.pc-name', h('span.pc-name-text.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
+          h('div.pc-cash', h('span.pc-coin', '$'), p.bankrupt ? h('span.pc-cash-value', '0') : cashEl),
+          h('div.pc-chips',
+            p.bankrupt ? h('span.pc-chip.off', p.rank ? `Classement #${p.rank}` : 'Éliminé') : [
+              h('span.pc-chip', { title: 'Propriétés' }, `🏠 ${props}`),
+              h('span.pc-chip', { title: 'Fortune totale' }, `💎 ${fmt(p.netWorth)}`),
+            ],
+            ...chips
+          )
+        ),
+        p.bankrupt ? h('div.pc-stamp', 'FAILLITE') : null,
+        isTurn ? h('div.pcard-turn', p.id === this.me ? '🎲 À VOUS !' : 'JOUE…') : null,
+        isTurn ? h('div.pcard-timer') : null
       );
+      this.playersEl.append(card);
+      if (!p.bankrupt) this.animateCash(cashEl, p.id, cash);
     }
+  }
+
+  /** Compteur d'argent qui défile (vert si gain, rouge si dépense). */
+  animateCash(el, pid, target) {
+    const from = this.cashShown[pid] ?? target;
+    if (from === target) {
+      el.textContent = fmt(target);
+      this.cashShown[pid] = target;
+      return;
+    }
+    const box = el.parentElement;
+    if (box) box.classList.add(target > from ? 'up' : 'down');
+    const t0 = performance.now();
+    const dur = 750;
+    const step = (now) => {
+      if (!el.isConnected) return;
+      const t = Math.min(1, (now - t0) / dur);
+      const e = 1 - Math.pow(1 - t, 3);
+      const v = Math.round(from + (target - from) * e);
+      this.cashShown[pid] = v;
+      el.textContent = fmt(v);
+      if (t < 1) requestAnimationFrame(step);
+      else if (box) setTimeout(() => box.classList.remove('up', 'down'), 350);
+    };
+    el.textContent = fmt(from);
+    requestAnimationFrame(step);
   }
 
   // ---------------------------------------------------------------- centre
