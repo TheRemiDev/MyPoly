@@ -99,17 +99,50 @@ export function toggleFullscreen() {
 }
 
 // ---------------------------------------------------------------- accueil
+/** Petite illustration animée du plateau pour l'en-tête de l'accueil. */
+function heroBoard() {
+  const colors = ['#8d6e63', '#4fc3f7', '#ec407a', '#ff9800', '#f44336', '#fdd835', '#66bb6a', '#3f51b5'];
+  const tiles = [];
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 6; c++) {
+      const edge = r === 0 || r === 5 || c === 0 || c === 5;
+      if (!edge) continue;
+      const corner = (r === 0 || r === 5) && (c === 0 || c === 5);
+      const k = tiles.length;
+      tiles.push(h('i.hb-tile' + (corner ? '.corner' : ''), { style: { gridRow: r + 1, gridColumn: c + 1, '--band': colors[k % colors.length], '--d': k * 60 + 'ms' } }, corner ? ['🏁', '🏝️', '🎪', '✈️'][[0, 5, 30, 35].indexOf(r * 6 + c)] || '' : ''));
+    }
+  }
+  return h('div.hero-art2',
+    h('div.hb-glow'),
+    h('div.hb-board', ...tiles,
+      h('div.hb-center', h('span', 'My'), h('b', 'Poly')),
+      h('div.hb-house.h1', '🏠'), h('div.hb-house.h2', '🏨'), h('div.hb-house.h3', '🏠')
+    ),
+    h('div.hb-die.d1', '⚄'), h('div.hb-die.d2', '⚂'),
+    h('div.hb-coin.c1', '$'), h('div.hb-coin.c2', '$'), h('div.hb-coin.c3', '$'),
+    h('div.hb-pawn', '🎩')
+  );
+}
+
 async function homePage() {
-  const roomsBox = h('div.room-list', h('div.muted', 'Chargement…'));
-  const online = h('span.online-count', '…');
-  const nameInput = h('input.input', { placeholder: 'Votre pseudo', maxlength: 16, value: guestName() });
-  const codeInput = h('input.input.code-input', { placeholder: 'CODE', maxlength: 6, autocomplete: 'off' });
+  const guestsOk = !store.site || store.site.guestsAllowed !== false;
+  const needAccount = !store.user && !guestsOk;
+  const roomsBox = h('div.room-list2', h('div.muted', 'Chargement…'));
+  const onlineEl = h('b', '…');
+  const playingEl = h('b', '…');
+  const nameInput = h('input.input.lg', { placeholder: 'Ton pseudo', maxlength: 16, value: guestName() });
+  const codeInput = h('input.input.code-input', { placeholder: 'CODE', maxlength: 6, autocomplete: 'off', 'aria-label': 'Code de salle' });
 
   function saveGuest() {
     if (store.user) return true;
+    if (needAccount) {
+      toast('Le mode invité est désactivé : créez un compte ou connectez-vous pour jouer.', 'warn');
+      navigate('/register');
+      return false;
+    }
     const n = nameInput.value.trim();
     if (n.length < 2) {
-      toast('Choisissez un pseudo (2 caractères minimum) ou connectez-vous.', 'warn');
+      toast('Choisis un pseudo (2 caractères minimum) ou connecte-toi.', 'warn');
       nameInput.focus();
       return false;
     }
@@ -124,12 +157,16 @@ async function homePage() {
     await new Promise((r) => (store.socket.connected ? r() : store.socket.once('connect', r)));
     // Les règles enregistrées par le joueur sont appliquées à chaque nouvelle salle
     const res = await emit('room:create', { settings: savedSettings() || {}, bots });
+    if (res.needAccount) return navigate('/register');
     if (res.error) return toast(res.error, 'error');
     navigate('/r/' + res.code);
   }
   async function join(code) {
     code = (code || codeInput.value).trim().toUpperCase();
-    if (code.length !== 6) return toast('Le code de salle contient 6 caractères.', 'warn');
+    if (code.length !== 6) {
+      codeInput.focus();
+      return toast('Le code de salle contient 6 caractères.', 'warn');
+    }
     if (!saveGuest()) return;
     navigate('/r/' + code);
   }
@@ -139,20 +176,32 @@ async function homePage() {
   async function refresh() {
     const res = await emit('rooms:list');
     if (res.error) return;
-    online.textContent = `${res.online} joueur${res.online > 1 ? 's' : ''} en ligne`;
+    onlineEl.textContent = res.online;
+    playingEl.textContent = res.rooms.filter((r) => r.state !== 'lobby').length;
     roomsBox.innerHTML = '';
-    if (!res.rooms.length) roomsBox.append(h('div.empty', '🌙 Aucune salle publique pour le moment. Créez la vôtre !'));
+    if (!res.rooms.length) {
+      roomsBox.append(h('div.rooms-empty', h('div', '🌙'), h('b', 'Aucune salle publique pour le moment'), h('span.muted', 'Crée la tienne et rends-la publique dans les règles !')));
+    }
     for (const r of res.rooms) {
+      const full = r.players >= r.max;
+      const dots = Array.from({ length: r.max }, (_, k) => h('i' + (k < r.players ? '.on' : '')));
       roomsBox.append(
-        h('div.room-item',
-          h('div.room-item-main',
-            h('div.room-item-name', r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
-            h('div.room-item-meta', `${fmt(r.settings.startMoney)} · ${r.settings.turnTime ? r.settings.turnTime + 's/tour' : 'sans chrono'} · ${r.settings.takeover ? 'rachat' : 'sans rachat'}`)
+        h('div.room-card' + (r.state !== 'lobby' ? '.live' : ''),
+          h('div.room-card-top',
+            h('div.room-card-name', r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
+            h('span.room-card-state', r.state === 'lobby' ? '🟢 En attente' : '🔴 En jeu')
           ),
-          h('div.room-item-players', `${r.players}/${r.max}`),
-          r.state === 'lobby'
-            ? h('button.btn.primary.sm', { onclick: () => join(r.code), disabled: r.players >= r.max }, r.players >= r.max ? 'Pleine' : 'Rejoindre')
-            : h('button.btn.ghost.sm', { onclick: () => join(r.code) }, '👁 Regarder')
+          h('div.room-card-meta',
+            h('span', '💰 ' + fmt(r.settings.startMoney)),
+            h('span', '⏱️ ' + (r.settings.turnTime ? r.settings.turnTime + ' s' : '∞')),
+            h('span', r.settings.takeover ? '🤝 Rachat' : '🚫 Sans rachat')
+          ),
+          h('div.room-card-bottom',
+            h('div.room-dots', dots, h('small', `${r.players}/${r.max}`)),
+            r.state === 'lobby'
+              ? h('button.btn.primary.sm', { onclick: () => join(r.code), disabled: full }, full ? 'Pleine' : 'Rejoindre')
+              : h('button.btn.ghost.sm', { onclick: () => join(r.code) }, '👁 Regarder')
+          )
         )
       );
     }
@@ -161,39 +210,93 @@ async function homePage() {
   const off = on('connect', refresh);
   if (store.socket?.connected) refresh();
 
-  app.append(
-    h('div.page.home',
-      h('section.hero',
-        h('div.hero-text',
-          h('div.hero-badge', '🎲 100% gratuit · sans téléchargement'),
-          h('h1.logo-big', 'My', h('span', 'Poly')),
-          h('p.hero-sub', 'Le jeu de plateau de magnats, en ligne et entre amis. Achetez des villes du monde entier, construisez des hôtels, rachetez les propriétés de vos adversaires et visez le triple monopole !'),
-          h('div.hero-stats', online)
-        ),
-        h('div.hero-art', h('div.hero-dice', h('div.die-face', '⚄'), h('div.die-face.b', '⚂')), h('div.hero-board', ...Array.from({ length: 12 }, (_, i) => h('i', { style: { '--i': i } }))))
-      ),
-      h('section.play-grid',
-        h('div.card.play-card',
-          h('h2', '🎮 Jouer maintenant'),
-          store.user
-            ? h('p.muted', 'Connecté en tant que ', h('b', store.user.name), '. Vos victoires et badges sont enregistrés !')
-            : h('div.field', h('label', 'Pseudo invité'), nameInput, h('small.muted', 'Créez un compte pour enregistrer vos statistiques et badges.')),
-          h('div.btn-row',
-            h('button.btn.primary.lg', { onclick: () => create(0) }, '✨ Créer une salle privée'),
-            h('button.btn.secondary.lg', { onclick: () => create(3) }, '🤖 Partie rapide vs bots')
-          ),
-          h('div.join-row', codeInput, h('button.btn.accent', { onclick: () => join() }, 'Rejoindre'))
-        ),
-        h('div.card.rooms-card', h('div.card-head', h('h2', '🌍 Salles publiques'), h('button.btn.ghost.sm', { onclick: refresh }, '↻')), roomsBox)
-      ),
-      h('section.features',
-        feature('🏗️', 'Construisez vite', 'Achetez un terrain et posez jusqu\'à 3 maisons d\'un coup, puis un hôtel imprenable.'),
-        feature('🤝', 'Rachetez tout', 'Tombez chez un adversaire, payez le loyer… puis rachetez-lui sa ville !'),
-        feature('🎉', 'Festival', 'Organisez le Festival sur votre propriété pour multiplier son loyer.'),
-        feature('🏆', '4 façons de gagner', 'Faillite des adversaires, triple monopole, monopole de ligne ou monopole balnéaire.'),
-        feature('⚙️', 'Vos règles', 'Argent de départ, chrono, rachat, monopoles… tout est configurable.'),
-        feature('🎲', '100% aléatoire', 'Dés et cartes tirés côté serveur par un générateur cryptographique. Rien n\'est scripté.')
+  const u = store.user;
+  const xpCur = u ? (u.level - 1) ** 2 * 100 : 0;
+  const xpNext = u ? u.level ** 2 * 100 : 1;
+  const who = u
+    ? h('div.player-chip',
+        h('span.avatar.lg', { style: { '--c': u.color } }, u.pawn),
+        h('div.player-chip-info',
+          h('div.player-chip-name', 'Salut ', h('b.' + (nameClass(u) || 'plain'), u.name), ' 👋', ...roleTags(u, { level: false })),
+          h('div.player-chip-xp', h('span', `Niveau ${u.level}`), h('div.xp-bar', h('div', { style: { width: Math.min(100, ((u.xp - xpCur) / (xpNext - xpCur)) * 100) + '%' } }))),
+          h('a.small', { href: '/joueur/' + u.id, 'data-link': true }, 'Voir mon profil →')
+        )
       )
+    : needAccount
+      ? h('div.account-needed',
+          h('div', h('b', '🔒 Un compte est nécessaire pour jouer'), h('p.muted', 'C\'est gratuit et ça prend 20 secondes. Tes victoires, badges et statistiques seront enregistrés.')),
+          h('div.btn-row', h('a.btn.primary', { href: '/register', 'data-link': true }, 'Créer un compte'), h('a.btn.ghost', { href: '/login', 'data-link': true }, 'Se connecter'))
+        )
+      : h('div.guest-box',
+          h('label', 'Choisis ton pseudo'),
+          nameInput,
+          h('small.muted', 'Tu joues en invité. ', h('a', { href: '/register', 'data-link': true }, 'Crée un compte'), ' pour garder tes victoires, badges et statistiques.')
+        );
+
+  const playSection = h('section.play2#jouer',
+    h('div.play-main.card',
+      who,
+      h('div.play-tiles',
+        h('button.play-tile.t-create', { onclick: () => create(0), disabled: needAccount },
+          h('span.play-tile-icon', '✨'), h('b', 'Salle privée'), h('small', 'Invite tes amis avec un code ou un lien')),
+        h('button.play-tile.t-bots', { onclick: () => create(3), disabled: needAccount },
+          h('span.play-tile-icon', '🤖'), h('b', 'Partie rapide'), h('small', 'Contre 3 bots, tout de suite')),
+        h('div.play-tile.t-join',
+          h('span.play-tile-icon', '🔑'), h('b', 'Rejoindre une salle'),
+          h('div.join-inline', codeInput, h('button.btn.accent', { onclick: () => join(), disabled: needAccount }, 'Go'))
+        )
+      )
+    ),
+    h('div.rooms2.card',
+      h('div.card-head', h('h2', '🌍 Salles publiques'), h('button.icon-btn', { onclick: refresh, title: 'Actualiser' }, '↻')),
+      roomsBox
+    )
+  );
+
+  app.append(
+    h('div.page.home2',
+      h('section.hero2',
+        h('div.hero2-text',
+          h('span.eyebrow', '🎲 Jeu de plateau multijoueur · 100 % gratuit'),
+          h('h1.hero2-title', 'Achète le monde.', h('br'), h('span', 'Ruine tes amis.')),
+          h('p.hero2-sub', 'Villes du monde entier, maisons qui poussent en 3D, rachats sans pitié et monopoles explosifs. Crée une salle, envoie le code à tes potes, c\'est parti !'),
+          h('div.hero2-cta',
+            h('button.btn.primary.xl', { onclick: () => playSection.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, '▶ Jouer maintenant'),
+            h('a.btn.ghost.xl', { href: '/rules', 'data-link': true }, '📖 Comment jouer')
+          ),
+          h('div.hero2-live',
+            h('span.live-chip', h('i.live-dot'), onlineEl, ' en ligne'),
+            h('span.live-chip', '🎲 ', playingEl, ' partie(s) publique(s) en cours'),
+            h('span.live-chip', '👥 2 à 4 joueurs')
+          )
+        ),
+        heroBoard()
+      ),
+      playSection,
+      h('section.steps',
+        h('h2.section-title', 'Comment ça marche ?'),
+        h('div.steps-grid',
+          step('1', '✨', 'Crée ta salle', 'Un clic, et tu obtiens un code à partager. Choisis les règles : argent, chrono, monopoles…'),
+          step('2', '👥', 'Invite tes amis', 'Envoie le lien. Complète avec des bots si vous n\'êtes pas assez nombreux.'),
+          step('3', '🏆', 'Deviens magnat', 'Achète, construis, rachète… et ruine tout le monde ou décroche un monopole !')
+        )
+      ),
+      h('section.features2',
+        h('h2.section-title', 'Pourquoi tu vas adorer'),
+        h('div.features2-grid',
+          feature('🏗️', 'Construis en 3D', 'Les maisons tombent du ciel, les hôtels sortent de terre, tout s\'anime sous tes yeux.', '#ff8a3d'),
+          feature('🤝', 'Rachète tout', 'Tu tombes chez un adversaire ? Paie… puis rachète-lui sa ville.', '#a66bff'),
+          feature('👑', '4 façons de gagner', 'Faillite, triple monopole, monopole de ligne ou balnéaire.', '#ffd166'),
+          feature('✈️', 'Voyage en avion', 'Depuis l\'Aéroport, saute en parachute sur la case de ton choix.', '#3fa7ff'),
+          feature('⚙️', 'Tes règles', 'Argent, chrono, rachat, monopoles… et enregistre tes réglages préférés.', '#2ecc71'),
+          feature('🎲', '100 % aléatoire', 'Dés et cartes tirés côté serveur. Rien n\'est truqué, rien n\'est scripté.', '#ff5a5f')
+        )
+      ),
+      h('section.cta-band',
+        h('div', h('h2', 'Prêt à devenir le plus grand magnat ?'), h('p', 'Une partie dure 15 à 30 minutes. Sans téléchargement, sur ordinateur comme sur mobile.')),
+        h('button.btn.primary.xl', { onclick: () => playSection.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, '🚀 Lancer une partie')
+      ),
+      siteFooter()
     )
   );
   return () => {
@@ -201,8 +304,18 @@ async function homePage() {
     off();
   };
 }
-function feature(icon, title, text) {
-  return h('div.feature', h('div.feature-icon', icon), h('h3', title), h('p', text));
+function step(n, icon, title, text) {
+  return h('div.step', h('div.step-num', n), h('div.step-icon', icon), h('h3', title), h('p', text));
+}
+function feature(icon, title, text, color = '#3fa7ff') {
+  return h('div.feature2', { style: { '--fc': color } }, h('div.feature2-icon', icon), h('h3', title), h('p', text));
+}
+function siteFooter() {
+  return h('footer.site-footer',
+    h('div.logo', 'My', h('span', 'Poly')),
+    h('nav', h('a', { href: '/rules', 'data-link': true }, 'Règles'), h('a', { href: '/leaderboard', 'data-link': true }, 'Classement'), store.user ? h('a', { href: '/settings', 'data-link': true }, 'Mon compte') : h('a', { href: '/register', 'data-link': true }, 'Créer un compte')),
+    h('small.muted', '© ' + new Date().getFullYear() + ' MyPoly · Jeu gratuit entre amis')
+  );
 }
 
 // ------------------------------------------------------------ authentification
@@ -416,35 +529,60 @@ function settingsPage() {
 // ------------------------------------------------------------------- règles
 function rulesPage() {
   const s = store.meta.defaults;
+  const fmtK = (k) => fmt(k);
+  const sections = [
+    { id: 'tour', icon: '🎲', color: '#3fa7ff', title: 'Le tour de jeu', body: `
+      <p>Lance les deux dés et avance ton pion. Le tirage est <b>100 % aléatoire</b>, effectué par le serveur : personne ne peut tricher.</p>
+      <ul><li>Un <b>double</b> te fait rejouer.</li><li><b>3 doubles</b> d'affilée t'envoient sur l'Île déserte.</li><li>Chaque passage par le <b>Départ</b> rapporte ${fmtK(s.salary)}, le double si tu tombes pile dessus.</li></ul>`, tip: 'Appuie sur Espace pour lancer les dés.' },
+    { id: 'villes', icon: '🏙️', color: '#ff8a3d', title: 'Villes & constructions', body: `
+      <p>Sur une ville libre, achète le terrain et pose jusqu'à <b>3 maisons d'un coup</b>. Reviens dessus pour l'améliorer, jusqu'à l'<b>hôtel</b> (il faut déjà 3 maisons).</p>
+      <ul><li>Au <b>premier tour</b>, 2 maisons maximum par ville.</li><li>Posséder <b>tout un pays</b> double les loyers.</li></ul>`, tip: 'Les hôtels sont intouchables : ni rachat, ni séisme, ni tornade.' },
+    { id: 'rachat', icon: '🤝', color: '#a66bff', title: 'Le rachat', body: `
+      <p>Tu tombes chez un adversaire ? Paie le loyer… puis <b>rachète-lui sa ville</b> pour ${s.takeoverMult} × sa valeur. Ses maisons deviennent les tiennes.</p>` },
+    { id: 'speciales', icon: '✨', color: '#ff2fb3', title: 'Les cases spéciales', body: `
+      <div class="rules-corners">
+        <div><span>🏁</span><b>Départ</b><small>+${fmtK(s.salary)} à chaque passage</small></div>
+        <div><span>🏝️</span><b>Île déserte</b><small>Double, amende de ${fmtK(s.jailFine)} ou 3 tours d'attente</small></div>
+        <div><span>🎪</span><b>Festival</b><small>Loyer ×2 sur la propriété de ton choix (jusqu'à ×5)</small></div>
+        <div><span>✈️</span><b>Aéroport</b><small>Au tour suivant, vole où tu veux (billet ${fmtK(s.travelFee)}, coins non desservis)</small></div>
+        <div><span>❓</span><b>Chance</b><small>30 cartes : bonus, coups durs, téléporteur, tornade…</small></div>
+        <div><span>🏖️</span><b>Stations balnéaires</b><small>Loyer 50K → 110K → 240K → 500K selon le nombre possédé</small></div>
+        <div><span>💸</span><b>Impôts</b><small>${s.taxPercent} % de ta fortune totale</small></div>
+      </div>` },
+    { id: 'dettes', icon: '💸', color: '#ff4757', title: 'Dettes & faillite', body: `
+      <p>Pas assez d'argent ? Le jeu te propose <b>automatiquement la meilleure vente</b> pour payer en perdant le moins possible. Tu peux modifier la sélection, puis tout payer en un clic.</p>
+      <p>Si même en vendant tout tu ne peux pas payer : <b>faillite</b>, et tu es éliminé.</p>` },
+    { id: 'chrono', icon: '⏱️', color: '#2ecc71', title: 'Chrono & absences', body: `
+      <p>Chaque décision a un temps limite (réglable). S'il s'écoule, une action par défaut est jouée. Un joueur déconnecté est joué automatiquement jusqu'à son retour : la partie ne s'arrête jamais.</p>` },
+  ];
+  const wins = [
+    ['💀', 'Faillite générale', 'Sois le dernier joueur encore en jeu.'],
+    ['♟️', 'Triple monopole', 'Possède 3 pays complets.'],
+    ['📏', 'Monopole de ligne', 'Possède toutes les propriétés d\'un côté du plateau.'],
+    ['🏖️', 'Monopole balnéaire', 'Possède les 4 stations balnéaires.'],
+  ];
   app.append(
-    h('div.page.narrow.rules',
-      h('h1.page-title', '📖 Règles de MyPoly'),
-      h('div.card', { html: `
-        <h3>🎯 Objectif</h3>
-        <p>Devenez le magnat le plus puissant ! Vous gagnez si tous vos adversaires font faillite, ou instantanément grâce à un monopole (si activé) :</p>
-        <ul>
-          <li><b>Triple monopole</b> : posséder 3 pays complets.</li>
-          <li><b>Monopole de ligne</b> : posséder toutes les propriétés d'un même côté du plateau.</li>
-          <li><b>Monopole balnéaire</b> : posséder les 4 stations balnéaires.</li>
-        </ul>
-        <h3>🎲 Le tour de jeu</h3>
-        <p>Lancez les deux dés (tirage 100 % aléatoire effectué par le serveur). Un double vous fait rejouer, mais 3 doubles d'affilée vous envoient sur l'Île déserte.</p>
-        <h3>🏙️ Villes & constructions</h3>
-        <p>Sur une ville libre, achetez le terrain et construisez jusqu'à 3 maisons immédiatement. Au premier tour, vous ne pouvez pas dépasser 2 maisons par ville (règle désactivable). Revenez sur votre ville pour l'améliorer : l'hôtel (niveau 4) ne peut être construit que sur une ville ayant déjà 3 maisons. Posséder un pays entier double les loyers.</p>
-        <h3>🤝 Rachat</h3>
-        <p>Après avoir payé le loyer chez un adversaire, vous pouvez lui racheter sa ville (prix = ${s.takeoverMult} × sa valeur). Les hôtels sont <b>intouchables</b> : ni rachat, ni séisme, ni aucune attaque ne peut les toucher.</p>
-        <h3>🏖️ Stations balnéaires</h3>
-        <p>Leur loyer augmente avec le nombre de stations que vous possédez (50K, 110K, 240K, 500K).</p>
-        <h3>🎉 Festival</h3>
-        <p>Choisissez une de vos propriétés : son loyer est doublé. Y organiser à nouveau le Festival augmente le multiplicateur (jusqu'à ×5).</p>
-        <h3>✈️ Aéroport</h3>
-        <p>Au tour suivant, envolez-vous vers la case de votre choix (moyennant un billet, les coins ne sont pas desservis), ou lancez les dés normalement.</p>
-        <h3>🏝️ Île déserte</h3>
-        <p>Pour partir : faites un double, payez l'amende, utilisez un gilet de sauvetage… ou attendez 3 tours.</p>
-        <h3>💸 Dettes & faillite</h3>
-        <p>Si vous ne pouvez pas payer, vendez des propriétés (50 % de leur valeur). Sans ressources suffisantes, c'est la faillite !</p>
-        <h3>⏱️ Chrono</h3>
-        <p>Si le temps de réflexion est écoulé, une action par défaut est jouée. Un joueur déconnecté est joué automatiquement jusqu'à son retour.</p>` })
+    h('div.page.rules2',
+      h('header.page-hero',
+        h('span.eyebrow', '📖 Règles du jeu'),
+        h('h1', 'Deviens le magnat le plus riche'),
+        h('p.muted', 'Tout ce qu\'il faut savoir en 2 minutes. Les règles marquées « réglables » se modifient dans le salon de la partie.'),
+        h('nav.chips', ...sections.map((x) => h('a.chip', { href: '#' + x.id, onclick: (e) => { e.preventDefault(); document.getElementById(x.id).scrollIntoView({ behavior: 'smooth' }); } }, x.icon + ' ' + x.title)))
+      ),
+      h('section.win-grid',
+        h('h2.section-title', '🏆 4 façons de gagner'),
+        h('div.win-cards', wins.map(([i, t, d]) => h('div.win-card', h('div.win-icon', i), h('b', t), h('small', d))))
+      ),
+      ...sections.map((x) => h('section.rule-card#' + x.id, { style: { '--rc': x.color } },
+        h('div.rule-head', h('span.rule-icon', x.icon), h('h2', x.title)),
+        h('div.rule-body', { html: x.body }),
+        x.tip ? h('div.rule-tip', '💡 ' + x.tip) : null
+      )),
+      h('section.cta-band',
+        h('div', h('h2', 'C\'est parti ?'), h('p', 'Crée une salle et invite tes amis en un clic.')),
+        h('a.btn.primary.xl', { href: '/', 'data-link': true }, '🎲 Jouer maintenant')
+      ),
+      siteFooter()
     )
   );
 }
@@ -453,106 +591,237 @@ function rulesPage() {
 async function adminPage() {
   if (!store.user || !store.user.staff) return navigate('/', true);
   const isAdmin = store.user.role === 'admin';
-  const overview = h('div.stat-grid');
-  const usersBox = h('div.admin-users');
-  const roomsBox = h('div.admin-rooms');
-  const auditBox = h('div.admin-audit');
-  const search = h('input.input', { placeholder: 'Rechercher un joueur (pseudo de connexion ou d\'affichage, e-mail)…' });
-  const annText = h('input.input', { placeholder: 'Message à diffuser à tous les joueurs connectés…', maxlength: 300 });
+  const tabs = [
+    ['overview', '📊', 'Vue d\'ensemble'],
+    ['users', '👥', 'Joueurs'],
+    ['rooms', '🎲', 'Salles en direct'],
+    ['site', '⚙️', 'Paramètres du site'],
+    ['announce', '📢', 'Annonce'],
+    ['audit', '📝', 'Journal'],
+  ];
+  let tab = location.hash.slice(1) || 'overview';
+  if (!tabs.some((t) => t[0] === tab)) tab = 'overview';
+  const nav = h('nav.admin-nav');
+  const content = h('div.admin-content');
 
-  async function loadOverview() {
-    const o = await api('/admin/overview');
-    overview.innerHTML = '';
-    overview.append(stat('👥', o.users, 'Comptes'), stat('🆕', o.new24, 'Inscrits (24h)'), stat('👑', o.vips, 'VIP actifs'), stat('⛔', o.banned, 'Bannis'), stat('🎮', o.games, 'Parties jouées'), stat('📅', o.games24, 'Parties (24h)'), stat('🟢', o.live.online, 'Connexions'), stat('🎲', `${o.live.playing}/${o.live.rooms}`, 'Salles en jeu'));
-  }
-  async function patch(id, body, msg) {
+  async function patch(id, body, msg, reload) {
     try {
       await api('/admin/users/' + id, { method: 'PATCH', body });
       toast(msg || 'Modifié ✔', 'success');
-      loadUsers();
+      reload && reload();
     } catch (e) {
       toast(e.message, 'error');
     }
   }
-  async function loadUsers() {
-    const { users } = await api('/admin/users?q=' + encodeURIComponent(search.value));
-    usersBox.innerHTML = '';
-    const table = h('table.table', h('thead', h('tr', ['Joueur', 'E-mail', 'Rôle', 'VIP', 'Parties', 'Vu', 'Actions'].map((t) => h('th', t)))));
-    const body = h('tbody');
-    for (const u of users) {
-      const roleSel = h('select.input.sm', { disabled: !isAdmin, onchange: (e) => patch(u.id, { role: e.target.value }, 'Rôle modifié') }, ['user', 'staff', 'admin'].map((r) => h('option', { value: r, selected: u.role === r }, r)));
-      body.append(
-        h('tr' + (u.banned ? '.banned' : ''),
-          h('td', h('a', { href: '/joueur/' + u.id, 'data-link': true }, u.display_name || u.username), u.display_name ? h('div.small.muted', '@' + u.username) : null, u.banned ? h('span.tag.tag-ban', 'BANNI') : null),
-          h('td.muted', u.email),
-          h('td', roleSel),
-          h('td', u.vip ? (u.vip_until === 0 ? '♾️ À vie' : new Date(u.vip_until).toLocaleDateString('fr-FR')) : '—'),
-          h('td', `${u.wins || 0}/${u.games || 0}`),
-          h('td.muted', u.last_seen ? timeAgo(u.last_seen) : '—'),
-          h('td.actions',
-            h('button.btn.sm.gold', { onclick: () => patch(u.id, { vip: 30 }, '+30 jours VIP') }, '+30j VIP'),
-            h('button.btn.sm.gold', { onclick: () => patch(u.id, { vip: 'lifetime' }, 'VIP à vie') }, 'VIP ♾️'),
-            u.vip ? h('button.btn.sm.ghost', { onclick: () => patch(u.id, { vip: false }, 'VIP retiré') }, 'Retirer VIP') : null,
-            u.banned
-              ? h('button.btn.sm.ghost', { onclick: () => patch(u.id, { banned: false }, 'Débanni') }, 'Débannir')
-              : h('button.btn.sm.danger', { onclick: async () => {
-                  const reason = prompt('Raison du bannissement ?');
-                  if (reason !== null) patch(u.id, { banned: true, reason }, 'Joueur banni');
-                } }, 'Bannir'),
-            u.display_name ? h('button.btn.sm.ghost', { title: 'Remettre le pseudo de connexion comme nom affiché', onclick: () => confirm(`Réinitialiser le pseudo d'affichage « ${u.display_name} » ?`) && patch(u.id, { resetDisplayName: true }, 'Pseudo d\'affichage réinitialisé') }, 'Réinit. pseudo') : null,
-            isAdmin ? h('button.btn.sm.ghost', { onclick: () => confirm(`Réinitialiser les stats de ${u.username} ?`) && patch(u.id, { resetStats: true }, 'Stats réinitialisées') }, 'Reset stats') : null
-          )
+  const panel = (title, sub, ...children) => h('div.admin-panel', h('div.admin-panel-head', h('h2', title), sub ? h('p.muted', sub) : null), ...children);
+
+  const views = {
+    async overview() {
+      const o = await api('/admin/overview');
+      const site = await api('/admin/site');
+      return panel('📊 Vue d\'ensemble', 'L\'activité de MyPoly en un coup d\'œil.',
+        h('div.kpi-grid',
+          kpi('🟢', o.live.online, 'Connectés en ce moment', '#2ecc71'),
+          kpi('🎲', `${o.live.playing} / ${o.live.rooms}`, 'Salles en jeu / ouvertes', '#3fa7ff'),
+          kpi('👥', o.users, 'Comptes', '#a66bff'),
+          kpi('🆕', o.new24, 'Inscrits (24 h)', '#ff8a3d'),
+          kpi('🎮', o.games, 'Parties jouées', '#ff5a5f'),
+          kpi('📅', o.games24, 'Parties (24 h)', '#ffd166'),
+          kpi('👑', o.vips, 'VIP actifs', '#f7b733'),
+          kpi('⛔', o.banned, 'Comptes bannis', '#e74c3c')
+        ),
+        h('div.admin-quick',
+          h('div.quick-card' + (site.guestsAllowed ? '.ok' : '.warn'),
+            h('b', site.guestsAllowed ? '🙋 Mode invité : activé' : '🔒 Mode invité : désactivé'),
+            h('small.muted', site.guestsAllowed ? 'Les visiteurs peuvent jouer sans compte.' : 'Un compte est obligatoire pour jouer.'),
+            h('button.btn.sm.ghost', { onclick: () => go('site') }, 'Modifier')
+          ),
+          h('div.quick-card', h('b', '📢 Prévenir les joueurs'), h('small.muted', 'Avant une mise à jour, par exemple.'), h('button.btn.sm.ghost', { onclick: () => go('announce') }, 'Écrire une annonce'))
         )
       );
+    },
+    async users() {
+      const search = h('input.input.lg', { placeholder: '🔎 Rechercher un joueur (pseudo, pseudo d\'affichage, e-mail)…' });
+      const list = h('div.user-list');
+      async function load() {
+        const { users } = await api('/admin/users?q=' + encodeURIComponent(search.value));
+        list.innerHTML = '';
+        if (!users.length) return list.append(h('div.empty', 'Aucun joueur trouvé.'));
+        for (const u of users) {
+          const roleSel = h('select.input.sm', { disabled: !isAdmin, title: isAdmin ? 'Rôle' : 'Seul un administrateur peut changer les rôles', onchange: (e) => patch(u.id, { role: e.target.value }, 'Rôle modifié', load) },
+            [['user', 'Joueur'], ['staff', 'Staff'], ['admin', 'Admin']].map(([v, l]) => h('option', { value: v, selected: u.role === v }, l)));
+          list.append(
+            h('div.user-row' + (u.banned ? '.banned' : ''),
+              h('div.user-id',
+                h('a.user-name', { href: '/joueur/' + u.id, 'data-link': true }, u.display_name || u.username),
+                h('div.user-sub', '@' + u.username, ' · ', u.email),
+                h('div.user-tags',
+                  u.role === 'admin' ? h('span.tag.tag-admin', '⚡ ADMIN') : u.role === 'staff' ? h('span.tag.tag-staff', '🛡️ STAFF') : null,
+                  u.vip ? h('span.tag.tag-vip', u.vip_until === 0 ? '👑 VIP à vie' : '👑 VIP → ' + new Date(u.vip_until).toLocaleDateString('fr-FR')) : null,
+                  u.banned ? h('span.tag.tag-ban', '⛔ BANNI') : null
+                )
+              ),
+              h('div.user-stats', h('b', `${u.wins || 0} / ${u.games || 0}`), h('small.muted', 'victoires / parties'), h('small.muted', u.last_seen ? 'vu ' + timeAgo(u.last_seen) : 'jamais vu')),
+              h('div.user-actions',
+                roleSel,
+                h('button.btn.sm.gold', { onclick: () => patch(u.id, { vip: 30 }, '+30 jours VIP', load) }, '+30 j VIP'),
+                h('button.btn.sm.gold', { onclick: () => patch(u.id, { vip: 'lifetime' }, 'VIP à vie', load) }, 'VIP ♾️'),
+                u.vip ? h('button.btn.sm.ghost', { onclick: () => patch(u.id, { vip: false }, 'VIP retiré', load) }, 'Retirer VIP') : null,
+                u.banned
+                  ? h('button.btn.sm.ghost', { onclick: () => patch(u.id, { banned: false }, 'Débanni', load) }, 'Débannir')
+                  : h('button.btn.sm.danger', { onclick: async () => {
+                      const reason = prompt('Raison du bannissement ?');
+                      if (reason !== null) patch(u.id, { banned: true, reason }, 'Joueur banni', load);
+                    } }, 'Bannir'),
+                u.display_name ? h('button.btn.sm.ghost', { onclick: () => confirm(`Réinitialiser le pseudo d'affichage « ${u.display_name} » ?`) && patch(u.id, { resetDisplayName: true }, 'Pseudo réinitialisé', load) }, 'Réinit. pseudo') : null,
+                isAdmin ? h('button.btn.sm.ghost', { onclick: () => confirm(`Réinitialiser les stats de ${u.username} ?`) && patch(u.id, { resetStats: true }, 'Stats réinitialisées', load) }, 'Reset stats') : null
+              )
+            )
+          );
+        }
+      }
+      let t;
+      search.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(load, 300);
+      });
+      load();
+      setTimeout(() => search.focus(), 50);
+      return panel('👥 Joueurs', 'Rôles, VIP, bannissements et modération des pseudos.', search, list);
+    },
+    async rooms() {
+      const list = h('div.admin-rooms2');
+      async function load() {
+        const { rooms } = await api('/admin/rooms');
+        list.innerHTML = '';
+        if (!rooms.length) return list.append(h('div.empty', '😴 Aucune salle active pour le moment.'));
+        for (const r of rooms) {
+          list.append(
+            h('div.room-card' + (r.state === 'playing' ? '.live' : ''),
+              h('div.room-card-top', h('div.room-card-name', r.name), h('span.room-card-state', r.state === 'playing' ? `🔴 En jeu · tour ${r.round}` : r.state === 'ended' ? '🏁 Terminée' : '🟢 Salon')),
+              h('div.room-card-meta', h('span', '🔑 ' + r.code), h('span', r.isPublic ? '🌍 Publique' : '🔒 Privée'), h('span', '⏱️ ' + timeAgo(r.createdAt))),
+              h('div.room-players', r.players.map((p) => h('span.chip' + (p.connected ? '' : '.off'), (p.isBot ? '🤖 ' : '') + p.name))),
+              h('div.room-card-bottom',
+                h('a.btn.ghost.sm', { href: '/r/' + r.code, 'data-link': true }, '👁 Observer'),
+                h('button.btn.danger.sm', { onclick: async () => {
+                  if (!confirm('Fermer la salle ' + r.code + ' ? Les joueurs seront renvoyés à l\'accueil.')) return;
+                  await api('/admin/rooms/' + r.code, { method: 'DELETE' });
+                  toast('Salle fermée', 'success');
+                  load();
+                } }, 'Fermer la salle')
+              )
+            )
+          );
+        }
+      }
+      load();
+      return panel('🎲 Salles en direct', 'Observer une partie ou fermer une salle problématique.', h('button.btn.ghost.sm.refresh', { onclick: load }, '↻ Actualiser'), list);
+    },
+    async site() {
+      const cfg = await api('/admin/site');
+      const toggle = h('input', { type: 'checkbox', checked: cfg.guestsAllowed, disabled: !isAdmin });
+      toggle.addEventListener('change', async () => {
+        const want = toggle.checked;
+        if (!want && !confirm('Désactiver le mode invité ?\n\nLes visiteurs sans compte ne pourront plus créer ni rejoindre de salle (les parties en cours continuent).')) {
+          toggle.checked = true;
+          return;
+        }
+        try {
+          const next = await api('/admin/site', { method: 'PATCH', body: { guestsAllowed: want } });
+          store.site = next;
+          toast(next.guestsAllowed ? '🙋 Mode invité activé' : '🔒 Mode invité désactivé : un compte est désormais obligatoire', 'success');
+          render();
+        } catch (e) {
+          toggle.checked = !want;
+          toast(e.message, 'error');
+        }
+      });
+      return panel('⚙️ Paramètres du site', isAdmin ? 'Ces réglages s\'appliquent à tout MyPoly.' : 'Seuls les administrateurs peuvent modifier ces réglages.',
+        h('div.setting-card' + (cfg.guestsAllowed ? '' : '.off'),
+          h('div.setting-icon', cfg.guestsAllowed ? '🙋' : '🔒'),
+          h('div.setting-text',
+            h('b', 'Mode invité'),
+            h('p.muted', cfg.guestsAllowed
+              ? 'Activé : n\'importe qui peut jouer avec un simple pseudo, sans créer de compte.'
+              : 'Désactivé : les joueurs doivent s\'inscrire et se connecter pour créer ou rejoindre une salle.')
+          ),
+          h('label.switch.big', toggle, h('span.slider'))
+        )
+      );
+    },
+    async announce() {
+      const txt = h('textarea.input', { rows: 3, maxlength: 300, placeholder: 'Ex. : « Mise à jour dans 5 minutes, terminez vos parties ! »' });
+      const count = h('small.muted', '0 / 300');
+      txt.addEventListener('input', () => (count.textContent = `${txt.value.length} / 300`));
+      return panel('📢 Annonce globale', 'Le message s\'affiche immédiatement chez tous les joueurs connectés.',
+        txt,
+        h('div.announce-foot', count, h('button.btn.primary', { onclick: async () => {
+          if (!txt.value.trim()) return toast('Écris un message.', 'warn');
+          try {
+            await api('/admin/announce', { body: { text: txt.value } });
+            txt.value = '';
+            count.textContent = '0 / 300';
+            toast('📢 Annonce envoyée', 'success');
+          } catch (e) {
+            toast(e.message, 'error');
+          }
+        } }, '📢 Diffuser'))
+      );
+    },
+    async audit() {
+      const { entries } = await api('/admin/audit');
+      const labels = { role: '🎭 Rôle', vip: '👑 VIP', ban: '⛔ Bannissement', unban: '✅ Débannissement', reset_stats: '🧹 Reset stats', grant_badge: '🎖️ Badge', close_room: '🚪 Salle fermée', announce: '📢 Annonce', display_name: '✏️ Pseudo', reset_display_name: '✏️ Pseudo réinitialisé', site_settings: '⚙️ Paramètres du site' };
+      return panel('📝 Journal d\'audit', 'Les 100 dernières actions du staff et changements sensibles.',
+        entries.length
+          ? h('div.audit-list', entries.map((e) => h('div.audit-item',
+              h('span.audit-when', timeAgo(e.created_at)),
+              h('span.audit-what', labels[e.action] || e.action),
+              h('span.audit-who', h('b', e.actor || '?'), e.target ? ' → ' + e.target : ''),
+              e.details ? h('code.audit-details', e.details) : null
+            )))
+          : h('div.empty', 'Rien pour le moment.')
+      );
+    },
+  };
+
+  function go(name) {
+    tab = name;
+    history.replaceState({}, '', '/admin#' + name);
+    render();
+  }
+  async function render() {
+    nav.innerHTML = '';
+    nav.append(...tabs.map(([k, i, l]) => h('button.admin-tab' + (k === tab ? '.active' : ''), { onclick: () => go(k) }, h('span', i), l)));
+    content.innerHTML = '';
+    content.append(h('div.admin-loading', h('div.spinner')));
+    try {
+      const el = await views[tab]();
+      content.innerHTML = '';
+      content.append(el);
+    } catch (e) {
+      content.innerHTML = '';
+      content.append(h('div.empty', '😵 ' + e.message));
     }
-    table.append(body);
-    usersBox.append(h('div.table-wrap', table));
   }
-  async function loadRooms() {
-    const { rooms } = await api('/admin/rooms');
-    roomsBox.innerHTML = '';
-    if (!rooms.length) return roomsBox.append(h('div.empty', 'Aucune salle active.'));
-    for (const r of rooms)
-      roomsBox.append(
-        h('div.room-item',
-          h('div.room-item-main', h('div.room-item-name', `${r.code} · ${r.name}`), h('div.room-item-meta', `${r.state}${r.round ? ' · tour ' + r.round : ''} · ${r.players.map((p) => p.name + (p.connected ? '' : ' (hors ligne)')).join(', ')}`)),
-          h('a.btn.ghost.sm', { href: '/r/' + r.code, 'data-link': true }, '👁'),
-          h('button.btn.danger.sm', { onclick: async () => { if (confirm('Fermer la salle ' + r.code + ' ?')) { await api('/admin/rooms/' + r.code, { method: 'DELETE' }); loadRooms(); } } }, 'Fermer')
-        )
-      );
-  }
-  async function loadAudit() {
-    const { entries } = await api('/admin/audit');
-    auditBox.innerHTML = '';
-    for (const e of entries) auditBox.append(h('div.audit-row', h('span.muted', timeAgo(e.created_at)), ` ${e.actor || '?'} → ${e.action} ${e.target || ''} `, h('span.muted', e.details || '')));
-  }
-  let t;
-  search.addEventListener('input', () => {
-    clearTimeout(t);
-    t = setTimeout(loadUsers, 300);
-  });
   app.append(
-    h('div.page.admin',
-      h('h1.page-title', '🛡️ Panneau d\'administration'),
-      overview,
-      h('div.card', h('h2', '📢 Annonce globale'), h('div.join-row', annText, h('button.btn.primary', { onclick: async () => { try { await api('/admin/announce', { body: { text: annText.value } }); annText.value = ''; toast('Annonce envoyée', 'success'); } catch (e) { toast(e.message, 'error'); } } }, 'Diffuser'))),
-      h('div.card', h('h2', '👥 Joueurs'), search, usersBox),
-      h('div.card', h('div.card-head', h('h2', '🎲 Salles actives'), h('button.btn.ghost.sm', { onclick: loadRooms }, '↻')), roomsBox),
-      h('div.card', h('h2', '📝 Journal d\'audit'), auditBox)
+    h('div.page.admin2',
+      h('header.admin-head', h('div', h('span.eyebrow', isAdmin ? '⚡ Administrateur' : '🛡️ Staff'), h('h1', 'Administration')), h('a.btn.ghost', { href: '/', 'data-link': true }, '← Retour au jeu')),
+      h('div.admin-layout', nav, content)
     )
   );
-  loadOverview();
-  loadUsers();
-  loadRooms();
-  loadAudit();
+  render();
+}
+function kpi(icon, value, label, color) {
+  return h('div.kpi', { style: { '--kc': color } }, h('span.kpi-icon', icon), h('div', h('b', String(value)), h('small', label)));
 }
 
 // ------------------------------------------------------------------ démarrage
 async function boot() {
   try {
-    const [meta, me] = await Promise.all([api('/meta'), api('/auth/me')]);
+    const [meta, me, site] = await Promise.all([api('/meta'), api('/auth/me'), api('/site').catch(() => ({ guestsAllowed: true }))]);
     store.meta = meta;
     store.user = me.user;
+    store.site = site;
   } catch (e) {
     app.innerHTML = '<div class="page center"><h1>😵</h1><p>Impossible de joindre le serveur. Réessayez dans un instant.</p></div>';
     return;

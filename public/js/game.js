@@ -215,6 +215,12 @@ class RoomView {
     const res = await emit('room:join', { code: this.code });
     if (res.error) {
       this.root.innerHTML = '';
+      if (res.needAccount) {
+        sessionStorage.setItem('mp_after_login', '/r/' + this.code);
+        this.root.append(h('div.page.center', h('h1', '🔒'), h('h2', 'Un compte est nécessaire pour jouer'), h('p.muted', res.error),
+          h('div.btn-row.center', h('a.btn.primary.lg', { href: '/register', 'data-link': true }, 'Créer un compte'), h('a.btn.ghost.lg', { href: '/login', 'data-link': true }, 'Se connecter'))));
+        return;
+      }
       this.root.append(h('div.page.center', h('h1', '🚪'), h('h2', res.error), h('a.btn.primary', { href: '/', 'data-link': true }, 'Retour à l\'accueil')));
     }
   }

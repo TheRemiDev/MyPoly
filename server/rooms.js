@@ -5,6 +5,7 @@ const { sanitize, DEFAULTS } = require('./game/settings');
 const R = require('./game/random');
 const U = require('./users');
 const { userFromToken, parseCookie, COOKIE } = require('./auth');
+const site = require('./site');
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const BOT_NAMES = ['Robo Rita', 'Capitaine Cash', 'Baron Béton', 'Lady Loyer', 'Dr. Dé', 'Mme Monopole', 'Sir Spéculo', 'Zara Zillion', 'Max Magnat', 'Polly Bot'];
@@ -325,7 +326,16 @@ function attach(server) {
       reply(cb, { rooms: list, online: io.engine.clientsCount });
     });
 
+    const guestBlocked = (cb) => {
+      if (ident.guest && !site.get().guestsAllowed) {
+        reply(cb, { error: 'Le mode invité est désactivé : connectez-vous ou créez un compte pour jouer.', needAccount: true });
+        return true;
+      }
+      return false;
+    };
+
     socket.on('room:create', (data, cb) => {
+      if (guestBlocked(cb)) return;
       if (rooms.size >= MAX_ROOMS) return reply(cb, { error: 'Le serveur est plein, réessayez plus tard.' });
       const room = createRoom(ident, data && data.settings);
       if (data && data.bots) for (let i = 0; i < Math.min(5, Number(data.bots) || 0); i++) addBot(room);
@@ -339,6 +349,7 @@ function attach(server) {
     });
 
     socket.on('room:join', (data, cb) => {
+      if (guestBlocked(cb)) return;
       const code = String((data && data.code) || '').toUpperCase().trim();
       const room = rooms.get(code);
       if (!room) return reply(cb, { error: 'Salle introuvable. Vérifiez le code.' });
@@ -531,6 +542,18 @@ function adminClose(code, reason) {
   deleteRoom(room, reason || 'Salle fermée par le staff.');
   return true;
 }
+/** Mode invité désactivé : les invités sont retirés des salons (pas des parties en cours). */
+function kickGuests() {
+  if (!io) return;
+  for (const s of io.sockets.sockets.values()) {
+    const id = s.data.ident;
+    if (!id || !id.guest || !s.data.room) continue;
+    const room = rooms.get(s.data.room);
+    if (room && room.state === 'playing' && room.game && room.game.player(id.key)) continue;
+    s.emit('room:closed', { reason: 'Le mode invité a été désactivé : créez un compte pour continuer à jouer.' });
+  }
+}
+
 function announce(text) {
   if (io) io.emit('announce', { text: cleanText(text, 300) });
 }
@@ -540,4 +563,4 @@ function counts() {
   return { rooms: rooms.size, playing, online: io ? io.engine.clientsCount : 0 };
 }
 
-module.exports = { attach, adminList, adminClose, announce, counts, DEFAULTS };
+module.exports = { attach, adminList, adminClose, announce, counts, kickGuests, DEFAULTS };

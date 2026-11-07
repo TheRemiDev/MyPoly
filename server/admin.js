@@ -3,6 +3,7 @@ const express = require('express');
 const db = require('./db');
 const U = require('./users');
 const rooms = require('./rooms');
+const site = require('./site');
 const { requireAuth, requireStaff } = require('./auth');
 
 const router = express.Router();
@@ -84,6 +85,16 @@ router.patch('/users/:id', (req, res) => {
     audit(actor, 'grant_badge', target.id, { badge: body.grantBadge });
   }
   res.json({ ok: true });
+});
+
+// Réglages du site (administrateurs uniquement pour la modification)
+router.get('/site', (_req, res) => res.json(site.get()));
+router.patch('/site', (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Réservé aux administrateurs.' });
+  const next = site.set(req.body || {});
+  audit(req.user, 'site_settings', null, req.body || {});
+  if (!next.guestsAllowed) rooms.kickGuests();
+  res.json(next);
 });
 
 router.get('/rooms', (_req, res) => res.json({ rooms: rooms.adminList() }));

@@ -12,6 +12,7 @@ const auth = require('./auth');
 const U = require('./users');
 const rooms = require('./rooms');
 const admin = require('./admin');
+const site = require('./site');
 const board = require('./game/board');
 const { CARDS } = require('./game/cards');
 const { DEFAULTS, LIMITS } = require('./game/settings');
@@ -70,6 +71,12 @@ app.get('/api/profile/:key', (req, res) => {
 
 app.get('/api/leaderboard', (req, res) => {
   res.json({ players: U.leaderboard(String(req.query.sort || 'rating')) });
+});
+
+// Réglages publics du site (mode invité…)
+app.get('/api/site', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(site.get());
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
