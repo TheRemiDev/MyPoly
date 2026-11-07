@@ -130,6 +130,21 @@ class Game {
   ownsCountry(pid, country) {
     return COUNTRY_CELLS[country].every((i) => this.props[i].owner === pid);
   }
+  /** Pays d'une ville et indication de monopole (null si ce n'est pas une ville). */
+  countryOf(i) {
+    return CELLS[i].type === 'city' ? CELLS[i].country : null;
+  }
+  announceMonopoly(p, country) {
+    const ct = COUNTRIES.find((c) => c.id === country);
+    this.emit({ t: 'monopoly', pid: p.id, country, cells: COUNTRY_CELLS[country] }, 3000);
+    this.say(`👑 MONOPOLE ! ${p.name} possède tout le pays ${ct.flag} ${ct.name}${this.settings.countryDoubleRent ? ' : loyers ×2' : ''} !`, p.id);
+  }
+  announceMonopolyLost(p, country) {
+    const ct = COUNTRIES.find((c) => c.id === country);
+    this.emit({ t: 'monopolyLost', pid: p.id, country, cells: COUNTRY_CELLS[country] }, 600);
+    this.say(`💔 ${p.name} perd son monopole ${ct.flag} ${ct.name}.`, p.id);
+  }
+
   rent(i) {
     const c = CELLS[i];
     const s = this.props[i];
@@ -360,11 +375,14 @@ class Game {
   sell(p, i) {
     const v = this.sellValue(i);
     const level = this.props[i].level;
+    const country = this.countryOf(i);
+    const hadMono = country && this.ownsCountry(p.id, country);
     this.props[i] = { owner: null, level: 0 };
     if (this.festival.cell === i) this.festival = { cell: null, mult: 1 };
     // Évènement émis avant le gain pour que l'animation de démolition précède l'argent
     this.emit({ t: 'sell', pid: p.id, cell: i, level, value: v }, 1300);
     this.money(p, v, 'sell');
+    if (hadMono) this.announceMonopolyLost(p, country);
     this.say(`${p.name} vend ${CELLS[i].name} pour ${fmt(v)}.`, p.id);
   }
   bankrupt(p, creditor) {
@@ -412,8 +430,10 @@ class Game {
         if (this.settings.festival && this.owned(p).length) return this.setPhase('festival');
         return this.endAction();
       case 'tax': {
-        const amount = Math.round((this.netWorth(p) * this.settings.taxPercent) / 100);
-        this.say(`${p.name} paie ${fmt(amount)} d'impôts.`, p.id);
+        const worth = this.netWorth(p);
+        const amount = Math.round((worth * this.settings.taxPercent) / 100);
+        this.emit({ t: 'tax', pid: p.id, cell: i, amount, percent: this.settings.taxPercent, worth, canPay: p.cash >= amount }, 1600);
+        this.say(`💸 ${p.name} paie ${fmt(amount)} d'impôts (${this.settings.taxPercent} % de sa fortune de ${fmt(worth)}).`, p.id);
         return this.charge(p, amount, null, 'tax', () => this.endAction());
       }
       case 'chance':
@@ -536,14 +556,16 @@ class Game {
         p.coupon = true;
         return this.endAction();
       case 'quake': {
-        const targets = others.filter((o) => this.owned(o).some((i) => this.props[i].level > 0));
+        // Les hôtels sont intouchables : seules les villes avec 1 à 3 maisons sont visées
+        const hit = (i) => this.props[i].level > 0 && this.props[i].level < 4;
+        const targets = others.filter((o) => this.owned(o).some(hit));
         if (!targets.length) {
-          this.say('Le séisme ne touche aucun bâtiment.');
+          this.say('Le séisme ne touche aucun bâtiment (les hôtels sont protégés).');
           return this.endAction();
         }
         const victim = R.pick(targets);
         const best = this.owned(victim)
-          .filter((i) => this.props[i].level > 0)
+          .filter(hit)
           .sort((a, b) => this.props[b].level - this.props[a].level || CELLS[b].price - CELLS[a].price)[0];
         this.props[best].level--;
         this.emit({ t: 'quake', pid: victim.id, by: p.id, cell: best, level: this.props[best].level }, 1600);
@@ -636,6 +658,7 @@ class Game {
         if (level) p.stats.built += level;
         this.emit({ t: 'buy', pid: p.id, cell: i, level }, 500);
         this.say(`${p.name} achète ${c.name}${level ? ` avec ${level} maison${level > 1 ? 's' : ''}` : ''} (${fmt(cost)}).`, p.id);
+        if (c.type === 'city' && this.ownsCountry(p.id, c.country)) this.announceMonopoly(p, c.country);
         return this.endAction();
       }
       case 'build': {
@@ -662,10 +685,14 @@ class Game {
         const price = this.takeoverPrice(i);
         if (p.cash < price) return { error: 'Fonds insuffisants.' };
         const owner = this.player(s.owner);
+        const country = this.countryOf(i);
+        const ownerHadMono = country && this.ownsCountry(owner.id, country);
         this.transfer(p, owner, price, 'takeover');
         s.owner = p.id;
         p.stats.takeovers++;
         this.emit({ t: 'takeover', pid: p.id, from: owner.id, cell: i }, 700);
+        if (ownerHadMono) this.announceMonopolyLost(owner, country);
+        if (country && this.ownsCountry(p.id, country)) this.announceMonopoly(p, country);
         this.say(`🤝 ${p.name} rachète ${CELLS[i].name} à ${owner.name} pour ${fmt(price)} !`, p.id);
         const w = this.monopolyWin(p);
         if (w) return this.finish(p, w);
@@ -693,6 +720,13 @@ class Game {
           this.bankrupt(p, to);
           this.afterDebt = null;
           return this.endAction();
+        }
+        if (type === 'sellMany') {
+          const list = Array.isArray(d.cells) ? [...new Set(d.cells.map(Number))] : [];
+          if (!list.length) return { error: 'Sélectionnez au moins une propriété.' };
+          if (list.some((i) => !this.props[i] || this.props[i].owner !== p.id)) return { error: 'Propriété invalide.' };
+          for (const i of list) this.sell(p, i);
+          return this.checkDebt(p);
         }
         if (type !== 'sell') return { error: 'Action invalide.' };
         const i = Number(d.cell);
@@ -884,6 +918,11 @@ class Game {
     }
     if (this.phase === 'takeover') pending.owner = this.props[pending.cell].owner;
     if (this.phase === 'jail') pending.fine = this.settings.jailFine;
+    if (this.phase === 'debt') {
+      pending.cash = p.cash;
+      pending.missing = Math.max(0, pending.amount - p.cash);
+      pending.toName = pending.to ? (this.player(pending.to) || {}).name : null;
+    }
     if (this.phase === 'travel') pending.fee = this.settings.travelFee;
     return pending;
   }

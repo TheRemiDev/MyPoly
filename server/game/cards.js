@@ -15,7 +15,7 @@ const CARDS = [
   { id: 'repairs', icon: '🛠️', title: 'Travaux', text: 'Payez 20K par maison et 80K par hôtel.' },
   { id: 'shield', icon: '🛡️', title: 'Bouclier', text: 'Votre prochain loyer est annulé.' },
   { id: 'coupon', icon: '🏷️', title: 'Coupon', text: 'Votre prochain loyer est réduit de moitié.' },
-  { id: 'quake', icon: '🌋', title: 'Séisme', text: 'La propriété la plus développée d\'un adversaire au hasard perd un niveau.' },
+  { id: 'quake', icon: '🌋', title: 'Séisme', text: 'La ville la plus développée d\'un adversaire au hasard perd une maison. Les hôtels sont intouchables.' },
   { id: 'nearest_resort', icon: '🏖️', title: 'Vacances', text: 'Avancez jusqu\'à la prochaine station balnéaire.' },
   { id: 'go_top', icon: '🗼', title: 'Week-end de luxe', text: 'Avancez jusqu\'à Paris.' },
   { id: 'lottery', icon: '🎰', title: 'Loterie', text: 'Vous gagnez entre 10K et 300K (tirage aléatoire).' },

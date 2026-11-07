@@ -431,7 +431,7 @@ function rulesPage() {
         <h3>🏙️ Villes & constructions</h3>
         <p>Sur une ville libre, achetez le terrain et construisez jusqu'à 3 maisons immédiatement. Au premier tour, vous ne pouvez pas dépasser 2 maisons par ville (règle désactivable). Revenez sur votre ville pour l'améliorer : l'hôtel (niveau 4) ne peut être construit que sur une ville ayant déjà 3 maisons. Posséder un pays entier double les loyers.</p>
         <h3>🤝 Rachat</h3>
-        <p>Après avoir payé le loyer chez un adversaire, vous pouvez lui racheter sa ville (prix = ${s.takeoverMult} × sa valeur). Les hôtels ne peuvent pas être rachetés.</p>
+        <p>Après avoir payé le loyer chez un adversaire, vous pouvez lui racheter sa ville (prix = ${s.takeoverMult} × sa valeur). Les hôtels sont <b>intouchables</b> : ni rachat, ni séisme, ni aucune attaque ne peut les toucher.</p>
         <h3>🏖️ Stations balnéaires</h3>
         <p>Leur loyer augmente avec le nombre de stations que vous possédez (50K, 110K, 240K, 500K).</p>
         <h3>🎉 Festival</h3>

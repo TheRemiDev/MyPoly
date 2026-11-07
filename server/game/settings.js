@@ -2,7 +2,7 @@
 
 /** Règles configurables d'une salle. */
 const DEFAULTS = {
-  maxPlayers: 4, // 2 - 6
+  maxPlayers: 4, // 2 - 4 (un joueur par coin de l'écran)
   startMoney: 2000, // en K
   salary: 300, // gain au passage du Départ
   turnTime: 30, // secondes par décision (0 = illimité)
@@ -27,7 +27,7 @@ const DEFAULTS = {
 };
 
 const LIMITS = {
-  maxPlayers: [2, 6],
+  maxPlayers: [2, 4],
   startMoney: [500, 10000],
   salary: [0, 2000],
   turnTime: [0, 300],

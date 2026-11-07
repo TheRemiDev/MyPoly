@@ -11,7 +11,9 @@ const HALF = 5; // le plateau va de -5 à 5
 const TILE_H = 0.14;
 const BOARD_TOP = 0.2;
 const TOP = BOARD_TOP + TILE_H; // surface des cases
-const PX = 240; // résolution des textures (pixels par unité)
+// Résolution des textures (pixels par unité de plateau), adaptée à l'écran pour
+// que les textes des cases restent nets, y compris en zoom et sur écran Retina/4K.
+const PX = Math.round(Math.min(512, Math.max(320, (Math.min(screen.width, screen.height) * Math.min(window.devicePixelRatio || 1, 3)) / 3.6)));
 
 // ------------------------------------------------------------------ helpers
 function gridPos(i) {
@@ -161,7 +163,8 @@ export class Board3D {
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }));
     this.mobile = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.mobile ? 1.5 : 2));
+    // Densité de pixels réelle de l'écran (plafonnée à 2) : rendu net sur Retina et mobiles
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     r.toneMapping = THREE.NeutralToneMapping;
@@ -282,7 +285,7 @@ export class Board3D {
 
   buildCenter() {
     // Art du centre : océan, globe, boussole, logo
-    const S = 1400;
+    const S = 2048;
     const cv = makeCanvas(S, S);
     const g = cv.getContext('2d');
     const bg = g.createRadialGradient(S * 0.5, S * 0.45, 50, S * 0.5, S * 0.5, S * 0.75);
@@ -447,28 +450,29 @@ export class Board3D {
   }
 
   emojiSprite(e, scale, ring = null) {
-    const c = makeCanvas(160, 160);
+    const c = makeCanvas(256, 256);
     const g = c.getContext('2d');
     if (ring) {
       g.fillStyle = '#ffffff';
       g.beginPath();
-      g.arc(80, 80, 72, 0, Math.PI * 2);
+      g.arc(128, 128, 115, 0, Math.PI * 2);
       g.fill();
-      g.lineWidth = 12;
+      g.lineWidth = 19;
       g.strokeStyle = ring;
       g.stroke();
     }
-    emoji(g, e, 80, 86, ring ? 84 : 118);
+    emoji(g, e, 128, 138, ring ? 134 : 190);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = this.maxAniso;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
     s.scale.set(scale, scale, 1);
     return s;
   }
   textSprite(text, { bg = '#ff00aa', fg = '#fff', size = 64, scale = 0.6 } = {}) {
-    const c = makeCanvas(320, 120);
+    const c = makeCanvas(640, 240);
     const g = c.getContext('2d');
-    pill(g, text, 160, 60, size, bg, fg);
+    pill(g, text, 320, 120, size * 2, bg, fg);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
@@ -574,6 +578,7 @@ export class Board3D {
         t.tex.needsUpdate = true;
       }
       t.selectable = view.selectable.has(i);
+      t.picked = view.picked ? view.picked.has(i) : false;
       t.dimmed = view.dimmed.has(i);
       this.syncBuildings(i, owner, pr ? pr.level : 0);
       this.syncFestival(i, fest);
@@ -1062,16 +1067,21 @@ export class Board3D {
   }
 
   /** Recadre brièvement la caméra sur une case pour montrer l'action. */
-  async focus(i, hold = 700, zoom = 1.55) {
+  focus(i, hold = 700, zoom = 1.55) {
+    const b = cellBox(i);
+    return this.focusPoint(b.cx * 0.7, b.cz * 0.7 + 0.15, zoom, hold);
+  }
+
+  /** Recadre la caméra sur un point du plateau, puis revient à la vue du joueur. */
+  async focusPoint(x, z, zoom = 1.55, hold = 700) {
     if (this.dragging) return;
     const tok = ++this.focusTok;
     if (!this.focusHome) this.focusHome = { target: this.target.clone(), zoom: this.view.zoom };
-    const b = cellBox(i);
     const fromT = this.target.clone();
     const fromZ = this.view.zoom;
-    const toT = new THREE.Vector3(b.cx * 0.7, 0, b.cz * 0.7 + 0.15);
+    const toT = new THREE.Vector3(x, 0, z);
     const toZ = Math.max(this.focusHome.zoom, zoom);
-    await this.tween(450, (t) => {
+    await this.tween(500, (t) => {
       if (tok !== this.focusTok) return;
       const e = ease.inOut(t);
       this.target.lerpVectors(fromT, toT, e);
@@ -1083,7 +1093,7 @@ export class Board3D {
     const home = this.focusHome;
     const t1 = this.target.clone();
     const z1 = this.view.zoom;
-    await this.tween(550, (t) => {
+    await this.tween(600, (t) => {
       if (tok !== this.focusTok) return;
       const e = ease.inOut(t);
       this.target.lerpVectors(t1, home.target, e);
@@ -1091,6 +1101,163 @@ export class Board3D {
       this.fitCamera();
     });
     if (tok === this.focusTok) this.focusHome = null;
+  }
+
+  // ------------------------------------------------------------ monopole
+  /** Grand titre doré (sprite) : « MONOPOLE ! ». */
+  bigTitle(text, color) {
+    const c = makeCanvas(1024, 300);
+    const g = c.getContext('2d');
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `900 190px ${FONT}`;
+    g.lineJoin = 'round';
+    g.shadowColor = 'rgba(0,0,0,.45)';
+    g.shadowBlur = 24;
+    g.shadowOffsetY = 12;
+    g.lineWidth = 34;
+    g.strokeStyle = shade(color, -0.35);
+    g.strokeText(text, 512, 160);
+    g.shadowColor = 'transparent';
+    g.lineWidth = 14;
+    g.strokeStyle = '#ffffff';
+    g.strokeText(text, 512, 160);
+    const lg = g.createLinearGradient(0, 70, 0, 250);
+    lg.addColorStop(0, '#fff6c9');
+    lg.addColorStop(0.45, '#ffd166');
+    lg.addColorStop(1, '#f39c12');
+    g.fillStyle = lg;
+    g.fillText(text, 512, 160);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false }));
+    sp.renderOrder = 30;
+    return sp;
+  }
+
+  /** Fusée qui monte puis éclate en feu d'artifice. */
+  rocket(x, z, color, delay, tx = x, tz = z) {
+    const trailMat = new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), trailMat);
+    head.visible = false;
+    this.scene.add(head);
+    const top = TOP + 1.2 + Math.random() * 0.8;
+    const dx = (tx - x) * 0.55 + (Math.random() - 0.5) * 1.2;
+    const dz = (tz - z) * 0.55 + (Math.random() - 0.5) * 0.8;
+    return this.tween(520, (t) => {
+      head.visible = true;
+      const e = ease.out(t);
+      head.position.set(x + dx * e, TOP + 0.1 + (top - TOP) * e, z + dz * e);
+      head.material.opacity = 1 - t * 0.3;
+    }, delay).then(() => {
+      this.scene.remove(head);
+      this.burst(head.position.clone(), color);
+      if (this.cb.onFirework) this.cb.onFirework();
+    });
+  }
+  burst(pos, color) {
+    const palette = [color, '#ffd166', '#ffffff', '#ff5a5f', '#3fa7ff', '#2ecc71', '#ff2fb3'];
+    const geo = new THREE.SphereGeometry(0.035, 6, 5);
+    const mats = palette.slice(0, 4).concat([palette[4 + Math.floor(Math.random() * 3)]]).map((c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const n = 46;
+    const speed = 1.5 + Math.random() * 0.6;
+    for (let k = 0; k < n; k++) {
+      const m = new THREE.Mesh(geo, mats[k % mats.length]);
+      // Direction répartie sur une sphère
+      const u = Math.random() * 2 - 1;
+      const th = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(1 - u * u);
+      const v = new THREE.Vector3(r * Math.cos(th), u, r * Math.sin(th)).multiplyScalar(speed * (0.75 + Math.random() * 0.35));
+      m.position.copy(pos);
+      this.scene.add(m);
+      this.tween(1250, (t) => {
+        m.position.set(pos.x + v.x * t, pos.y + v.y * t - 1.1 * t * t, pos.z + v.z * t);
+        m.material.opacity = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
+        m.scale.setScalar(1.2 - t * 0.7);
+      }).then(() => this.scene.remove(m));
+    }
+    // Éclair central
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    flash.position.copy(pos);
+    this.scene.add(flash);
+    this.tween(300, (t) => {
+      flash.scale.setScalar(1 + t * 2.5);
+      flash.material.opacity = 1 - t;
+    }).then(() => this.scene.remove(flash));
+  }
+
+  /**
+   * Célébration d'un monopole : zoom sur le pays, cases dorées, feux d'artifice
+   * et grand titre « MONOPOLE ! ».
+   */
+  async celebrate(cells, color, subtitle) {
+    const boxes = cells.map(cellBox);
+    const minX = Math.min(...boxes.map((b) => b.x0));
+    const maxX = Math.max(...boxes.map((b) => b.x1));
+    const minZ = Math.min(...boxes.map((b) => b.z0));
+    const maxZ = Math.max(...boxes.map((b) => b.z1));
+    const cx = (minX + maxX) / 2;
+    const cz = (minZ + maxZ) / 2;
+    const span = Math.max(maxX - minX, maxZ - minZ);
+    // Scène placée entre le pays et le centre du plateau : le pays, le titre et
+    // les feux d'artifice restent tous dans le cadre, quel que soit le côté
+    const sx = cx * 0.55;
+    const sz = cz * 0.55;
+    this.focusPoint(sx, sz + 0.3, Math.min(1.5, 4.8 / Math.max(2, span)), 3300);
+    // Cases dorées + étincelles
+    cells.forEach((i, k) => {
+      const t = this.tiles[i];
+      this.wait(250 + k * 120).then(() => {
+        t.flash = new THREE.Color('#ffd166');
+        t.flashT = 1.6;
+        t.lift = 0.18;
+        this.sparkle(new THREE.Vector3(t.box.cx, 0, t.box.cz), 0xffd166, 14);
+      });
+    });
+    // Anneau doré qui entoure le pays
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 64), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(cx, TOP + 0.03, cz);
+    this.scene.add(ring);
+    this.tween(1400, (t) => {
+      ring.scale.setScalar(1 + ease.out(t) * span * 2.2);
+      ring.material.opacity = 1 - t;
+    }, 300).then(() => this.scene.remove(ring));
+    // Titre « MONOPOLE ! » + sous-titre (pays, loyers ×2)
+    const title = this.bigTitle('MONOPOLE !', color);
+    const sub = this.textSprite(subtitle, { bg: color, fg: '#ffffff', size: 54, scale: 0.42 });
+    sub.material.depthTest = false;
+    sub.renderOrder = 31;
+    const y = TOP + 1.05;
+    title.position.set(sx, y, sz);
+    sub.position.set(sx, y - 0.78, sz);
+    const tw = 2.9;
+    const th = tw * (300 / 1024);
+    const sw = sub.scale.x;
+    const sh = sub.scale.y;
+    title.scale.set(0.01, 0.01, 1);
+    sub.scale.set(0.01, 0.01, 1);
+    this.scene.add(title, sub);
+    this.tween(3300, (t) => {
+      const pop = t < 0.14 ? ease.back(t / 0.14) : 1;
+      const wobble = 1 + Math.sin(t * 22) * 0.03 * (1 - t);
+      title.scale.set(tw * pop * wobble, th * pop * wobble, 1);
+      title.material.rotation = Math.sin(t * 9) * 0.04 * (1 - t);
+      const pop2 = t < 0.2 ? 0 : t < 0.32 ? ease.back((t - 0.2) / 0.12) : 1;
+      sub.scale.set(sw * pop2, sh * pop2, 1);
+      title.position.y = y + Math.sin(t * Math.PI * 3) * 0.05 + (t > 0.8 ? (t - 0.8) * 1.5 : 0);
+      sub.position.y = y - 0.78 + (t > 0.8 ? (t - 0.8) * 1.5 : 0);
+      const fade = t > 0.82 ? 1 - (t - 0.82) / 0.18 : 1;
+      title.material.opacity = fade;
+      sub.material.opacity = fade;
+    }, 200).then(() => this.scene.remove(title, sub));
+    // Feux d'artifice : 3 salves depuis chaque ville du pays
+    const shots = [];
+    for (let wave = 0; wave < 3; wave++) {
+      boxes.forEach((b, k) => shots.push(this.rocket(b.cx, b.cz, color, 350 + wave * 650 + k * 140 + Math.random() * 120, sx, sz)));
+    }
+    await Promise.all(shots);
+    await this.wait(500);
   }
 
   removeObj(obj) {
@@ -1373,6 +1540,9 @@ export class Board3D {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     if (!w || !h) return;
+    // La densité de pixels peut changer (zoom du navigateur, écran externe)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (this.renderer.getPixelRatio() !== dpr) this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     // Écran étroit (mobile portrait) : vue plus en surplomb pour remplir l'espace
@@ -1529,7 +1699,7 @@ export class Board3D {
     // Cases : survol, sélection, flash, rebond
     for (let i = 0; i < this.tiles.length; i++) {
       const t = this.tiles[i];
-      const target = (this.hover === i ? 0.07 : 0) + (t.selectable ? 0.05 + Math.sin(time * 5) * 0.04 : 0);
+      const target = (this.hover === i ? 0.07 : 0) + (t.picked ? 0.2 : t.selectable ? 0.05 + Math.sin(time * 5) * 0.04 : 0);
       t.lift += (target - t.lift) * Math.min(1, dt * 12);
       t.bump = Math.max(0, t.bump - dt * 5);
       t.group.position.y = BOARD_TOP + t.lift - Math.sin(t.bump * Math.PI) * 0.05;
@@ -1538,6 +1708,9 @@ export class Board3D {
         t.flashT = Math.max(0, t.flashT - dt * 1.6);
         m.emissive.copy(t.flash);
         m.emissiveIntensity = t.flashT * 0.6;
+      } else if (t.picked) {
+        m.emissive.set(0xff4757);
+        m.emissiveIntensity = 0.25 + (Math.sin(time * 6) + 1) * 0.1;
       } else if (t.selectable) {
         m.emissive.set(0x7fdcff);
         m.emissiveIntensity = 0.06 + (Math.sin(time * 5) + 1) * 0.07;
