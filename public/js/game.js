@@ -3,6 +3,7 @@ import { $, $$, h, fmt, toast, modal, roleTags, nameClass, sleep, confetti, dura
 import { store, on, emit } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
+import { Board3D, webglAvailable } from './board3d.js';
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
 const LEVEL_LABEL = ['Terrain', '1 maison', '2 maisons', '3 maisons', 'Hôtel'];
@@ -214,6 +215,7 @@ class RoomView {
     window.removeEventListener('resize', this.onResize);
     clearInterval(this.tick);
     if (this.resizeObs) this.resizeObs.disconnect();
+    if (this.b3) this.b3.destroy();
     emit('room:leave');
     document.body.classList.remove('in-game');
   }
@@ -457,7 +459,9 @@ class RoomView {
     this.hud = h('div.board-hud', this.centerInfo, this.actionPanel, this.cardSlot);
     this.tip = h('div.tile-tip', { hidden: true });
     this.boardScale = h('div.board-scale', this.board, this.hud);
-    this.boardWrap = h('div.board-wrap', this.boardScale, this.tip);
+    this.host3d = h('div.board3d-host');
+    this.fxLayer = h('div.fx-layer');
+    this.boardWrap = h('div.board-wrap', this.host3d, this.boardScale, this.fxLayer, this.tip);
 
     this.toolbar = h('div.toolbar');
     this.playersEl = h('div.players');
@@ -468,8 +472,9 @@ class RoomView {
     this.sidePanel = h('div.side-panel', this.logEl, this.chatBox);
     this.endOverlay = h('div.end-overlay', { hidden: true });
 
-    this.gameEl = h('div.game' + (this.view3d ? '.view-3d' : ''), this.boardWrap, h('div.side', this.toolbar, this.playersEl, this.tabsEl, this.sidePanel, this.emoteBar));
+    this.gameEl = h('div.game', this.boardWrap, h('div.side', this.toolbar, this.playersEl, this.tabsEl, this.sidePanel, this.emoteBar));
     this.root.append(this.gameEl, this.endOverlay);
+    if (this.view3d) this.enable3d();
     // Replace les pions dès que la taille du plateau change (vue 2D/3D, redimensionnement)
     this.resizeObs = new ResizeObserver(() => this.placePawns(false));
     this.resizeObs.observe(this.board);
@@ -479,15 +484,52 @@ class RoomView {
   }
 
   get view3d() {
-    const v = storage('view3d');
-    if (v === null || v === undefined) return window.innerWidth > 900 && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    return v === '1';
+    if (!webglAvailable()) return false;
+    return storage('view3d') !== '0';
+  }
+  enable3d() {
+    try {
+      this.b3 = new Board3D(this.host3d, this.meta, {
+        onClick: (i) => this.onCellClick(i),
+        onHover: (i) => (i >= 0 ? this.showTip(i) : this.hideTip()),
+        onStep: () => Sound.play('step'),
+      });
+      this.gameEl.classList.add('webgl');
+    } catch (e) {
+      console.error('WebGL indisponible', e);
+      this.b3 = null;
+      this.gameEl.classList.remove('webgl');
+    }
+  }
+  disable3d() {
+    if (this.b3) this.b3.destroy();
+    this.b3 = null;
+    this.gameEl.classList.remove('webgl');
   }
   toggleView() {
-    const next = !this.gameEl.classList.contains('view-3d');
-    storage('view3d', next ? '1' : '0');
-    this.gameEl.classList.toggle('view-3d', next);
+    const to3d = !this.b3;
+    storage('view3d', to3d ? '1' : '0');
+    if (to3d) this.enable3d();
+    else this.disable3d();
+    if (this.state) {
+      this.renderCells();
+      this.placePawns(false);
+      this.showDice(this.state.dice, true);
+    }
     this.renderToolbar();
+  }
+
+  /** Pièces qui volent entre deux points : { pawn }, { cell } ou { bank }. */
+  coins(from, to, n = 6) {
+    if (this.b3) return this.b3.coins(from, to, n);
+    const pt = (s) => (s.bank ? this.boardCenter() : s.cell != null ? this.cellCenter(s.cell) : this.pawnPos(s.pawn));
+    return this.flyCoins(pt(from), pt(to), n);
+  }
+
+  /** Position écran (dans la zone du plateau) au-dessus d'un pion, pour les effets flottants. */
+  fxPoint(pid) {
+    if (this.b3) return this.b3.pawnScreen(pid);
+    return null;
   }
 
   renderTabs() {
@@ -511,7 +553,8 @@ class RoomView {
     this.toolbar.append(
       h('div.tb-code', { title: 'Copier le lien', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') }, '🔗 ', this.code),
       h('div.tb-info', this.state ? `Tour ${this.state.round}` : ''),
-      h('button.icon-btn.view-btn', { title: 'Vue 3D / 2D', onclick: () => this.toggleView() }, this.gameEl && this.gameEl.classList.contains('view-3d') ? '2D' : '3D'),
+      h('button.icon-btn.view-btn', { title: this.b3 ? 'Passer au plateau 2D' : 'Passer au plateau 3D', onclick: () => this.toggleView() }, this.b3 ? '2D' : '3D'),
+      this.b3 ? h('button.icon-btn', { title: 'Recentrer la caméra (double-clic sur le plateau)', onclick: () => this.b3.resetView() }, '🎥') : null,
       h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
       h('button.icon-btn', { title: 'Son', onclick: (e) => (e.target.textContent = Sound.toggle() ? '🔊' : '🔇') }, Sound.isEnabled() ? '🔊' : '🔇'),
       h('button.icon-btn', { title: 'Plein écran (F)', onclick: toggleFullscreen }, '⛶'),
@@ -590,11 +633,13 @@ class RoomView {
       this.disp.pos[p.id] = p.pos;
       this.disp.cash[p.id] = p.cash;
     }
+    this.syncInstant = first || instant;
     if (first || instant) {
       this.logEl.innerHTML = '';
       for (const l of st.log) this.addLog(l, true);
     }
     this.renderCells();
+    this.syncInstant = false;
     this.renderPlayers();
     this.placePawns(!instant);
     this.renderCenter();
@@ -629,10 +674,8 @@ class RoomView {
         this.floatMoney(ev.pid, ev.delta);
         if (ev.pid === this.me) Sound.play(ev.delta > 0 ? 'cash' : 'pay');
         if (ev.reason === 'salary' || ev.reason === 'card' || ev.reason === 'sell') {
-          const from = this.boardCenter();
-          const to = this.pawnPos(ev.pid);
-          if (ev.delta > 0) this.flyCoins(from, to, 5);
-          else this.flyCoins(to, from, 4);
+          if (ev.delta > 0) this.coins({ bank: true }, { pawn: ev.pid }, 5);
+          else this.coins({ pawn: ev.pid }, { bank: true }, 4);
         }
         this.renderPlayers();
         await sleep(120);
@@ -640,9 +683,7 @@ class RoomView {
       case 'buy':
       case 'build': {
         Sound.play(ev.t === 'buy' ? 'buy' : 'build');
-        const from = this.pawnPos(ev.pid);
-        const c = this.cellCenter(ev.cell);
-        await this.flyCoins(from, c, 5);
+        await this.coins({ pawn: ev.pid }, { cell: ev.cell }, 5);
         this.patchProps(ev);
         this.pulseCell(ev.cell, p);
         await sleep(350);
@@ -650,7 +691,7 @@ class RoomView {
       }
       case 'takeover': {
         Sound.play('takeover');
-        await this.flyCoins(this.pawnPos(ev.pid), this.pawnPos(ev.from), 8);
+        await this.coins({ pawn: ev.pid }, { pawn: ev.from }, 8);
         this.patchProps(ev);
         this.pulseCell(ev.cell, p, 'takeover');
         await sleep(600);
@@ -659,7 +700,7 @@ class RoomView {
       case 'rent':
         this.pulseCell(ev.cell, this.player(ev.to), 'rent');
         Sound.play('pay');
-        await this.flyCoins(this.pawnPos(ev.pid), this.pawnPos(ev.to) || this.cellCenter(ev.cell), Math.min(10, 3 + Math.round(ev.amount / 150)));
+        await this.coins({ pawn: ev.pid }, { pawn: ev.to }, Math.min(10, 3 + Math.round(ev.amount / 150)));
         return;
       case 'sell':
         this.patchProps(ev);
@@ -683,8 +724,11 @@ class RoomView {
         return;
       case 'quake':
         Sound.play('quake');
-        this.board.classList.add('shake');
-        setTimeout(() => this.board.classList.remove('shake'), 900);
+        if (this.b3) this.b3.shake(0.9);
+        else {
+          this.board.classList.add('shake');
+          setTimeout(() => this.board.classList.remove('shake'), 900);
+        }
         this.patchProps(ev);
         this.pulseCell(ev.cell, null, 'quake');
         await sleep(800);
@@ -705,6 +749,7 @@ class RoomView {
 
   // --------------------------------------------------------------- plateau
   renderCells() {
+    if (this.b3) return this.render3d();
     const st = this.state;
     const cells = this.meta.cells;
     const countries = Object.fromEntries(this.meta.countries.map((c) => [c.id, c]));
@@ -768,6 +813,30 @@ class RoomView {
     }
   }
 
+  render3d() {
+    const st = this.state;
+    const myTurn = this.canAct();
+    const selectable = new Set();
+    const dimmed = new Set();
+    st.props.forEach((pr, i) => {
+      const owner = pr && pr.owner;
+      if (myTurn) {
+        if (st.phase === 'travel' && i !== 24) selectable.add(i);
+        if ((st.phase === 'festival' || st.phase === 'debt') && owner === this.me) selectable.add(i);
+      }
+      if (this.highlightOwner && owner !== this.highlightOwner) dimmed.add(i);
+    });
+    this.b3.update({
+      props: st.props,
+      players: Object.fromEntries(st.players.map((p) => [p.id, p])),
+      festival: st.festival,
+      selectable,
+      dimmed,
+      settings: this.room.settings,
+      mono: (pid, country) => this.ownsCountry(pid, country),
+    }, !this.syncInstant);
+  }
+
   ownsCountry(pid, country) {
     return this.meta.cells.filter((c) => c.type === 'city' && c.country === country).every((c) => this.state.props[c.index].owner === pid);
   }
@@ -802,8 +871,12 @@ class RoomView {
     } else lines.push(h('div.muted', 'Cliquez pour plus d\'infos'));
     this.tip.innerHTML = '';
     this.tip.append(...lines);
-    const r = this.cellEls[i].getBoundingClientRect();
     const w = this.boardWrap.getBoundingClientRect();
+    let r;
+    if (this.b3) {
+      const c = this.b3.cellRect(i);
+      r = { left: c.left + w.left, top: c.top + w.top, width: c.width, bottom: c.top + c.height + w.top };
+    } else r = this.cellEls[i].getBoundingClientRect();
     this.tip.hidden = false;
     const tw = this.tip.offsetWidth;
     const th = this.tip.offsetHeight;
@@ -827,6 +900,12 @@ class RoomView {
 
   placePawns(animate) {
     if (!this.state) return;
+    if (this.b3) {
+      return this.b3.placePawns(
+        this.state.players.map((p) => ({ ...p, pos: this.disp.pos[p.id] ?? p.pos, current: this.state.current === p.id && !this.state.over })),
+        animate
+      );
+    }
     const groups = {};
     for (const p of this.state.players) {
       if (p.bankrupt) continue;
@@ -887,6 +966,13 @@ class RoomView {
 
   async animateMove(ev) {
     const p = this.player(ev.pid) || { id: ev.pid };
+    if (this.b3) {
+      await this.b3.animateMove(ev);
+      this.disp.pos[ev.pid] = ev.to;
+      this.placePawns(true);
+      this.pulseCell(ev.to, p.color ? p : null, 'land');
+      return;
+    }
     const el = this.pawnEls[ev.pid];
     if (!el) return;
     if (ev.teleport) {
@@ -921,6 +1007,7 @@ class RoomView {
   }
 
   pulseCell(i, p, kind = 'pulse') {
+    if (this.b3) return this.b3.fx(i, kind, p ? p.color : null);
     const el = this.cellEls[i];
     if (!el) return;
     el.classList.remove('fx-' + kind);
@@ -949,6 +1036,11 @@ class RoomView {
   }
 
   async showDice(d, instant) {
+    if (this.b3) {
+      if (instant) this.b3.setDice(d);
+      else await this.b3.rollDice(d);
+      return;
+    }
     for (let k = 0; k < 2; k++) {
       const cube = this.diceEls[k].firstChild;
       const [bx, by] = DIE_ROT[d[k]];
@@ -981,6 +1073,15 @@ class RoomView {
       card.append(f);
       setTimeout(() => f.remove(), 1600);
     }
+    const sp = this.fxPoint(pid);
+    if (sp) {
+      const f = h('div.fx-float.float-money.' + (delta >= 0 ? 'pos' : 'neg'), (delta >= 0 ? '+' : '') + fmt(delta));
+      f.style.left = sp.x + 'px';
+      f.style.top = sp.y + 'px';
+      this.fxLayer.append(f);
+      setTimeout(() => f.remove(), 1600);
+      return;
+    }
     const pos = this.pawnPos(pid);
     if (pos) {
       const f = h('div.board-float', h('span.float-money.board.' + (delta >= 0 ? 'pos' : 'neg'), (delta >= 0 ? '+' : '') + fmt(delta)));
@@ -997,7 +1098,15 @@ class RoomView {
   }
 
   onEmote({ key, emoji }) {
-    const pos = this.pawnPos(key);
+    const sp = this.fxPoint(key);
+    if (sp) {
+      const b = h('div.fx-float.fx-emote', emoji);
+      b.style.left = sp.x + 'px';
+      b.style.top = sp.y + 'px';
+      this.fxLayer.append(b);
+      setTimeout(() => b.remove(), 2200);
+    }
+    const pos = sp ? null : this.pawnPos(key);
     if (pos) {
       const b = h('div.board-float', h('span.emote-bubble', emoji));
       b.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;

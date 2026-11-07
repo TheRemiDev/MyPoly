@@ -76,6 +76,8 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
 // ------------------------------------------------------------ fichiers
 const pub = path.join(__dirname, '..', 'public');
+// Three.js (rendu 3D du plateau) servi localement : aucune dépendance à un CDN
+app.use('/vendor/three', express.static(path.join(__dirname, '..', 'node_modules', 'three', 'build'), { maxAge: config.production ? '7d' : 0 }));
 app.use(express.static(pub, { maxAge: config.production ? '1h' : 0, index: false }));
 app.get('*', (_req, res) => res.sendFile(path.join(pub, 'index.html')));
 
