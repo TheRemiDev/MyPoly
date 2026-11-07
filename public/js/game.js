@@ -1084,7 +1084,7 @@ class RoomView {
       el.classList.toggle('festival-on', fest);
       let selectable = false;
       if (myTurn) {
-        if (st.phase === 'travel') selectable = i !== 24;
+        if (st.phase === 'travel') selectable = i % 8 !== 0;
         if ((st.phase === 'festival' || st.phase === 'debt') && owner && owner.id === this.me) selectable = true;
       }
       el.classList.toggle('selectable', selectable);
@@ -1141,7 +1141,7 @@ class RoomView {
     st.props.forEach((pr, i) => {
       const owner = pr && pr.owner;
       if (myTurn) {
-        if (st.phase === 'travel' && i !== 24) selectable.add(i);
+        if (st.phase === 'travel' && i % 8 !== 0) selectable.add(i);
         if ((st.phase === 'festival' || st.phase === 'debt') && owner === this.me) selectable.add(i);
       }
       if (this.highlightOwner && owner !== this.highlightOwner) dimmed.add(i);
@@ -1607,7 +1607,7 @@ class RoomView {
       case 'travel':
         panel.append(
           h('div.panel-title', '✈️ Où voulez-vous aller ?'),
-          h('div.hint', `Cliquez sur une case du plateau (billet : ${fmt(pend.fee)}).`),
+          h('div.hint', `Cliquez sur une case du plateau, hors coins (billet : ${fmt(pend.fee)}).`),
           h('button.btn.skip', { onclick: act('skip') }, '🎲 Rester au sol et lancer les dés')
         );
         break;
@@ -1825,7 +1825,7 @@ class RoomView {
     const st = this.state;
     if (!st) return;
     if (this.canAct()) {
-      if (st.phase === 'travel' && i !== 24) return this.action('travel', { cell: i });
+      if (st.phase === 'travel' && i % 8 !== 0) return this.action('travel', { cell: i });
       const pr = st.props[i];
       if (st.phase === 'festival' && pr && pr.owner === this.me) return this.action('festival', { cell: i });
       if (st.phase === 'debt' && pr && pr.owner === this.me && this.debt) return this.toggleDebtPick(i);
@@ -1862,7 +1862,7 @@ class RoomView {
         start: `Touchez ${fmt(s.salary)} à chaque passage${s.startBonus ? ', et le double en tombant pile dessus' : ''}.`,
         jail: `Vous y êtes bloqué(e) jusqu'à faire un double, payer ${fmt(s.jailFine)} ou attendre 3 tours.`,
         festival: 'Choisissez une de vos propriétés : son loyer est multiplié (×2, puis davantage si le Festival y revient).',
-        travel: `Au prochain tour, envolez-vous vers n'importe quelle case pour ${fmt(s.travelFee)}.`,
+        travel: `Au prochain tour, envolez-vous vers la case de votre choix (sauf les coins) pour ${fmt(s.travelFee)}.`,
         chance: 'Tirez une carte Chance : bonne ou mauvaise surprise !',
         tax: `Payez ${s.taxPercent} % de votre fortune totale.`,
       }[c.type];

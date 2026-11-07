@@ -636,7 +636,9 @@ class Game {
         }
         if (type === 'travel') {
           const to = Number(d.cell);
-          if (!Number.isInteger(to) || to < 0 || to >= N || to === CORNERS.travel) return { error: 'Destination invalide.' };
+          if (!Number.isInteger(to) || to < 0 || to >= N) return { error: 'Destination invalide.' };
+          // Les coins (Départ, Île déserte, Festival, Aéroport) ne sont pas desservis en avion
+          if (to % 8 === 0) return { error: 'L\'avion ne dessert pas les cases des coins.' };
           if (p.cash < this.settings.travelFee) return { error: 'Fonds insuffisants.' };
           p.travel = false;
           if (this.settings.travelFee) this.money(p, -this.settings.travelFee, 'travel');

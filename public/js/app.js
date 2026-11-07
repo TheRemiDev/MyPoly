@@ -437,7 +437,7 @@ function rulesPage() {
         <h3>🎉 Festival</h3>
         <p>Choisissez une de vos propriétés : son loyer est doublé. Y organiser à nouveau le Festival augmente le multiplicateur (jusqu'à ×5).</p>
         <h3>✈️ Aéroport</h3>
-        <p>Au tour suivant, envolez-vous vers la case de votre choix (moyennant un billet), ou lancez les dés normalement.</p>
+        <p>Au tour suivant, envolez-vous vers la case de votre choix (moyennant un billet, les coins ne sont pas desservis), ou lancez les dés normalement.</p>
         <h3>🏝️ Île déserte</h3>
         <p>Pour partir : faites un double, payez l'amende, utilisez un gilet de sauvetage… ou attendez 3 tours.</p>
         <h3>💸 Dettes & faillite</h3>
