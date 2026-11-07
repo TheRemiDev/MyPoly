@@ -6,6 +6,8 @@ import { h, toast, modal, roleTags, nameClass, sleep, confetti, duration } from 
 import { store, emit } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen } from './app.js';
+import { webglAvailable } from './board3d.js';
+import { Card3D } from './cards3d.js';
 
 export const CARD_SETTINGS_UI = [
   { group: 'Partie', items: [
@@ -144,8 +146,26 @@ export class CardTable {
       '--delay': (-Math.random() * 20).toFixed(1) + 's',
     } }));
     this.bg = h('div.ct-bg', h('i.ct-blob.b1'), h('i.ct-blob.b2'), h('i.ct-blob.b3'), h('div.ct-floor'), h('div.ct-sparks', sparks));
-    v.gameEl = h('div.game.cards-game', this.bg, h('div.ct-room', v.playersEl), this.fx, this.banner, h('div.topbar', v.toolbar, v.popover));
+    // Table 3D façon MyPoly (fiches des joueurs dans les coins), sinon table 2D de secours
+    this.host = h('div.board3d-host');
+    this.cornersEl = h('div.corners');
+    v.notifStacks = Object.fromEntries(['tl', 'tr', 'bl', 'br', 'mid'].map((k) => [k, h('div.notif-stack.ns-' + k)]));
+    v.gameEl = h('div.game.cards-game', this.host, this.bg, h('div.ct-room', v.playersEl), this.cornersEl, ...Object.values(v.notifStacks), this.fx, this.banner, h('div.topbar', v.toolbar, v.popover));
     v.root.append(v.gameEl, v.endOverlay);
+    if (webglAvailable()) {
+      try {
+        this.b3 = new Card3D(this.host, { onDeck: () => this.draw() });
+        v.gameEl.classList.add('c3d', 'webgl');
+        this.bg.remove();
+        this.fx.append(this.pendingEl);
+        this.colorTag = h('div.c3-color');
+        this.deckTag = h('div.c3-deck');
+        this.fx.append(this.colorTag, this.deckTag);
+      } catch (e) {
+        console.error('WebGL indisponible', e);
+        this.b3 = null;
+      }
+    }
     v.renderTabs();
     v.renderChat();
     this.renderToolbar();
@@ -158,10 +178,13 @@ export class CardTable {
     };
     document.addEventListener('keydown', this.onKey);
     this.onResize = () => {
-      if (!this.state || this.busy) return;
-      this.renderSeats();
-      this.renderHand();
-      this.aimPointer();
+      if (!this.state) return;
+      if (!this.busy) {
+        this.renderSeats();
+        this.renderHand();
+        this.aimPointer();
+      }
+      this.renderCenter();
     };
     window.addEventListener('resize', this.onResize);
   }
@@ -169,6 +192,7 @@ export class CardTable {
   destroy() {
     document.removeEventListener('keydown', this.onKey);
     window.removeEventListener('resize', this.onResize);
+    if (this.b3) this.b3.destroy();
     this.dead = true;
   }
 
@@ -294,6 +318,7 @@ export class CardTable {
 
   /** Oriente le faisceau de l'arène vers le joueur dont c'est le tour. */
   aimPointer() {
+    if (this.b3) return;
     const st = this.state;
     const ptr = this.pointer;
     if (!st || !ptr) return;
@@ -362,6 +387,7 @@ export class CardTable {
   renderSeats() {
     const st = this.state;
     if (!st) return;
+    if (this.b3) return this.renderCorners();
     const { mine, others } = this.seatOrder();
     const pos = this.seatPositions(others.length);
     this.seatsEl.innerHTML = '';
@@ -374,6 +400,69 @@ export class CardTable {
     if (mine) this.meBar.append(this.badgeEl(mine, true));
     else this.meBar.append(h('div.ct-spectate', '👁 Vous regardez la partie'));
     this.meBar.setAttribute('data-pid', mine ? mine.id : '');
+  }
+
+  /** Emplacements des adversaires autour de la table (sens horaire depuis moi). */
+  slotsFor(n) {
+    return { 1: ['tm'], 2: ['tl', 'tr'], 3: ['tl', 'tm', 'tr'], 4: ['ml', 'tl', 'tr', 'mr'], 5: ['ml', 'tl', 'tm', 'tr', 'mr'] }[n] || [];
+  }
+  /** Fiches des joueurs dans les coins, exactement comme dans MyPoly. */
+  renderCorners() {
+    const st = this.state;
+    const { mine, others } = this.seatOrder();
+    const slots = this.slotsFor(others.length);
+    const map = {};
+    others.forEach((p, k) => (map[p.id] = slots[k]));
+    if (mine) map[mine.id] = 'me';
+    this.b3.setSeats(map);
+    this.cornersEl.innerHTML = '';
+    const counts = {};
+    const me = this.player(this.me);
+    for (const p of st.players) {
+      const slot = map[p.id];
+      if (!slot) continue;
+      const count = this.disp ? this.disp.counts[p.id] ?? p.count : p.count;
+      counts[p.id] = p.out ? 0 : count;
+      const turn = st.current === p.id && !st.over && st.phase !== 'roundEnd';
+      const isMe = p.id === this.me;
+      const corner = slot === 'me' ? 'bl' : slot;
+      // Téléphone : adversaires en grille de 2 colonnes sous la barre d'outils
+      const k = others.indexOf(p);
+      const card = h('div.pcard.corner.c-' + corner + (turn ? '.turn' : '') + (p.out ? '.out' : '') + (isMe ? '.me' : '') + (p.vip ? '.vip' : ''),
+        { 'data-pid': p.id, style: { '--c': p.color } },
+        h('div.pc-face'),
+        h('div.pc-avatar', h('span.pc-pawn', p.out ? '💀' : p.pawn)),
+        h('div.pc-body',
+          h('div.pc-name', h('span.pc-name-text.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
+          h('div.pc-cash.c3-count' + (count === 1 ? '.one' : ''), h('span.c3-cards', '🃏'), p.out ? 'Abandon' : `${count} carte${count > 1 ? 's' : ''}`),
+          h('div.pc-chips',
+            st.settings.targetScore ? h('span.pc-chip', { title: 'Points' }, `🏆 ${p.score} pts`) : null,
+            p.carton && count === 1 ? h('span.pc-chip.c3-carton', '📣 CARTON !') : null,
+            !p.isBot && !p.connected ? h('span.pc-chip.off', { title: 'Déconnecté' }, '📡') : p.afk ? h('span.pc-chip.off', { title: 'Absent' }, '💤') : null
+          )
+        ),
+        turn ? h('div.pcard-turn', isMe ? '🎴 À VOUS !' : 'JOUE…') : null,
+        turn ? h('div.pcard-timer') : null
+      );
+      // Oubli de « Carton ! » : bouton pour prendre le joueur, sur sa fiche
+      if (p.exposed && me && !me.out && !isMe && !st.over) {
+        const left = p.exposedUntil ? p.exposedUntil - (Date.now() + this.v.clockOffset) : 5000;
+        if (left > 0) {
+          const btn = h('button.ct-catch.c3-catch', { title: 'Ce joueur a oublié de crier « Carton ! »', onclick: () => {
+            btn.disabled = true;
+            this.act('catch', { target: p.id });
+          } }, '🚨 ', h('span.ct-catch-long', 'Carton oublié ! '), h('b', 'Prendre'), h('i.ct-catch-bar', { style: { animationDuration: Math.round(left) + 'ms' } }));
+          card.append(btn);
+          setTimeout(() => btn.remove(), left);
+        }
+      }
+      if (k >= 0) card.style.setProperty('--gr', String(Math.floor(k / 2))), card.style.setProperty('--gc', String(k % 2));
+      this.cornersEl.append(card);
+    }
+    this.v.gameEl.style.setProperty('--rows', String(Math.ceil(others.length / 2)));
+    this.b3.setHands(counts);
+    const cur = this.player(st.current);
+    this.b3.setTurn(st.over || st.phase === 'roundEnd' ? null : st.current, cur && cur.color);
   }
 
   badgeEl(p, isMe) {
@@ -435,6 +524,7 @@ export class CardTable {
       else this.pile = [d.top];
       if (this.pile.length > 5) this.pile = this.pile.slice(-5);
     }
+    if (this.b3) return this.renderCenter3d();
     this.discardEl.innerHTML = '';
     this.pile.forEach((c, k) => {
       const el = cardEl(c, '.big' + (k === this.pile.length - 1 ? '.top' : ''));
@@ -464,6 +554,37 @@ export class CardTable {
     this.deckEl.classList.toggle('active', canDraw);
     this.pendingEl.hidden = !d.pending;
     this.pendingEl.textContent = '+' + d.pending;
+  }
+
+  renderCenter3d() {
+    const st = this.state;
+    const d = this.disp;
+    const b = this.b3;
+    b.setDeck(d.deck);
+    b.setPile(this.pile);
+    b.setColor(CCOLORS[d.color] || '#ffffff');
+    b.setDirection(d.dir);
+    const canDraw = this.myTurn() && st.phase === 'play';
+    b.deckActive = canDraw;
+    // Étiquettes posées sur la table : couleur en cours, pioche cumulée
+    requestAnimationFrame(() => {
+      const pile = b.pileScreen();
+      const deck = b.deckScreen();
+      this.colorTag.textContent = CNAMES[d.color] || '';
+      this.colorTag.style.setProperty('--cc', CCOLORS[d.color] || '#fff');
+      // Couleur en cours sous la défausse, compteur sous la pioche
+      this.colorTag.style.left = pile.x + 'px';
+      this.colorTag.style.top = pile.y + 58 + 'px';
+      const mustDraw = canDraw && !st.playable.length;
+      this.deckTag.classList.toggle('draw', mustDraw);
+      this.deckTag.textContent = mustDraw ? '👆 Piochez !' : `${d.deck} cartes`;
+      this.deckTag.style.left = deck.x + 'px';
+      this.deckTag.style.top = deck.y + 62 + 'px';
+      this.pendingEl.hidden = !d.pending;
+      this.pendingEl.textContent = '+' + d.pending;
+      this.pendingEl.style.left = pile.x + 60 + 'px';
+      this.pendingEl.style.top = pile.y - 90 + 'px';
+    });
   }
 
   myTurn() {
@@ -660,7 +781,7 @@ export class CardTable {
       const r = this.handEl.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }
-    const el = this.v.playersEl.querySelector(`.ct-seat[data-pid="${CSS.escape(pid)}"] .ct-fan`) || this.v.playersEl.querySelector(`[data-pid="${CSS.escape(pid)}"]`);
+    const el = this.b3 ? this.cornersEl.querySelector(`[data-pid="${CSS.escape(pid)}"]`) : this.v.playersEl.querySelector(`.ct-seat[data-pid="${CSS.escape(pid)}"] .ct-fan`) || this.v.playersEl.querySelector(`[data-pid="${CSS.escape(pid)}"]`);
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -721,10 +842,12 @@ export class CardTable {
         Sound.play('dice');
         const deck = this.rectCenter(this.deckEl);
         const n = ev.n;
+        if (this.b3) this.b3.setPile([]);
         for (let k = 0; k < n; k++) {
           for (const id of ids) {
-            const to = this.pointOf(id);
-            this.flyCard(backEl(), deck, to, 300, { scaleTo: 0.6 });
+            if (this.b3) {
+              if (k < 3) this.b3.drawCards(id, 1, id === this.me);
+            } else this.flyCard(backEl(), deck, this.pointOf(id), 300, { scaleTo: 0.6 });
             d.counts[id]++;
           }
           await sleep(Math.max(40, 220 - ids.length * 25));
@@ -754,7 +877,8 @@ export class CardTable {
         d.counts[ev.pid] = Math.max(0, (d.counts[ev.pid] || 1) - 1);
         this.renderSeats();
         if (!isMe) Sound.play('card');
-        await this.flyCard(cardEl(ev.card), from, this.rectCenter(this.discardEl), 380, { rot: (Math.random() - 0.5) * 16, scaleFrom: isMe ? 1 : 0.6 });
+        if (this.b3) await this.b3.playCard(ev.pid, ev.card, isMe);
+        else await this.flyCard(cardEl(ev.card), from, this.rectCenter(this.discardEl), 380, { rot: (Math.random() - 0.5) * 16, scaleFrom: isMe ? 1 : 0.6 });
         d.top = ev.card;
         d.color = ev.color;
         this.renderCenter();
@@ -775,7 +899,11 @@ export class CardTable {
           d.pending = 0;
           this.renderCenter();
         }
-        for (let k = 0; k < shown; k++) {
+        if (this.b3) {
+          await this.b3.drawCards(ev.pid, ev.n, ev.pid === this.me);
+          for (let k = 0; k < shown; k++) Sound.play('step');
+        }
+        for (let k = 0; k < (this.b3 ? 0 : shown); k++) {
           const card = ev.pid === this.me && ev.cards ? ev.cards[k] : null;
           this.flyCard(card ? cardEl(card) : backEl(), deck, to, 360, { scaleTo: ev.pid === this.me ? 1 : 0.6 });
           Sound.play('step');
@@ -802,6 +930,7 @@ export class CardTable {
         this.dirEl.classList.remove('flip');
         void this.dirEl.offsetWidth;
         this.dirEl.classList.add('flip');
+        if (this.b3) this.b3.spinArrows();
         Sound.play('turn');
         this.showBanner('🔄', 'Demi-tour !', ev.dir > 0 ? 'Sens des aiguilles d\'une montre' : 'Sens inverse', '#a66bff', 1200);
         await sleep(700);
@@ -821,6 +950,7 @@ export class CardTable {
         this.colorEl.classList.remove('flash');
         void this.colorEl.offsetWidth;
         this.colorEl.classList.add('flash');
+        if (this.b3) this.b3.burst(this.b3.pilePos.clone().setY(0.6), CCOLORS[ev.color], 30);
         Sound.play('festival');
         this.showBanner('🎨', CNAMES[ev.color] + ' !', p ? `choisi par ${p.name}` : null, CCOLORS[ev.color], 1300);
         await sleep(600);
@@ -875,6 +1005,10 @@ export class CardTable {
         d.deck = ev.n;
         this.renderCenter();
         this.deckEl.classList.add('shuffle');
+        if (this.b3) {
+          this.b3.deckLayers = 0;
+          this.b3.setDeck(ev.n);
+        }
         this.showBanner('🔀', 'La défausse est remélangée', null, '#3fa7ff', 1000);
         await sleep(650);
         this.deckEl.classList.remove('shuffle');

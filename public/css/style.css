@@ -1933,3 +1933,59 @@ body:not(.in-game) {
 .game-pick .game-pick-btn .gp-art { width: 54px; height: 44px; font-size: 1.9rem; place-items: center start; }
 .game-pick .game-pick-btn small { display: block; line-height: 1.3; }
 @media (max-width: 760px) { .game-pick .game-pick-btn { flex-direction: row; align-items: center; } }
+
+/* =====================================================================
+   CARTON ! — table 3D façon MyPoly
+   ===================================================================== */
+.cards-game.c3d {
+  --cw: 250px;
+  --safe-top: 66px; --safe-x: 272px; --safe-y: calc(var(--hw) * 1.46 * .62 + 70px);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 52%, rgba(38, 150, 160, .28), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 120%, rgba(166, 107, 255, .22), transparent 60%),
+    linear-gradient(180deg, #121633, #0b0e22);
+}
+.cards-game.c3d .ct-felt, .cards-game.c3d .ct-mebar { display: none; }
+.cards-game.c3d .ct-room { pointer-events: none; }
+.cards-game.c3d .ct-me { pointer-events: none; z-index: 32; }
+.cards-game.c3d .ct-me::before { background: radial-gradient(ellipse at 50% 100%, rgba(0, 0, 0, .55), transparent 70%); }
+.cards-game.c3d .ct-me > * { pointer-events: auto; }
+.cards-game.c3d .corners { z-index: 30; }
+/* Fiches supplémentaires (jusqu'à 6 joueurs) */
+.pcard.corner.c-tm { top: 64px; left: 50%; translate: -50% 0; }
+.pcard.corner.c-ml { left: 12px; top: 44%; translate: 0 -50%; }
+.pcard.corner.c-mr { right: 12px; top: 44%; translate: 0 -50%; flex-direction: row-reverse; text-align: right; }
+.pcard.corner.c-mr .pc-name, .pcard.corner.c-mr .pc-chips { justify-content: flex-end; }
+.pcard.corner.c-tm .pcard-turn, .pcard.corner.c-ml .pcard-turn { left: 16px; }
+.pcard.corner.c-mr .pcard-turn { right: 16px; }
+/* Nombre de cartes à la place de l'argent */
+.c3-count { display: flex; align-items: center; gap: 6px; }
+.c3-count .c3-cards { font-size: 1.1rem; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .4)); }
+.c-tr .c3-count, .c-br .c3-count, .c-mr .c3-count { justify-content: flex-end; }
+.c3-count.one { color: #ff8a93 !important; animation: pulse .9s ease-in-out infinite; }
+.c3-carton { background: linear-gradient(180deg, #ffe08a, #ff9a3d) !important; color: #3b1e05 !important; font-weight: 900; }
+.c3-catch { position: absolute; top: calc(100% + 8px); left: 50%; translate: -50% 0; white-space: nowrap; z-index: 6; }
+.c-bl .c3-catch, .c-br .c3-catch { top: auto; bottom: calc(100% + 26px); }
+/* Étiquettes posées sur la table */
+.c3-color { --cc: #fff; position: absolute; translate: -50% 0; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 31; }
+.c3-color::before { content: ''; }
+.c3-color { padding: 5px 18px; border-radius: 99px; background: var(--cc); border: 2px solid #fff; color: #fff; font-weight: 900; font-size: .8rem; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0, 0, 0, .45); box-shadow: 0 0 22px var(--cc), 0 6px 14px rgba(0, 0, 0, .4); transition: background-color .3s ease, box-shadow .3s ease; }
+.c3-deck { position: absolute; translate: -50% 0; white-space: nowrap; padding: 3px 12px; border-radius: 99px; background: rgba(14, 17, 38, .86); border: 1px solid var(--panel-border); color: #e9e6ff; font-size: .72rem; font-weight: 800; pointer-events: none; z-index: 31; }
+.c3-deck.draw { background: #fff; color: #1b1030; font-weight: 900; animation: pulse 1.1s ease-in-out infinite; }
+.cards-game.c3d .ct-pending { position: absolute; right: auto; translate: -50% -50%; width: 74px; z-index: 31; }
+/* Boutons : retour au toucher */
+.ct-shout, .ct-catch, .ct-colorbtn, .ct-targetbtn { transition: transform 160ms cubic-bezier(.23, 1, .32, 1); }
+.ct-shout:active, .ct-catch:active, .ct-colorbtn:active, .ct-targetbtn:active { transform: scale(.97); }
+@media (max-aspect-ratio: 5/4) {
+  .cards-game.c3d { --rows: 1; --cw: calc(50vw - 12px); --safe-x: 6px; --safe-top: calc(64px + var(--rows) * 66px); --safe-y: calc(var(--hw) * 1.46 * .62 + 58px); }
+  .cards-game.c3d .topbar { top: 8px; }
+  /* Adversaires : grille de 2 colonnes, fiches compactes */
+  .cards-game.c3d .pcard.corner:not(.me) { top: calc(62px + var(--gr, 0) * 66px) !important; bottom: auto !important; left: calc(8px + var(--gc, 0) * (50vw - 4px)) !important; right: auto !important; translate: none !important; flex-direction: row !important; text-align: left !important; padding: 6px 10px 6px 6px; gap: 8px; }
+  .cards-game.c3d .pcard.corner:not(.me) .pc-name, .cards-game.c3d .pcard.corner:not(.me) .c3-count { justify-content: flex-start; }
+  .cards-game.c3d .pcard.corner .pc-avatar { width: 40px; height: 40px; font-size: 1.3rem; }
+  .cards-game.c3d .pcard.corner .pc-chips { display: none; }
+  .cards-game.c3d .pcard.corner .pcard-turn { left: 10px !important; right: auto !important; }
+  /* Ma fiche : remplacée par « À vous ! » au-dessus de la main */
+  .cards-game.c3d .pcard.corner.me { display: none; }
+  .cards-game.c3d .c3-catch { top: calc(100% + 4px); bottom: auto; }
+}

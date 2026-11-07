@@ -77,7 +77,8 @@ function crown(g, x, y, s) {
  * brillant, couronne, étincelles et ruban portant le slogan.
  * Renvoie { canvas, mask } — le masque (blanc sur transparent) sert au reflet animé.
  */
-export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1 } = {}) {
+export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1, first = 'My', second = 'Poly', crown: withCrown = true } = {}) {
+  const full = first + second;
   const W = Math.round(1800 * scale);
   const H = Math.round(820 * scale);
   const k = scale;
@@ -90,8 +91,8 @@ export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1 } = {})
 
   const m = canvas(8, 8).getContext('2d');
   m.font = font;
-  const wMy = m.measureText('My').width;
-  const wPoly = m.measureText('Poly').width;
+  const wMy = m.measureText(first).width;
+  const wPoly = m.measureText(second).width;
   const total = wMy + wPoly;
   const x0 = (W - total) / 2 + 20 * k;
 
@@ -115,8 +116,8 @@ export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1 } = {})
     c.lineWidth = 60 * k;
     c.lineJoin = 'round';
     c.strokeStyle = '#000';
-    c.strokeText('MyPoly', x, y + 40 * k);
-    c.fillText('MyPoly', x, y + 40 * k);
+    c.strokeText(full, x, y + 40 * k);
+    c.fillText(full, x, y + 40 * k);
   });
   g.restore();
 
@@ -128,7 +129,7 @@ export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1 } = {})
       c.lineJoin = 'round';
       c.lineWidth = 46 * k;
       c.strokeStyle = t > 0.5 ? '#3b1e05' : '#6b3a08';
-      c.strokeText('MyPoly', x, y);
+      c.strokeText(full, x, y);
     }, d * 0.35, d);
   }
 
@@ -142,10 +143,10 @@ export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1 } = {})
     c.lineJoin = 'round';
     c.lineWidth = 46 * k;
     c.strokeStyle = gold;
-    c.strokeText('MyPoly', x, y);
+    c.strokeText(full, x, y);
     c.lineWidth = 20 * k;
     c.strokeStyle = '#1b1030';
-    c.strokeText('MyPoly', x, y);
+    c.strokeText(full, x, y);
   });
 
   // 4. Faces des lettres (toile séparée pour appliquer le reflet uniquement dessus)
@@ -166,9 +167,9 @@ export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1 } = {})
     c.font = font;
     c.textBaseline = 'alphabetic';
     c.fillStyle = fillMy;
-    c.fillText('My', x0, baseY);
+    c.fillText(first, x0, baseY);
     c.fillStyle = fillPoly;
-    c.fillText('Poly', x0 + wMy, baseY);
+    c.fillText(second, x0 + wMy, baseY);
     c.restore();
   };
   faces(fg, gMy, gPoly);
@@ -189,7 +190,7 @@ export function drawLogo({ tagline = 'LE MONDE EST À VENDRE', scale = 1 } = {})
   faces(mask.getContext('2d'), '#ffffff', '#ffffff');
 
   // 5. Couronne sur le « M »
-  crown(g, x0 + 80 * k, baseY - fs * 0.84, 62 * k);
+  if (withCrown) crown(g, x0 + 80 * k, baseY - fs * 0.84, 62 * k);
 
   // 6. Ruban avec le slogan
   const rb = { y: baseY + 150 * k, h: 104 * k };
