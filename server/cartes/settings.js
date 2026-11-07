@@ -9,6 +9,7 @@ const DEFAULTS = {
   stacking: true, // cumul des +2 / +4
   drawToPlay: false, // piocher jusqu'à pouvoir jouer
   sevenZero: false, // 7 = échange de main, 0 = toutes les mains tournent
+  noSpecialFinish: true, // interdit de finir sur une carte spéciale (Stop, Demi-tour, +2, Jokers)
   cartonPenalty: 2, // cartes de pénalité si on oublie de crier « Carton ! »
   isPublic: false,
   allowSpectators: true,
