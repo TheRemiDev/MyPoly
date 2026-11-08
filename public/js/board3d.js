@@ -2176,7 +2176,7 @@ export class Board3D {
 
   worldOf(spec) {
     if (!spec) return null;
-    if (spec.bank) return new THREE.Vector3(0, BOARD_TOP + 0.2, 0.3);
+    if (spec.bank) return new THREE.Vector3(0, BOARD_TOP + 0.75, 0.3);
     if (spec.cell != null) {
       const b = cellBox(spec.cell);
       return new THREE.Vector3(b.cx, TOP + 0.1, b.cz);
@@ -2188,7 +2188,96 @@ export class Board3D {
     return null;
   }
 
+  /** Petite banque 3D (colonnes, fronton, $ doré) qui surgit au centre du plateau. */
+  makeBank() {
+    const g = new THREE.Group();
+    const marble = new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.45 });
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffc94a, metalness: 0.85, roughness: 0.25, emissive: 0x5a3a00, emissiveIntensity: 0.3 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x2a3a6a, roughness: 0.6 });
+    const add = (geo, mat, x, y, z) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.castShadow = m.receiveShadow = true;
+      g.add(m);
+      return m;
+    };
+    add(new THREE.BoxGeometry(1.5, 0.08, 1.0), marble, 0, 0.04, 0);
+    add(new THREE.BoxGeometry(1.35, 0.06, 0.88), marble, 0, 0.11, 0);
+    add(new THREE.BoxGeometry(1.0, 0.6, 0.5), dark, 0, 0.44, -0.08);
+    for (let k = 0; k < 5; k++) add(new THREE.CylinderGeometry(0.055, 0.065, 0.62, 14), marble, -0.52 + k * 0.26, 0.45, 0.28);
+    add(new THREE.BoxGeometry(1.4, 0.08, 0.9), marble, 0, 0.8, 0);
+    // Fronton triangulaire (prisme extrudé)
+    const tri = new THREE.Shape();
+    tri.moveTo(-0.72, 0);
+    tri.lineTo(0.72, 0);
+    tri.lineTo(0, 0.32);
+    tri.closePath();
+    const roofGeo = new THREE.ExtrudeGeometry(tri, { depth: 0.9, bevelEnabled: false });
+    roofGeo.translate(0, 0, -0.45);
+    add(roofGeo, marble, 0, 0.84, 0);
+    // Médaillon « $ » doré sur le fronton
+    const coin = add(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 28), gold, 0, 0.96, 0.46);
+    coin.rotation.x = Math.PI / 2;
+    const tag = this.textSprite('BANQUE', { bg: '#ffc94a', fg: '#4a2c00', size: 40, scale: 0.34 });
+    tag.position.set(0, 1.42, 0);
+    tag.material.depthTest = false;
+    tag.renderOrder = 18;
+    g.add(tag);
+    g.position.set(0, BOARD_TOP + 0.02, 0.3);
+    g.visible = false;
+    this.scene.add(g);
+    return g;
+  }
+  /** Fait apparaître la banque le temps d'un paiement (comptage pour les paiements simultanés). */
+  async withBank(fn) {
+    this.bank ||= this.makeBank();
+    const b = this.bank;
+    this.bankUsers = (this.bankUsers || 0) + 1;
+    clearTimeout(this.bankHide);
+    if (!b.visible || this.bankLeaving) {
+      this.bankLeaving = false;
+      b.visible = true;
+      b.rotation.y = -0.6;
+      await this.tween(260, (t) => {
+        const e = ease.back(t);
+        b.scale.setScalar(Math.max(0.01, e));
+        b.rotation.y = -0.6 * (1 - t);
+      });
+    }
+    try {
+      await fn();
+    } finally {
+      this.bankUsers--;
+      if (!this.bankUsers) {
+        // Petit « encaissement » puis disparition rapide
+        this.bankHide = setTimeout(() => {
+          if (this.bankUsers) return;
+          this.bankLeaving = true;
+          this.tween(220, (t) => {
+            if (!this.bankLeaving) return;
+            b.scale.setScalar(Math.max(0.01, 1 - ease.inOut(t)));
+            b.rotation.y = t * 0.8;
+          }).then(() => {
+            if (this.bankLeaving) b.visible = false;
+            this.bankLeaving = false;
+          });
+        }, 260);
+      }
+    }
+  }
+  bankBump() {
+    const b = this.bank;
+    if (!b) return;
+    this.tween(160, (t) => b.scale.set(1 + Math.sin(t * Math.PI) * 0.08, 1 - Math.sin(t * Math.PI) * 0.06, 1 + Math.sin(t * Math.PI) * 0.08));
+  }
+
   coins(fromSpec, toSpec, n = 6) {
+    if ((fromSpec && fromSpec.bank) || (toSpec && toSpec.bank)) {
+      return this.withBank(() => this.flyCoins(fromSpec, toSpec, n, !!(toSpec && toSpec.bank)));
+    }
+    return this.flyCoins(fromSpec, toSpec, n, false);
+  }
+  flyCoins(fromSpec, toSpec, n = 6, intoBank = false) {
     const a = this.worldOf(fromSpec);
     const b = this.worldOf(toSpec);
     if (!a || !b) return Promise.resolve();
@@ -2209,8 +2298,12 @@ export class Board3D {
           c.position.lerpVectors(a, b, ease.inOut(t)).add(j);
           c.position.y += Math.sin(t * Math.PI) * h;
           c.rotation.x = t * Math.PI * 4;
-        }, k * 60).then(() => this.scene.remove(c))
+        }, k * 60).then(() => {
+          this.scene.remove(c);
+          if (intoBank) this.bankBump();
+        })
       );
+      if (!intoBank && fromSpec && fromSpec.bank && k === 0) this.bankBump();
     }
     return Promise.all(proms);
   }

@@ -760,40 +760,89 @@ export class CardTable {
     else this.armed = false;
   }
 
-  pickColor() {
+  /**
+   * Fenêtre de choix plein écran, dans le style des annonces de partie :
+   * grand titre façon logo, choix en grandes cartes, Échap ou clic à côté pour annuler.
+   */
+  picker(kind, title, sub, items, color) {
     return new Promise((resolve) => {
-      const counts = { r: 0, b: 0, g: 0, y: 0 };
-      for (const c of this.state.hand) if (c.c !== 'w') counts[c.c]++;
-      const ov = h('div.ct-picker',
-        h('div.ct-picker-card',
-          h('div.ct-picker-title', '🎨 Choisissez la couleur'),
-          h('div.ct-colors', Object.entries(CCOLORS).map(([k, col]) => h('button.ct-colorbtn', { style: { '--cc': col }, onclick: () => done(k) }, h('b', CNAMES[k]), h('small', `${counts[k]} en main`)))),
-          h('button.btn.ghost.sm', { onclick: () => done(null) }, 'Annuler')
-        )
-      );
-      const done = (v) => {
-        ov.remove();
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        document.removeEventListener('keydown', onKey, true);
+        ov.classList.add('out');
+        setTimeout(() => ov.remove(), 220);
         resolve(v);
       };
+      const onKey = (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(null);
+        }
+        const n = Number(e.key);
+        if (n >= 1 && n <= items.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(items[n - 1].value);
+        }
+      };
+      const ov = h('div.pk.pk-' + kind, { style: { '--c': color }, onclick: (e) => e.target === ov && finish(null) },
+        h('div.pk-head',
+          h('div.fx-art.pk-art', { html: eventArt(kind === 'color' ? 'color' : 'swap', color, null) }),
+          h('div.fx-title', title),
+          h('div.pk-sub', sub)
+        ),
+        h('div.pk-list', items.map((it, k) => {
+          const b = h('button.pk-item', { style: { '--c': it.color, '--d': k * 60 + 'ms' }, onclick: () => finish(it.value) }, ...it.content, h('kbd.pk-key', String(k + 1)));
+          return b;
+        })),
+        h('button.pk-cancel', { onclick: () => finish(null) }, 'Annuler', h('kbd', 'Échap'))
+      );
+      document.addEventListener('keydown', onKey, true);
       this.v.gameEl.append(ov);
     });
   }
+
+  pickColor() {
+    const counts = { r: 0, b: 0, g: 0, y: 0 };
+    for (const c of this.state.hand) if (c.c !== 'w') counts[c.c]++;
+    const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+    return this.picker('color', 'Quelle couleur ?', 'Choisissez la couleur à jouer', Object.entries(CCOLORS).map(([k, col]) => ({
+      value: k,
+      color: col,
+      content: [
+        h('span.pk-swatch', h('i')),
+        h('b.pk-name', CNAMES[k]),
+        h('small.pk-meta', counts[k] ? `${counts[k]} carte${counts[k] > 1 ? 's' : ''} en main` : 'aucune en main'),
+        k === best && counts[k] ? h('span.pk-tag', 'Conseillé') : null,
+      ],
+    })), '#a66bff');
+  }
+
   pickTarget() {
-    return new Promise((resolve) => {
-      const others = this.state.players.filter((p) => p.id !== this.me && !p.out);
-      const ov = h('div.ct-picker',
-        h('div.ct-picker-card',
-          h('div.ct-picker-title', '🔀 Échanger votre main avec…'),
-          h('div.ct-targets', others.map((p) => h('button.ct-targetbtn', { style: { '--c': p.color }, onclick: () => done(p.id) }, h('span.ct-avatar', p.pawn), h('b', p.name), h('small', `🃏 ${this.disp.counts[p.id]} cartes`)))),
-          h('button.btn.ghost.sm', { onclick: () => done(null) }, 'Annuler')
-        )
-      );
-      const done = (v) => {
-        ov.remove();
-        resolve(v);
+    const mine = this.state.hand ? this.state.hand.length - 1 : 0; // après avoir posé le 7
+    const others = this.state.players.filter((p) => p.id !== this.me && !p.out);
+    const fan = (n) => h('span.pk-fan', Array.from({ length: Math.min(n, 9) }, (_, k) => {
+      const t = Math.min(n, 9) > 1 ? k / (Math.min(n, 9) - 1) - 0.5 : 0;
+      return h('i', { style: { transform: `rotate(${t * 50}deg)` } });
+    }));
+    return this.picker('swap', 'Échange !', `Votre main : ${mine} carte${mine > 1 ? 's' : ''} — avec qui échanger ?`, others.map((p) => {
+      const n = this.disp.counts[p.id] ?? p.count;
+      const diff = n - mine;
+      return {
+        value: p.id,
+        color: p.color,
+        content: [
+          fan(n),
+          h('span.pk-avatar', p.pawn),
+          h('b.pk-name', p.name),
+          h('small.pk-meta', `${n} carte${n > 1 ? 's' : ''}`),
+          h('span.pk-deal' + (diff < 0 ? '.good' : diff > 0 ? '.bad' : ''), diff < 0 ? `${diff} pour vous` : diff > 0 ? `+${diff} pour vous` : 'égalité'),
+        ],
       };
-      this.v.gameEl.append(ov);
-    });
+    }), '#2ecc71');
   }
 
   // ============================================================ animations

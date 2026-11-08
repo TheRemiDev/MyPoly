@@ -1984,13 +1984,15 @@ class RoomView {
     for (const [k, p] of ordered.entries()) {
       const cash = this.disp.cash[p.id] ?? p.cash;
       const chips = [];
-      if (p.jailed) chips.push(h('span.pc-chip.warn', { title: 'Sur l\'Île déserte' }, `🏝️ ${p.jailTurns}/3`));
-      if (p.travel) chips.push(h('span.pc-chip', { title: 'Vol au prochain tour' }, '✈️'));
-      if (p.shield) chips.push(h('span.pc-chip.good', { title: 'Bouclier : prochain loyer annulé' }, '🛡️'));
-      if (p.voucher) chips.push(h('span.pc-chip.good', { title: 'Bon d\'achat : prochain achat à moitié prix' }, '💌'));
-      if (p.curse) chips.push(h('span.pc-chip.warn', { title: 'Chat noir : prochain loyer doublé' }, '🐈‍⬛'));
-      if (p.coupon) chips.push(h('span.pc-chip.good', { title: 'Coupon : prochain loyer -50 %' }, '🏷️'));
-      if (p.jailCards) chips.push(h('span.pc-chip.good', { title: 'Gilet de sauvetage' }, '🛟' + (p.jailCards > 1 ? '×' + p.jailCards : '')));
+      // Bonus / malus en cours, visibles par tous dans un bandeau sous la fiche
+      const fx = [];
+      if (p.shield) fx.push(['good', '🛡️', 'Bouclier anti-loyer', 'Le prochain loyer est annulé']);
+      if (p.coupon) fx.push(['good', '🏷️', 'Loyer −50 %', 'Le prochain loyer est réduit de moitié']);
+      if (p.voucher) fx.push(['good', '💌', 'Achat −50 %', 'Le prochain achat est à moitié prix']);
+      if (p.jailCards) fx.push(['good', '🛟', 'Gilet' + (p.jailCards > 1 ? ' ×' + p.jailCards : ''), 'Sort de l\'Île déserte gratuitement']);
+      if (p.travel) fx.push(['info', '✈️', 'Vol prêt', 'Voyage où il veut au prochain tour']);
+      if (p.curse) fx.push(['bad', '🐈‍⬛', 'Loyer ×2', 'Chat noir : le prochain loyer payé est doublé']);
+      if (p.jailed) fx.push(['bad', '🏝️', `Bloqué ${p.jailTurns}/3`, 'Sur l\'Île déserte']);
       if (!p.isBot && !p.connected) chips.push(h('span.pc-chip.off', { title: 'Déconnecté (joué automatiquement)' }, '📡'));
       else if (p.afk) chips.push(h('span.pc-chip.off', { title: 'Absent (joué automatiquement)' }, '💤'));
       const props = st.props.filter((x) => x && x.owner === p.id).length;
@@ -2022,7 +2024,8 @@ class RoomView {
         ),
         p.bankrupt ? h('div.pc-stamp', 'FAILLITE') : null,
         isTurn ? h('div.pcard-turn', p.id === this.me ? '🎲 À VOUS !' : 'JOUE…') : null,
-        isTurn ? h('div.pcard-timer', { style: { transform: `scaleX(${this.timerFraction()})` } }) : null
+        isTurn ? h('div.pcard-timer', { style: { transform: `scaleX(${this.timerFraction()})` } }) : null,
+        fx.length && !p.bankrupt ? h('div.pc-effects', fx.map(([k, ico, label, tip]) => h('span.pc-effect.' + k, { title: tip }, h('i', ico), label))) : null
       );
       this.playersEl.append(card);
       if (!p.bankrupt) this.animateCash(cashEl, p.id, cash);
