@@ -426,8 +426,9 @@ class Game {
   }
   bankrupt(p, creditor) {
     if (p.bankrupt) return;
-    if (creditor && p.cash > 0 && !creditor.bankrupt) this.money(creditor, p.cash, 'bankrupt');
-    p.cash = 0;
+    // Le créancier récupère tout : l'argent restant + la valeur de revente de toutes les propriétés
+    const payee = creditor && !creditor.bankrupt && creditor !== p ? creditor : null;
+    const total = Math.max(0, p.cash) + this.liquidation(p);
     const lost = this.owned(p).map((i) => ({ cell: i, level: this.props[i].level }));
     for (const { cell: i } of lost) {
       this.props[i] = { owner: null, level: 0 };
@@ -439,6 +440,12 @@ class Game {
     // Les propriétés perdues sont détaillées pour animer leur démolition une à une
     this.emit({ t: 'bankrupt', pid: p.id, to: creditor ? creditor.id : null, cells: lost }, 1800 + lost.length * 450);
     this.say(`💥 ${p.name} fait faillite !`, p.id);
+    if (payee && total > 0) {
+      p.cash = total;
+      this.transfer(p, payee, total, 'bankrupt');
+      this.say(`💰 ${payee.name} récupère ${fmt(total)} (argent et propriétés revendues de ${p.name}).`, payee.id);
+    }
+    p.cash = 0;
     if (creditor) creditor.stats.knockouts = (creditor.stats.knockouts || 0) + 1;
     const alive = this.alive();
     if (alive.length <= 1) this.finish(alive[0], 'last');
