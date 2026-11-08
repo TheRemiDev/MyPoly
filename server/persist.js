@@ -61,6 +61,7 @@ function restoreGame(kind, data, callbacks) {
   g.anim = 0;
   if (typeof data.pendingBy === 'string') g.pendingBy = g.player(data.pendingBy) || null;
   if (g.rebuildAfterDebt) g.rebuildAfterDebt();
+  if (g.afterRestore) g.afterRestore();
   return g;
 }
 

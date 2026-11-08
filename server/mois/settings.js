@@ -8,6 +8,7 @@ const DEFAULTS = {
   startCash: 3000, // argent de départ (€)
   salary: 3500, // salaire versé le 31
   loanRate: 10, // intérêts mensuels des emprunts (%)
+  savingsRate: 5, // intérêts mensuels de l'épargne (%)
   jackpotSix: true, // un 6 au dé remporte la cagnotte
   sundayBet: true, // match du dimanche (pari)
   tombola: true, // tombola : tout le monde participe
@@ -23,6 +24,7 @@ const LIMITS = {
   startCash: [0, 20000],
   salary: [1000, 20000],
   loanRate: [0, 30],
+  savingsRate: [0, 20],
 };
 
 function sanitize(input, base = DEFAULTS) {

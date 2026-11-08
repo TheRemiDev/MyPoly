@@ -8,6 +8,7 @@ let errors = 0;
 let turns = 0;
 let worthSum = 0;
 let winSum = 0;
+let saved = 0;
 const t0 = Date.now();
 for (let r = 0; r < runs; r++) {
   const nb = 2 + (r % 5);
@@ -29,6 +30,7 @@ for (let r = 0; r < runs; r++) {
       const total = g.players.reduce((s, p) => s + p.cash, 0);
       for (const p of g.players) {
         if (p.cash < 0) throw new Error('argent négatif ' + p.cash);
+        if (!(p.savings >= 0)) throw new Error('épargne invalide ' + p.savings);
         if (p.loans < 0 || p.loans % 1000) throw new Error('emprunt invalide ' + p.loans);
         if (p.day < 0 || p.day > PAYDAY) throw new Error('jour invalide ' + p.day);
         if (!Number.isFinite(total)) throw new Error('argent NaN');
@@ -38,6 +40,7 @@ for (let r = 0; r < runs; r++) {
     if (!g.over) throw new Error('partie sans fin');
     if (!ended || !ended.players.find((p) => p.rank === 1)) throw new Error('résultat invalide');
     turns += g.turns;
+    saved += g.players.reduce((t, p) => t + p.savings, 0) / g.players.length;
     const w = ended.players.find((p) => p.rank === 1);
     winSum += w.netWorth;
     worthSum += ended.players.reduce((s, p) => s + p.netWorth, 0) / ended.players.length;
@@ -46,4 +49,4 @@ for (let r = 0; r < runs; r++) {
     console.error('Partie', r, ':', e.stack, JSON.stringify(settings));
   }
 }
-console.log(`${runs} parties simulées en ${Date.now() - t0} ms, ${errors} erreur(s). Tours moyens : ${(turns / runs).toFixed(1)}, patrimoine moyen ${Math.round(worthSum / runs)} €, gagnant moyen ${Math.round(winSum / runs)} €`);
+console.log(`${runs} parties simulées en ${Date.now() - t0} ms, ${errors} erreur(s). Tours moyens : ${(turns / runs).toFixed(1)}, patrimoine moyen ${Math.round(worthSum / runs)} €, gagnant moyen ${Math.round(winSum / runs)} €, épargne moyenne en fin ${Math.round(saved / runs)} €`);

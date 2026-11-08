@@ -951,16 +951,17 @@ function rulesPage() {
       h('section.rule-card#mois', { style: { '--rc': '#3fa7ff' } },
         h('div.rule-head', h('span.rule-icon', '📅'), h('h2', 'Fin de mois — tiendras-tu jusqu\'à la paye ?')),
         h('div.rule-body',
-          h('p', 'De 2 à 6 joueurs. Chacun traverse un mois calendrier, du 1er au 31, en lançant le dé. La partie dure 3 mois (réglable de 1 à 12) : ', h('b', 'le plus riche à la fin (argent − emprunts) gagne.')),
+          h('p', 'De 2 à 6 joueurs. Chacun traverse un mois calendrier, du 1er au 31, en lançant le dé. La partie dure 3 mois (réglable de 1 à 12) : ', h('b', 'le plus riche à la fin (argent + épargne − emprunts) gagne.')),
           h('ul',
             h('li', '✉️ ', h('b', 'Courrier'), ' : factures à régler le jour de paye, amendes (pour la cagnotte), chèques, publicités…'),
             h('li', '🏷️ ', h('b', 'Affaire'), ' : achète un objet (vélo vintage, food truck…), puis revends-le plus cher sur une case 🛍️ ', h('b', 'Acheteur'), '.'),
             h('li', '💶 ', h('b', 'Le 31, c\'est la paye'), ' : tu touches ton salaire, puis tu règles tes factures et les intérêts de tes emprunts.'),
             h('li', '🏦 Plus d\'argent ? La banque te prête automatiquement par tranches de 1 000 €, à rembourser le jour de paye.'),
+            h('li', '🐷 ', h('b', 'Épargne'), ' : le jour de paye, mets de l\'argent sur ton livret. Il rapporte des intérêts à chaque paye et te dépanne automatiquement avant tout emprunt.'),
             h('li', '💰 Fais un ', h('b', '6'), ' au dé pour rafler la cagnotte, alimentée par les amendes, coups durs et paris perdus.'),
             h('li', '⚽ Match du dimanche, 🎟️ tombola, 🎂 anniversaire, 🍻 tournée générale, 📦 vide-grenier, 📻 jeu radio : chaque jour réserve sa surprise.')
           ),
-          h('p.muted', 'Réglables : durée en mois, argent de départ, salaire, taux d\'intérêt, cagnotte sur un 6, match du dimanche, tombola, valeur des affaires invendues.')
+          h('p.muted', 'Réglables : durée en mois, argent de départ, salaire, taux des emprunts et de l\'épargne, cagnotte sur un 6, match du dimanche, tombola, valeur des affaires invendues.')
         ),
         h('div.rule-tip', '💡 Une affaire non revendue ne vaut rien à la fin : pense à garder un acheteur sous le coude pour ton dernier mois.')
       ),

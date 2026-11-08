@@ -7,7 +7,7 @@ import { store, emit } from './store.js';
 import * as Sound from './sound.js';
 import { navigate } from './app.js';
 import { webglAvailable } from './board3d.js';
-import { Month3D, SPACES, WEEKDAYS } from './mois3d.js';
+import { Month3D, SPACES, WEEKDAYS, DAY_ART } from './mois3d.js';
 
 export const MONTH_SETTINGS_UI = [
   { group: 'Partie', items: [
@@ -19,6 +19,7 @@ export const MONTH_SETTINGS_UI = [
     { key: 'startCash', label: 'Argent de départ', type: 'select', options: [[0, '0 €'], [1000, '1 000 €'], [2000, '2 000 €'], [3000, '3 000 €'], [5000, '5 000 €']] },
     { key: 'salary', label: 'Salaire mensuel', type: 'select', options: [[2000, '2 000 €'], [2500, '2 500 €'], [3500, '3 500 €'], [5000, '5 000 €']] },
     { key: 'loanRate', label: 'Intérêts des emprunts', type: 'select', options: [[0, '0 %'], [5, '5 % / mois'], [10, '10 % / mois'], [15, '15 % / mois'], [20, '20 % / mois']] },
+    { key: 'savingsRate', label: 'Intérêts de l\'épargne', type: 'select', options: [[0, '0 % (pas d\'intérêts)'], [2, '2 % / mois'], [5, '5 % / mois'], [8, '8 % / mois'], [10, '10 % / mois']] },
   ] },
   { group: 'Règles', items: [
     { key: 'jackpotSix', label: 'Un 6 rafle la cagnotte', type: 'toggle', hint: 'Amendes, coups durs et paris perdus remplissent la cagnotte' },
@@ -33,10 +34,10 @@ export const MONTH_SETTINGS_UI = [
 ];
 
 export const MONTH_PRESETS = {
-  '⚡ Express': { months: 1, turnTime: 15, startCash: 3000, salary: 3500, loanRate: 10 },
-  '📅 Standard': { months: 3, turnTime: 25, startCash: 3000, salary: 3500, loanRate: 10 },
-  '🗓️ Longue': { months: 6, turnTime: 25, startCash: 3000, salary: 3500, loanRate: 10 },
-  '💸 Crise': { months: 3, turnTime: 25, startCash: 1000, salary: 2500, loanRate: 20 },
+  '⚡ Express': { months: 1, turnTime: 15, startCash: 3000, salary: 3500, loanRate: 10 , savingsRate: 5 },
+  '📅 Standard': { months: 3, turnTime: 25, startCash: 3000, salary: 3500, loanRate: 10 , savingsRate: 5 },
+  '🗓️ Longue': { months: 6, turnTime: 25, startCash: 3000, salary: 3500, loanRate: 10 , savingsRate: 5 },
+  '💸 Crise': { months: 3, turnTime: 25, startCash: 1000, salary: 2500, loanRate: 20 , savingsRate: 2 },
 };
 
 const EMOTES = ['👍', '😂', '😱', '😡', '🔥', '💸', '🎉', '😎', '🙏', '💀'];
@@ -200,12 +201,13 @@ export class MonthTable {
     modal({
       title: '📅 Règles de Fin de mois',
       body: h('div.rules-summary',
-        h('p', `Chaque tour, lance le dé et avance dans le mois. Le 31, c'est la paye ! La partie dure ${s.months} mois : `, h('b', 'le joueur le plus riche à la fin (argent − emprunts) gagne.')),
+        h('p', `Chaque tour, lance le dé et avance dans le mois. Le 31, c'est la paye ! La partie dure ${s.months} mois : `, h('b', 'le joueur le plus riche à la fin (argent + épargne − emprunts) gagne.')),
         h('ul',
           h('li', '✉️ Courrier : factures à régler le jour de paye, amendes, bonnes surprises…'),
           h('li', '🏷️ Affaire : achète un objet, puis revends-le plus cher sur une case 🛍️ Acheteur.'),
           h('li', `💶 Jour de paye : +${euro(s.salary)} de salaire, puis tu règles tes factures${s.loanRate ? ` et ${s.loanRate} % d'intérêts sur tes emprunts` : ''}.`),
           h('li', '🏦 Pas assez d\'argent ? La banque te prête automatiquement par tranches de 1 000 €. Rembourse-les le jour de paye.'),
+          h('li', `🐷 Le jour de paye, mets de l'argent sur ton livret d'épargne : il rapporte ${s.savingsRate ?? 5} % à chaque paye et te dépanne automatiquement avant tout emprunt.`),
           s.jackpotSix ? h('li', '💰 Amendes et coups durs remplissent la cagnotte : fais un 6 au dé pour la rafler !') : null,
           s.sundayBet ? h('li', '⚽ Le dimanche, parie 500 € : 4, 5 ou 6 pour gagner 500 €.') : null,
           s.tombola ? h('li', '🎟️ Tombola : chacun paie 100 €, le dé désigne le gagnant (sinon tout va dans la cagnotte).') : null,
@@ -376,6 +378,7 @@ export class MonthTable {
           h('div.pc-cash.mo-cash', euro(p.cash)),
           h('div.pc-chips',
             p.out ? h('span.pc-chip.off', 'Abandon') : p.done ? h('span.pc-chip.mo-done', '🏁 Terminé') : h('span.pc-chip', { title: 'Avancement' }, `📅 ${p.month}/${months} · ${p.day === 0 ? 'départ' : p.day === PAYDAY ? 'paye' : 'le ' + p.day}`),
+            p.savings ? h('span.pc-chip.mo-savechip', { title: 'Livret d\'épargne' }, `🐷 ${euro(p.savings)}`) : null,
             p.loans ? h('span.pc-chip.mo-loan', { title: 'Emprunts à rembourser' }, `🏦 −${euro(p.loans)}`) : null,
             p.bills.length ? h('span.pc-chip.mo-bill', { title: p.bills.map((b) => `${b.name} : ${euro(b.amount)}`).join('\n') }, `🧾 ${euro(billsTotal)}`) : null,
             p.deals.length ? h('span.pc-chip.mo-dealchip', { title: p.deals.map((d) => `${d.name} (revente ${euro(d.value)})`).join('\n') }, `🏷️ ${p.deals.length}`) : null,
@@ -398,12 +401,12 @@ export class MonthTable {
     const total = me.bills.reduce((s, b) => s + b.amount, 0);
     this.billsEl.innerHTML = '';
     this.billsEl.append(
-      h('div.mo-pile-cards', me.bills.slice(-4).map((b, k) => h('span.mo-mini.letter', { style: { '--k': k } }, b.icon)), me.bills.length ? null : h('span.mo-mini.empty', '🧾')),
+      h('div.mo-pile-cards', me.bills.slice(-4).map((b, k) => h('span.mo-mini.letter', { style: { '--k': k } }, b.icon)), me.bills.length ? null : h('span.mo-none', '🧾')),
       h('div.mo-pile-txt', h('small', 'Mes factures'), h('b', me.bills.length ? euro(total) : 'Aucune'))
     );
     this.dealsEl.innerHTML = '';
     this.dealsEl.append(
-      h('div.mo-pile-cards', me.deals.slice(-4).map((d, k) => h('span.mo-mini.deal', { style: { '--k': k } }, d.icon)), me.deals.length ? null : h('span.mo-mini.empty', '🏷️')),
+      h('div.mo-pile-cards', me.deals.slice(-4).map((d, k) => h('span.mo-mini.deal', { style: { '--k': k } }, d.icon)), me.deals.length ? null : h('span.mo-none', '🏷️')),
       h('div.mo-pile-txt', h('small', 'Mes affaires'), h('b', me.deals.length ? `${me.deals.length} · ${euro(me.deals.reduce((s, d) => s + d.value, 0))}` : 'Aucune'))
     );
   }
@@ -488,7 +491,7 @@ export class MonthTable {
         h('div.mo-decide-title', '🛍️ Un acheteur est intéressé !'),
         who,
         h('div.mo-decide-sub', mine ? 'Choisissez l\'affaire à lui revendre :' : `${p.name} choisit quoi revendre`),
-        h('div.mo-deal-row', p.deals.map((d) => dealCard(d, { cls: '.sm' + (mine ? '.pick' : ''), onclick: mine ? () => choose(d.uid) : null, foot: mine ? h('div.mo-deal-sell', `Vendre ${euro(d.value)}`) : null }))),
+        h('div.mo-deal-row', p.deals.map((d) => dealCard(d, { cls: '.sm' + (mine ? '.mo-pickable' : ''), onclick: mine ? () => choose(d.uid) : null, foot: mine ? h('div.mo-deal-sell', `Vendre ${euro(d.value)}`) : null }))),
         mine ? h('div.mo-decide-btns', h('button.btn.ghost', { onclick: () => choose('keep') }, 'Ne rien vendre')) : null
       );
     } else if (pd.type === 'bet') {
@@ -505,20 +508,35 @@ export class MonthTable {
         ) : null
       );
     } else if (pd.type === 'payday') {
+      const rate = st.settings.savingsRate || 0;
       const max = Math.min(p.loans, Math.floor(p.cash / 1000) * 1000);
+      const all500 = Math.floor(p.cash / 500) * 500;
+      const account = (cls, icon, label, value, sub) => h('div.mo-acc.' + cls, h('span.mo-acc-ico', icon), h('small', label), h('b', euro(value)), h('em', sub));
+      const btn = (label, choice, cls = '.ghost') => h('button.btn.sm' + cls, { onclick: () => choose(choice) }, label);
       el.append(
-        h('div.mo-decide-title', '🏦 Rembourser la banque ?'),
+        h('div.mo-decide-title', '💶 Jour de paye : votre banque'),
         who,
-        h('div.mo-repay',
-          h('div', h('small', 'Emprunts'), h('b.neg', euro(p.loans))),
-          h('div', h('small', 'Votre argent'), h('b', euro(p.cash))),
-          h('div', h('small', 'Intérêts'), h('b', `${st.settings.loanRate} % / mois`))
+        h('div.mo-accounts',
+          account('cash', '👛', 'Porte-monnaie', p.cash, 'disponible'),
+          account('save', '🐷', 'Livret d\'épargne', p.savings || 0, rate ? `+${rate} % chaque paye` : 'sans intérêts'),
+          account('loan', '🏦', 'Emprunts', p.loans, p.loans ? `${st.settings.loanRate} % d'intérêts / mois` : 'aucun crédit')
         ),
-        mine ? h('div.mo-decide-btns',
-          h('button.btn.primary', { onclick: () => choose('all') }, `Rembourser ${euro(max)}`),
-          max > 1000 ? h('button.btn.ghost', { onclick: () => choose('one') }, 'Rembourser 1 000 €') : null,
-          h('button.btn.ghost', { onclick: () => choose('done') }, 'Garder mon argent')
-        ) : null
+        mine ? h('div.mo-bank-ops',
+          h('div.mo-bank-row', h('span.mo-bank-lbl', '🐷 Épargner'),
+            p.cash >= 500 ? btn('+500 €', 'save:500') : null,
+            p.cash >= 1000 ? btn('+1 000 €', 'save:1000') : null,
+            all500 >= 1500 ? btn(`Tout (${euro(all500)})`, 'save:' + all500) : null,
+            p.savings > 0 ? btn(`Retirer ${euro(p.savings)}`, 'withdraw:' + p.savings) : null,
+            p.cash < 500 && !p.savings ? h('small.muted', 'Pas assez d\'argent ce mois-ci') : null
+          ),
+          p.loans > 0 ? h('div.mo-bank-row', h('span.mo-bank-lbl', '🏦 Rembourser'),
+            max >= 1000 ? btn('1 000 €', 'one') : null,
+            max > 1000 ? btn(`Tout possible (${euro(max)})`, 'all') : null,
+            max < 1000 ? h('small.muted', 'Il faut au moins 1 000 € en poche') : null
+          ) : null
+        ) : null,
+        mine ? h('div.mo-decide-note.soft', '💡 L\'épargne rapporte des intérêts et sert automatiquement si vous manquez d\'argent, avant tout emprunt.') : null,
+        mine ? h('div.mo-decide-btns', h('button.btn.primary.lg', { onclick: () => choose('done') }, '✓ Terminer le mois')) : null
       );
     }
   }
@@ -629,10 +647,10 @@ export class MonthTable {
     const cx = box.left + box.width / 2;
     const cy = box.top + box.height / 2;
     const off = (pt) => (pt ? `translate(${pt.x - cx}px, ${pt.y - cy}px)` : 'translate(0, 40px)');
-    const inAnim = wrap.animate([{ transform: `${off(from)} scale(.25) rotate(-12deg)`, opacity: 0 }, { transform: 'translate(0,0) scale(1.04) rotate(1deg)', opacity: 1, offset: 0.75 }, { transform: 'none', opacity: 1 }], { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1.1)' });
+    const inAnim = wrap.animate([{ transform: `${off(from)} scale(.25) rotate(-12deg)`, opacity: 0 }, { transform: 'translate(0,0) scale(1.04) rotate(1deg)', opacity: 1, offset: 0.75 }, { transform: 'none', opacity: 1 }], { duration: 520, easing: 'cubic-bezier(.2,.9,.3,1.1)' });
     await inAnim.finished.catch(() => {});
     await sleep(ms);
-    const out = wrap.animate([{ transform: 'none', opacity: 1 }, { transform: `${to ? off(to) : 'translate(0,-30px)'} scale(${to ? 0.15 : 0.9})`, opacity: 0 }], { duration: 380, easing: 'cubic-bezier(.5,0,.75,0)' });
+    const out = wrap.animate([{ transform: 'none', opacity: 1 }, { transform: `${to ? off(to) : 'translate(0,-30px)'} scale(${to ? 0.15 : 0.9})`, opacity: 0 }], { duration: 450, easing: 'cubic-bezier(.5,0,.75,0)' });
     await out.finished.catch(() => {});
     wrap.remove();
   }
@@ -657,7 +675,7 @@ export class MonthTable {
     const s = SPACES[sp.k] || SPACES.start;
     const here = this.state.players.filter((p) => !p.out && (this.disp.days[p.id] ?? p.day) === day);
     this.tipEl.replaceChildren(
-      h('div.mo-tip-head', { style: { '--k': s.color } }, h('span', s.icon), h('b', day === 0 ? 'Départ' : `${dayLabel(day)} · ${s.name}`)),
+      h('div.mo-tip-head', { style: { '--k': s.color } }, h('span', s.icon), h('b', day === 0 ? 'Départ' : `${dayLabel(day)} · ${DAY_ART[day] && sp.k !== 'payday' ? DAY_ART[day].title.replace(/-?\n/g, (x) => (x.startsWith('-') ? '' : ' ')) : s.name}`)),
       h('div.mo-tip-txt', sp.k === 'mail' ? `${sp.n} lettre${sp.n > 1 ? 's' : ''} à ouvrir : factures, amendes, chèques, publicités…` : s.desc),
       here.length ? h('div.mo-tip-who', here.map((p) => h('span', { style: { '--c': p.color } }, p.pawn, ' ', p.name))) : null
     );
@@ -692,15 +710,15 @@ export class MonthTable {
           showFace(this.die, ev.value);
         }
         const pt = this.b3 ? this.b3.dieScreen() : this.rectOf(this.die);
-        this.bubble({ x: pt.x, y: pt.y - 50 }, `🎲 ${ev.value}`, ev.value === 6 ? '.warn' : '', 1100);
-        await sleep(200);
+        this.bubble({ x: pt.x, y: pt.y - 50 }, `🎲 ${ev.value}`, ev.value === 6 ? '.warn' : '', 1800);
+        await sleep(450);
         return;
       }
       case 'jackpot': {
         Sound.play('festival');
         const pot = this.b3 ? this.b3.jarScreen() : this.potEl ? this.rectOf(this.potEl) : null;
         this.bubble(pot, `💰 ${euro(ev.amount)}`, '.warn', 1800);
-        if (p) this.announce({ icon: '💰', title: `${p.name} rafle la cagnotte !`, text: `Un 6 qui rapporte ${euro(ev.amount)}`, color: p.color, pid: p.id, kind: 'gold', ms: 3500 });
+        if (p) this.announce({ icon: '💰', title: `${p.name} rafle la cagnotte !`, text: `Un 6 qui rapporte ${euro(ev.amount)}`, color: p.color, pid: p.id, kind: 'gold', ms: 4900 });
         if (this.b3) {
           await this.b3.coins('pot', ev.pid, 14);
           this.b3.shake(0.3);
@@ -714,7 +732,7 @@ export class MonthTable {
           d.days[ev.pid] = day;
           this.renderPawns(true);
           Sound.play('step');
-          await sleep(185);
+          await sleep(270);
         }
         return;
       }
@@ -723,14 +741,14 @@ export class MonthTable {
           this.b3.bumpTile(ev.day);
           this.b3.daySparkle(ev.day, (SPACES[ev.k] || {}).color || '#fff', 12);
         }
-        await sleep(150);
+        await sleep(400);
         return;
       case 'mail': {
         Sound.play('card');
         if (this.b3) this.b3.drawFrom('mail');
         const c = ev.card;
         const toPlayer = c.t === 'bill' ? this.cardPt(ev.pid) : null;
-        await this.showcase(h('div', letterCard(c, ev.n > 1 ? `${ev.k}/${ev.n}` : ''), p ? h('div.mo-show-for', { style: { '--c': p.color } }, `pour ${p.name}`) : null), { ms: 1250, from: this.deckPt('mail'), to: toPlayer });
+        await this.showcase(h('div', letterCard(c, ev.n > 1 ? `${ev.k}/${ev.n}` : ''), p ? h('div.mo-show-for', { style: { '--c': p.color } }, `pour ${p.name}`) : null), { ms: 2500, from: this.deckPt('mail'), to: toPlayer });
         if (c.t === 'bill' && p) {
           const sp = this.player(ev.pid);
           if (sp && !sp.bills.some((b) => b.uid === c.uid)) sp.bills.push({ uid: c.uid, icon: c.icon, name: c.name, amount: c.amount });
@@ -741,18 +759,18 @@ export class MonthTable {
       case 'dealDraw':
         Sound.play('card');
         if (this.b3) this.b3.drawFrom('deal');
-        await this.showcase(dealCard(ev.card, { cls: '.big' }), { ms: 500, from: this.deckPt('deal') });
+        await this.showcase(dealCard(ev.card, { cls: '.big' }), { ms: 1000, from: this.deckPt('deal') });
         return;
       case 'money': {
         const pt = this.pawnPt(ev.pid);
         const gain = ev.delta > 0;
-        this.bubble({ x: pt.x, y: pt.y - 30 }, `${gain ? '+' : '−'}${euro(Math.abs(ev.delta))}`, gain ? '.gain' : '.loss', 1500);
+        this.bubble({ x: pt.x, y: pt.y - 30 }, `${gain ? '+' : '−'}${euro(Math.abs(ev.delta))}`, gain ? '.gain' : '.loss', 2400);
         Sound.play(gain ? 'cash' : 'pay');
         if (this.b3) {
           const n = Math.min(10, 3 + Math.floor(Math.abs(ev.delta) / 400));
           const job = gain ? this.b3.coins(ev.from === 'pot' ? 'pot' : ev.from || 'bank', ev.pid, n) : this.b3.coins(ev.pid, ev.to || 'bank', n);
-          await Promise.race([job, sleep(450)]);
-        } else await sleep(300);
+          await Promise.race([job, sleep(800)]);
+        } else await sleep(600);
         this.setCash(ev.pid, ev.cash);
         if (ev.to && ev.to !== 'pot' && ev.to !== 'bank') this.setCash(ev.to, ev.peerCash);
         if (ev.pot !== undefined) {
@@ -763,14 +781,14 @@ export class MonthTable {
       }
       case 'loan':
         Sound.play('alarm');
-        if (p) this.announce({ icon: '🏦', title: `${p.name} emprunte ${euro(ev.amount)}`, text: `Total des emprunts : ${euro(ev.loans)}`, color: p.color, pid: p.id, kind: 'danger', ms: 2600 });
+        if (p) this.announce({ icon: '🏦', title: `${p.name} emprunte ${euro(ev.amount)}`, text: `Total des emprunts : ${euro(ev.loans)}`, color: p.color, pid: p.id, kind: 'danger', ms: 3600 });
         if (this.b3) this.b3.coins('bank', ev.pid, 6);
         this.setCash(ev.pid, ev.cash);
         if (p) {
           const sp = this.player(ev.pid);
           if (sp) sp.loans = ev.loans;
         }
-        await sleep(400);
+        await sleep(1100);
         return;
       case 'repay': {
         const sp = this.player(ev.pid);
@@ -780,7 +798,34 @@ export class MonthTable {
         const pt = this.pawnPt(ev.pid);
         this.bubble({ x: pt.x, y: pt.y - 30 }, `🏦 −${euro(ev.amount)}`, '.loss', 1500);
         Sound.play('pay');
-        await sleep(500);
+        await sleep(900);
+        return;
+      }
+      case 'deposit':
+      case 'withdraw':
+      case 'savings': {
+        const sp = this.player(ev.pid);
+        if (sp) sp.savings = ev.savings;
+        this.setCash(ev.pid, ev.cash);
+        const pt = this.pawnPt(ev.pid);
+        if (ev.t === 'deposit') {
+          if (this.b3) this.b3.coins(ev.pid, 'piggy', Math.min(10, 3 + Math.floor(ev.amount / 400)));
+          this.bubble({ x: pt.x, y: pt.y - 30 }, `🐷 +${euro(ev.amount)} épargnés`, '.save', 2400);
+          Sound.play('buy');
+        } else if (ev.t === 'withdraw') {
+          if (this.b3) this.b3.coins('piggy', ev.pid, Math.min(10, 3 + Math.floor(ev.amount / 400)));
+          this.bubble({ x: pt.x, y: pt.y - 30 }, `🐷 ${euro(ev.amount)} retirés`, '.save', 2400);
+          const p2 = this.player(ev.pid);
+          if (ev.auto && p2) this.announce({ icon: '🐷', title: `${p2.name} casse sa tirelire`, text: `${euro(ev.amount)} puisés dans l'épargne pour payer`, color: p2.color, pid: p2.id, ms: 3300 });
+          Sound.play('cash');
+        } else {
+          if (this.b3) this.b3.piggyShine();
+          const pp = this.b3 ? this.b3.piggyScreen() : pt;
+          this.bubble({ x: pp.x, y: pp.y - 20 }, `🐷 +${euro(ev.amount)} d'intérêts`, '.save', 2400);
+          Sound.play('cash');
+        }
+        this.renderPlayers();
+        await sleep(1000);
         return;
       }
       case 'pot':
@@ -792,9 +837,9 @@ export class MonthTable {
         Sound.play('buy');
         const sp = this.player(ev.pid);
         if (sp && !sp.deals.some((x) => x.uid === ev.card.uid)) sp.deals.push(ev.card);
-        if (p) this.announce({ icon: ev.card.icon, title: `${p.name} achète ${ev.card.name}`, text: `${euro(ev.price)} · revente ${euro(ev.card.value)}`, color: p.color, pid: p.id, ms: 2400 });
+        if (p) this.announce({ icon: ev.card.icon, title: `${p.name} achète ${ev.card.name}`, text: `${euro(ev.price)} · revente ${euro(ev.card.value)}`, color: p.color, pid: p.id, ms: 3300 });
         this.renderPlayers();
-        await sleep(300);
+        await sleep(900);
         return;
       }
       case 'passed':
@@ -804,8 +849,8 @@ export class MonthTable {
         Sound.play('festival');
         const sp = this.player(ev.pid);
         if (sp) sp.deals = sp.deals.filter((x) => x.uid !== ev.card.uid);
-        await this.showcase(dealCard(ev.card, { cls: '.big.sold', foot: h('div.mo-sold-stamp', 'VENDU !') }), { ms: 900, to: this.cardPt(ev.pid) });
-        if (p) this.announce({ icon: '🤑', title: `${p.name} revend ${ev.card.name}`, text: `+${euro(ev.profit)} de bénéfice !`, color: p.color, pid: p.id, kind: 'gold', ms: 3000 });
+        await this.showcase(dealCard(ev.card, { cls: '.big.sold', foot: h('div.mo-sold-stamp', 'VENDU !') }), { ms: 1900, to: this.cardPt(ev.pid) });
+        if (p) this.announce({ icon: '🤑', title: `${p.name} revend ${ev.card.name}`, text: `+${euro(ev.profit)} de bénéfice !`, color: p.color, pid: p.id, kind: 'gold', ms: 4200 });
         return;
       }
       case 'roll': {
@@ -814,10 +859,11 @@ export class MonthTable {
         const txt = h('div.mo-event-txt', { style: { opacity: 0 } }, ev.text);
         const node = h('div.mo-event' + (ev.win ? '.win' : '.lose'), { style: { '--c': p ? p.color : '#fff' } },
           h('div.mo-event-icon', ev.icon), h('div.mo-event-title', ev.title), dieWrap, txt, p ? h('div.mo-show-for', p.name) : null);
-        const shown = this.showcase(node, { ms: 1500 });
-        for (let k = 0; k < 8; k++) {
+        const shown = this.showcase(node, { ms: 2600 });
+        await sleep(350);
+        for (let k = 0; k < 10; k++) {
           dieWrap.replaceChildren(miniDie(1 + Math.floor(Math.random() * 6)));
-          await sleep(70);
+          await sleep(90 + k * 12);
         }
         dieWrap.replaceChildren(miniDie(ev.value));
         dieWrap.classList.add('landed');
@@ -833,11 +879,12 @@ export class MonthTable {
         for (let k = players.length; k < 6; k++) tickets.push(h('div.mo-ticket.void', h('b', String(k + 1)), h('span', '🫙'), h('small', 'Cagnotte')));
         const dieWrap = h('div.mo-event-die', miniDie(1));
         const node = h('div.mo-event.tombola', h('div.mo-event-icon', '🎟️'), h('div.mo-event-title', `Tombola · ${euro(ev.pot)} à gagner`), h('div.mo-tickets', tickets), dieWrap);
-        const shown = this.showcase(node, { ms: 2000 });
-        for (let k = 0; k < 9; k++) {
+        const shown = this.showcase(node, { ms: 3200 });
+        await sleep(400);
+        for (let k = 0; k < 12; k++) {
           dieWrap.replaceChildren(miniDie(1 + Math.floor(Math.random() * 6)));
           tickets.forEach((t, i) => t.classList.toggle('lit', i === k % 6));
-          await sleep(80);
+          await sleep(100 + k * 15);
         }
         dieWrap.replaceChildren(miniDie(ev.value));
         tickets.forEach((t, i) => t.classList.toggle('lit', i === ev.value - 1));
@@ -854,11 +901,12 @@ export class MonthTable {
           h('div.mo-payslip-row.plus', h('span', '💼 Salaire'), h('b', '+' + euro(ev.salary))),
           ev.bills.length ? ev.bills.map((b) => h('div.mo-payslip-row.minus.small', h('span', `${b.icon} ${b.name}`), h('b', '−' + euro(b.amount)))) : h('div.mo-payslip-row.small', h('span', '🧾 Aucune facture'), h('b', '0 €')),
           ev.interest ? h('div.mo-payslip-row.minus', h('span', `🏦 Intérêts (${euro(ev.loans)} empruntés)`), h('b', '−' + euro(ev.interest))) : null,
+          ev.earned ? h('div.mo-payslip-row.plus.save', h('span', `🐷 Intérêts du livret (${ev.rate} %)`), h('b', '+' + euro(ev.earned))) : null,
           h('div.mo-payslip-total', h('span', 'Reste'), h('b' + (net < 0 ? '.neg' : ''), (net >= 0 ? '+' : '−') + euro(Math.abs(net)))),
           h('div.mo-paid-stamp', 'PAYÉ')
         );
         if (this.b3) this.b3.daySparkle(PAYDAY, '#ffd166', 30);
-        await this.showcase(node, { ms: 2100, to: this.cardPt(ev.pid) });
+        await this.showcase(node, { ms: 3700, to: this.cardPt(ev.pid) });
         const sp = this.player(ev.pid);
         if (sp) sp.bills = [];
         return;
@@ -866,20 +914,20 @@ export class MonthTable {
       case 'newMonth': {
         d.days[ev.pid] = 0;
         this.renderPawns(true, ev.pid);
-        if (p) this.announce({ icon: '📅', title: `${p.name} attaque le mois ${ev.month}`, text: 'Retour au début du calendrier', color: p.color, pid: p.id, ms: 2200 });
+        if (p) this.announce({ icon: '📅', title: `${p.name} attaque le mois ${ev.month}`, text: 'Retour au début du calendrier', color: p.color, pid: p.id, ms: 4900 });
         Sound.play('turn');
-        await sleep(750);
+        await sleep(1300);
         return;
       }
       case 'done':
-        if (p) this.announce({ icon: '🏁', title: `${p.name} a terminé !`, text: `Patrimoine : ${euro(ev.worth)}`, color: p.color, pid: p.id, kind: 'gold', ms: 3000 });
+        if (p) this.announce({ icon: '🏁', title: `${p.name} a terminé !`, text: `Patrimoine : ${euro(ev.worth)}`, color: p.color, pid: p.id, kind: 'gold', ms: 4200 });
         Sound.play('festival');
-        await sleep(500);
+        await sleep(1400);
         return;
       case 'info':
-        if (p) this.announce({ icon: ev.icon, title: ev.title, text: ev.text, color: p.color, pid: p.id, kind: ev.kind || 'info', ms: 2400 });
+        if (p) this.announce({ icon: ev.icon, title: ev.title, text: ev.text, color: p.color, pid: p.id, kind: ev.kind || 'info', ms: 3300 });
         if (ev.icon === '🎂' && this.b3) this.b3.daySparkle(d.days[ev.pid] ?? 0, '#ff7ac6', 26);
-        await sleep(450);
+        await sleep(1100);
         return;
       case 'shuffle':
         if (this.b3) this.b3.shake(0.15);
@@ -935,7 +983,7 @@ export class MonthTable {
         h('div.end-sub', `📅 Fin de mois · ${res.months || ''} mois · ${duration(res.duration)}`),
         podium,
         h('div.end-list', ranked.slice(3).map((pl) => h('div.end-row', `#${pl.rank} ${pl.name}`, h('span', detail(pl))))),
-        h('div.mo-end-table', ranked.map((pl) => h('div.mo-end-row', h('span', `#${pl.rank} ${pl.name}`), h('small', `argent ${euro(pl.cash)} · emprunts ${euro(pl.loans)} · ${pl.stats.sold} vente${pl.stats.sold > 1 ? 's' : ''}`), h('b', euro(pl.netWorth))))),
+        h('div.mo-end-table', ranked.map((pl) => h('div.mo-end-row', h('span', `#${pl.rank} ${pl.name}`), h('small', `argent ${euro(pl.cash)} · épargne ${euro(pl.savings || 0)} · emprunts ${euro(pl.loans)} · ${pl.stats.sold} vente${pl.stats.sold > 1 ? 's' : ''}`), h('b', euro(pl.netWorth))))),
         rw ? h('div.rewards',
           h('div.reward', `+${rw.xp} XP`),
           rw.badges.length ? h('div.new-badges', h('div.small', 'Nouveaux badges débloqués !'), rw.badges.map((b) => h('div.badge.tier-' + b.tier, h('div.badge-icon', b.icon), h('div.badge-name', b.name)))) : null
