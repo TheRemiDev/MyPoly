@@ -680,7 +680,10 @@ export class CardTable {
     return res;
   }
   draw() {
-    if (!this.myTurn() || this.state.phase !== 'play') return;
+    if (!this.myTurn() || this.state.phase !== 'play') {
+      if (this.state && !this.state.over) this.nope(this.b3 ? (() => { const p = this.b3.deckScreen(); return { left: p.x, top: p.y }; })() : this.deckEl);
+      return;
+    }
     Sound.play('click');
     this.act('draw');
   }
@@ -698,18 +701,12 @@ export class CardTable {
 
   async clickCard(card, el) {
     const st = this.state;
-    if (!this.myTurn()) {
+    if (!this.myTurn() || !st.playable.includes(card.id)) {
+      // Pas mon tour, ou carte non jouable : sens interdit sur la carte + petit son
       el.classList.remove('nope');
       void el.offsetWidth;
       el.classList.add('nope');
-      if (st && st.hand && !st.over) toast(this.busy ? 'Un instant…' : 'Ce n\'est pas votre tour.', 'info', 1500);
-      return;
-    }
-    if (!st.playable.includes(card.id)) {
-      el.classList.remove('nope');
-      void el.offsetWidth;
-      el.classList.add('nope');
-      Sound.play('error');
+      this.nope(el);
       return;
     }
     const data = { card: card.id, carton: this.armed };
@@ -800,11 +797,51 @@ export class CardTable {
     }));
     return sleep(ms).then(() => node.remove());
   }
+  /** Centre de la table à l'écran (au-dessus des piles). */
+  tableCenter() {
+    if (this.b3) {
+      const p = this.b3.pileScreen();
+      const d = this.b3.deckScreen();
+      return { x: (p.x + d.x) / 2, y: Math.min(p.y, d.y) - 30 };
+    }
+    const r = this.center.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 - 30 };
+  }
+  /**
+   * Annonce d'un évènement de partie : médaillon animé posé au centre de la table
+   * (icône qui rebondit, onde de couleur, titre et détail), un seul à la fois.
+   */
   showBanner(icon, title, sub, color = '#3fa7ff', ms = 1500) {
-    const b = h('div.ct-banner', { style: { '--c': color } }, h('span.ct-banner-icon', icon), h('div', h('b', title), sub ? h('small', sub) : null));
-    this.banner.append(b);
-    setTimeout(() => b.classList.add('out'), ms);
-    setTimeout(() => b.remove(), ms + 400);
+    if (document.hidden) return;
+    const old = this.flashEl;
+    if (old) {
+      old.classList.add('out');
+      setTimeout(() => old.remove(), 220);
+    }
+    const host = this.v.gameEl.getBoundingClientRect();
+    const c = this.tableCenter();
+    const el = h('div.ct-flash', { style: { '--c': color, left: c.x - host.left + 'px', top: c.y - host.top + 'px' } },
+      h('div.ct-flash-medal', h('i.ct-flash-wave'), h('span', icon)),
+      h('div.ct-flash-text', h('b', title), sub ? h('small', sub) : null)
+    );
+    this.v.gameEl.append(el);
+    this.flashEl = el;
+    setTimeout(() => {
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 260);
+      if (this.flashEl === el) this.flashEl = null;
+    }, Math.max(ms, 1300));
+  }
+  /** « Sens interdit » sur une carte ou la pioche : action impossible maintenant. */
+  nope(target) {
+    Sound.play('nope');
+    if (!target) return;
+    const r = target.getBoundingClientRect ? target.getBoundingClientRect() : target;
+    const host = this.v.gameEl.getBoundingClientRect();
+    const el = h('div.ct-nope', { style: { left: r.left + (r.width || 0) / 2 - host.left + 'px', top: r.top + (r.height || 0) / 2 - host.top + 'px' } },
+      h('span', { html: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="#ff3b4e" stroke="#fff" stroke-width="4"/><rect x="11" y="20" width="26" height="8" rx="2" fill="#fff"/></svg>' }));
+    this.v.gameEl.append(el);
+    setTimeout(() => el.remove(), 750);
   }
   seatBubble(pid, content, cls = '', ms = 1600) {
     const pt = this.pointOf(pid);

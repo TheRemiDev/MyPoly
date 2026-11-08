@@ -2247,3 +2247,25 @@ body:not(.in-game) {
 .cell .sale-tag { position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 6; padding: 0.25cqw 0.7cqw; border-radius: 99px; background: #1b1f45; color: #fff; font-weight: 900; font-size: max(8px, 1.05cqw); white-space: nowrap; box-shadow: 0 0 0 0.15cqw rgba(255, 255, 255, .85), 0 0.4cqw 1cqw rgba(0, 0, 0, .45); pointer-events: none; }
 .cell .sale-tag.on { background: #2ecc71; }
 .cell.picked::after { content: none !important; }
+
+/* Carton ! — annonces de partie au centre de la table */
+.ct-flash { --c: #3fa7ff; position: absolute; z-index: 40; translate: -50% -50%; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+  animation: ctFlashIn 260ms cubic-bezier(.23, 1, .32, 1) both; }
+.ct-flash.out { opacity: 0; transform: translateY(-14px) scale(.96); filter: blur(2px); transition: opacity 220ms ease-out, transform 220ms ease-out, filter 220ms ease-out; }
+@keyframes ctFlashIn { from { opacity: 0; transform: scale(.85) translateY(10px); } }
+.ct-flash-medal { position: relative; width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; font-size: 36px;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c) 55%, #fff), var(--c) 55%, color-mix(in srgb, var(--c) 55%, #000));
+  box-shadow: 0 0 0 4px #fff, 0 0 0 8px color-mix(in srgb, var(--c) 45%, transparent), 0 14px 30px rgba(0, 0, 0, .5), 0 0 40px color-mix(in srgb, var(--c) 70%, transparent); }
+.ct-flash-medal span { position: relative; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); animation: ctFlashIcon 520ms cubic-bezier(.23, 1, .32, 1) 80ms both; }
+@keyframes ctFlashIcon { 0% { transform: scale(.4) rotate(-25deg); } 60% { transform: scale(1.18) rotate(6deg); } 100% { transform: scale(1) rotate(0); } }
+.ct-flash-wave { position: absolute; inset: -4px; border-radius: 50%; border: 3px solid var(--c); animation: ctFlashWave 900ms ease-out 100ms both; }
+@keyframes ctFlashWave { from { transform: scale(1); opacity: .9; } to { transform: scale(1.9); opacity: 0; } }
+.ct-flash-text { display: flex; flex-direction: column; align-items: center; padding: 7px 18px 8px; border-radius: 16px; text-align: center; white-space: nowrap;
+  background: rgba(14, 16, 38, .94); border: 1px solid color-mix(in srgb, var(--c) 60%, rgba(255, 255, 255, .2)); box-shadow: 0 10px 26px rgba(0, 0, 0, .45); }
+.ct-flash-text b { font-size: 1.05rem; font-weight: 900; color: #fff; }
+.ct-flash-text small { font-size: .78rem; font-weight: 700; color: #c9cdf0; }
+/* Sens interdit (action impossible) */
+.ct-nope { position: absolute; z-index: 60; width: 52px; height: 52px; translate: -50% -50%; pointer-events: none; animation: ctNopeIn 750ms cubic-bezier(.23, 1, .32, 1) both; }
+.ct-nope span, .ct-nope svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .5)); }
+@keyframes ctNopeIn { 0% { opacity: 0; transform: scale(.6); } 18% { opacity: 1; transform: scale(1.1); } 30% { transform: scale(1) rotate(-10deg); } 42% { transform: rotate(9deg); } 54% { transform: rotate(-5deg); } 66% { transform: rotate(0); opacity: 1; } 100% { opacity: 0; transform: scale(.95); } }
+@media (prefers-reduced-motion: reduce) { .ct-flash, .ct-flash-medal span, .ct-flash-wave, .ct-nope { animation-duration: 1ms; } }

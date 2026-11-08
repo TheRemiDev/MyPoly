@@ -118,6 +118,10 @@ const SFX = {
     tone(880, k * 0.32, 0.16, { type: 'square', gain: 0.07 });
     tone(620, k * 0.32 + 0.16, 0.16, { type: 'square', gain: 0.07 });
   }),
+  nope: () => {
+    tone(330, 0, 0.09, { type: 'square', gain: 0.07 });
+    tone(220, 0.09, 0.14, { type: 'square', gain: 0.07 });
+  },
   chat: () => tone(1200, 0, 0.08, { gain: 0.08 }),
   tick: () => tone(1000, 0, 0.04, { type: 'square', gain: 0.05 }),
   quake: () => {
