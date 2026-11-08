@@ -8,6 +8,7 @@
 import * as THREE from '/vendor/three/three.module.min.js';
 import { Horse3D, BOARD_TOP } from './horses3d.js';
 import { drawLogo } from './logo.js';
+import { drawArt } from './mois-art.js';
 
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif";
 const S17 = 10 / 17; // pas de la grille de référence de Horse3D
@@ -402,7 +403,7 @@ function medallion(g, icon, cx, cy, r, color) {
   g.beginPath();
   g.arc(cx, cy, r * 0.94, 0, Math.PI * 2);
   g.stroke();
-  emoji(g, icon, cx, cy + r * 0.04, r * 1.12);
+  if (!drawArt(g, icon, cx, cy + r * 0.02, r * 1.5)) emoji(g, icon, cx, cy + r * 0.04, r * 1.12);
 }
 /** Titre sur une ou deux lignes, blanc avec ombre portée. */
 function titleBlock(g, lines, cx, cy, maxW, size) {
@@ -767,12 +768,12 @@ export class Month3D extends Horse3D {
       g.fill();
       if (label) pill(g, label, x, y + r * 0.78, 34, 'rgba(10,12,40,.75)', color);
     };
-    spot(MAILBOX, 230, '✉️ COURRIER', '#6cc0ff');
-    spot(DECK, 230, '🏷️ AFFAIRES', '#ffc14d');
-    spot(BANK, 230, '🏦 BANQUE', '#c7cdfa');
-    spot(JAR, 240, '💰 CAGNOTTE', '#ffd166');
+    spot(MAILBOX, 230, 'COURRIER', '#6cc0ff');
+    spot(DECK, 230, 'AFFAIRES', '#ffc14d');
+    spot(BANK, 230, 'BANQUE', '#c7cdfa');
+    spot(JAR, 240, 'CAGNOTTE', '#ffd166');
     spot(DIE, 170, '', '#ffffff');
-    spot(PIGGY, 150, '🐷 ÉPARGNE', '#ff9ad5');
+    spot(PIGGY, 150, 'ÉPARGNE', '#ff9ad5');
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.maxAniso;
@@ -832,7 +833,7 @@ export class Month3D extends Horse3D {
       c.fillStyle = '#10203f';
       rr(c, w * 0.18, h * 0.16, w * 0.64, h * 0.07, 8);
       c.fill();
-      emoji(c, '✉️', w / 2, h * 0.5, w * 0.36);
+      if (!drawArt(c, 'envelope', w / 2, h * 0.5, w * 0.62)) emoji(c, '✉️', w / 2, h * 0.5, w * 0.36);
       fitText(c, 'COURRIER', w / 2, h * 0.8, w * 0.8, w * 0.12, '#fff');
     }, 256, 320);
     const W = 0.62;
@@ -924,7 +925,7 @@ export class Month3D extends Horse3D {
     const pay = st.day === 31;
     const wd = WEEKDAY_FULL[weekday(st.day)];
     if (st.day === 0) {
-      fitText(g, '🚩', W / 2, 230, W, 130, '#000');
+      if (!drawArt(g, 'flag', W / 2, 225, 170)) fitText(g, '🚩', W / 2, 230, W, 130, '#000');
       fitText(g, 'DÉPART', W / 2, 360, W - 40, 56, '#22b45e');
     } else {
       fitText(g, String(st.day), W / 2, 240, W - 40, 190, pay ? '#16a34a' : weekday(st.day) === 6 ? '#e23b4b' : '#23202b');
@@ -969,7 +970,7 @@ export class Month3D extends Horse3D {
       c.lineWidth = 8;
       rr(c, 14, 14, w - 28, h - 28, 20);
       c.stroke();
-      emoji(c, '🏷️', w / 2, h * 0.42, 110);
+      if (!drawArt(c, 'tag', w / 2, h * 0.42, 150)) emoji(c, '🏷️', w / 2, h * 0.42, 110);
       fitText(c, 'AFFAIRE', w / 2, h * 0.76, w - 50, 36, '#fff');
     }, 220, 300);
     const g = new THREE.Group();
@@ -1025,7 +1026,7 @@ export class Month3D extends Horse3D {
     sg.lineWidth = 5;
     sg.strokeStyle = '#fff';
     sg.stroke();
-    fitText(sg, '🏦 BANQUE', 128, 38, 220, 36, '#4a2c00');
+    fitText(sg, 'BANQUE', 128, 38, 220, 36, '#4a2c00');
     const st = new THREE.CanvasTexture(sc);
     st.colorSpace = THREE.SRGBColorSpace;
     const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: st, transparent: true, depthWrite: false }));
