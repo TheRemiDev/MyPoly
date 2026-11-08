@@ -78,6 +78,37 @@ app.get('/api/leaderboard', (req, res) => {
   res.json({ players: U.leaderboard(String(req.query.sort || 'rating')) });
 });
 
+// Statistiques publiques de la page d'accueil (mises en cache 20 s)
+let statsCache = null;
+app.get('/api/stats', (_req, res) => {
+  const now = Date.now();
+  if (!statsCache || now - statsCache.at > 20000) {
+    const db = require('./db');
+    const kindOf = (wt) => (wt === 'cartes' || wt === 'chevaux' ? wt : 'poly');
+    const recent = db.prepare('SELECT win_type, winner_name, players, ended_at, duration FROM games WHERE winner_name IS NOT NULL ORDER BY id DESC LIMIT 12').all()
+      .map((g) => ({ kind: kindOf(g.win_type), winner: g.winner_name, players: JSON.parse(g.players).length, at: g.ended_at, duration: g.duration }));
+    const byKind = { poly: 0, cartes: 0, chevaux: 0 };
+    for (const r of db.prepare("SELECT CASE WHEN win_type IN ('cartes','chevaux') THEN win_type ELSE 'poly' END AS k, COUNT(*) AS n FROM games GROUP BY k").all()) byKind[r.k] = r.n;
+    const top = {
+      poly: U.leaderboard('wins', 3),
+      cartes: U.leaderboard('c_wins', 3),
+      chevaux: U.leaderboard('h_wins', 3),
+    };
+    statsCache = {
+      at: now,
+      data: {
+        players: db.prepare('SELECT COUNT(*) AS n FROM users WHERE banned = 0').get().n,
+        games: Object.values(byKind).reduce((a, b) => a + b, 0),
+        today: db.prepare('SELECT COUNT(*) AS n FROM games WHERE ended_at > ?').get(now - 86400000).n,
+        byKind,
+        recent,
+        top: Object.fromEntries(Object.entries(top).map(([k, list]) => [k, list.map((p) => ({ id: p.id, name: p.name, pawn: p.pawn, color: p.color, wins: p.wins, vip: p.vip, role: p.role }))])),
+      },
+    };
+  }
+  res.json({ ...statsCache.data, live: rooms.counts() });
+});
+
 // Réglages publics du site (mode invité…)
 app.get('/api/site', (_req, res) => {
   res.set('Cache-Control', 'no-store');
