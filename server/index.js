@@ -113,8 +113,13 @@ server.listen(config.port, config.host, () => {
   console.log(`🎲 MyPoly en ligne sur http://${config.host}:${config.port} ${config.publicUrl ? '(' + config.publicUrl + ')' : ''}`);
 });
 
+let stopping = false;
 function shutdown() {
+  if (stopping) return;
+  stopping = true;
   console.log('Arrêt de MyPoly…');
+  // Les salles et parties en cours sont sauvegardées : elles reprennent au redémarrage
+  rooms.saveRooms();
   io.emit('announce', { text: 'Le serveur redémarre, reconnexion automatique dans quelques secondes…' });
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();

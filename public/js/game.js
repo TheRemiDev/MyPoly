@@ -872,6 +872,50 @@ class RoomView {
     await sleep(300);
   }
 
+  /** Bouclier : le loyer est bloqué, de façon bien visible pour tout le monde. */
+  async shieldShow(ev, p) {
+    const owner = ev.owner ? this.player(ev.owner) : null;
+    Sound.play('takeover');
+    this.announce({ icon: '🛡️', title: `${p.name} est protégé(e) !`, text: `Son bouclier bloque le loyer de ${fmt(ev.amount || 0)}${owner ? ` dû à ${owner.name}` : ''}`, color: '#3fa7ff', kind: 'buy', ms: 3200, pid: p.id });
+    if (ev.cell != null) {
+      this.focusCell(ev.cell);
+      this.cellLabel(ev.cell, `🛡️ LOYER ANNULÉ`, '#3fa7ff');
+    }
+    if (document.hidden) return;
+    // Bandeau au centre : montant du loyer barré
+    const pop = h('div.shield-pop', { style: { '--c': p.color } },
+      h('div.shield-icon', h('span', '🛡️')),
+      h('div.shield-text',
+        h('div.shield-title', 'BOUCLIER !'),
+        h('div.shield-amount', h('s', fmt(ev.amount || 0)), h('b', '0')),
+        h('div.shield-sub', `${p.name} ne paie rien${owner ? ` à ${owner.name}` : ''}`)
+      )
+    );
+    this.gameEl.append(pop);
+    const card = this.playersEl && this.playersEl.querySelector(`[data-pid="${CSS.escape(p.id)}"]`);
+    if (card) {
+      card.classList.remove('shielded');
+      void card.offsetWidth;
+      card.classList.add('shielded');
+    }
+    if (this.b3) {
+      this.b3.cb.onShieldHit = () => Sound.play('tick');
+      await this.b3.shieldBlock(p.id, ev.owner);
+    } else {
+      // Plateau 2D : bulle bleue autour du pion
+      const el = this.pawnEls && this.pawnEls[p.id];
+      if (el) {
+        el.classList.add('shield-bubble');
+        setTimeout(() => el.classList.remove('shield-bubble'), 2000);
+      }
+      await sleep(2000);
+    }
+    Sound.play('crumble');
+    pop.classList.add('out');
+    setTimeout(() => pop.remove(), 300);
+    await sleep(200);
+  }
+
   /** Recadre brièvement la caméra 3D sur une case. */
   focusCell(i) {
     if (this.b3 && !document.hidden) this.b3.focus(i);
@@ -1400,8 +1444,7 @@ class RoomView {
         return;
       }
       case 'shield':
-        Sound.play('buy');
-        this.announce({ icon: '🛡️', title: `Bouclier de ${p.name} !`, text: 'Le loyer est annulé', color: p.color, kind: 'buy' });
+        await this.shieldShow(ev, p);
         return;
       case 'bankrupt': {
         const cells = ev.cells || [];
@@ -1512,6 +1555,7 @@ class RoomView {
       }
       el.classList.toggle('selectable', selectable);
       el.classList.toggle('picked', !!(this.debt && st.phase === 'debt' && this.debt.sel.has(i)));
+      const saleTag = myTurn && st.phase === 'debt' && this.debt && owner && owner.id === this.me ? h('span.sale-tag' + (this.debt.sel.has(i) ? '.on' : ''), (this.debt.sel.has(i) ? '✓ +' : '+') + fmt(pr.sell || 0)) : null;
       const priceTxt = owner && pr.rent ? fmt(pr.rent) : c.price ? fmt(c.price) : '';
       if (c.type === 'city') {
         const ct = countries[c.country];
@@ -1552,6 +1596,7 @@ class RoomView {
         );
       }
       if (fest) el.append(h('div.festival-badge', `🎉 ×${st.festival.mult}`));
+      if (saleTag) el.append(saleTag);
       if (owner) el.append(h('div.owner-flag', { style: { '--c': owner.color }, title: owner.name }, owner.pawn));
     }
   }
@@ -1583,6 +1628,18 @@ class RoomView {
       settings: this.room.settings,
       mono: (pid, country) => this.ownsCountry(pid, country),
     }, !this.syncInstant);
+    this.b3.setTags(this.saleTags());
+  }
+
+  /** Prix de revente de mes propriétés, affichés en permanence pendant une vente. */
+  saleTags() {
+    const st = this.state;
+    if (!st || st.phase !== 'debt' || st.current !== this.me || !this.debt) return null;
+    const tags = {};
+    st.props.forEach((pr, i) => {
+      if (pr && pr.owner === this.me) tags[i] = { text: (this.debt.sel.has(i) ? '✓ +' : '+') + fmt(pr.sell || 0), on: this.debt.sel.has(i) };
+    });
+    return tags;
   }
 
   ownsCountry(pid, country) {
@@ -2193,14 +2250,9 @@ class RoomView {
   toggleDebtPick(i) {
     if (!this.debt) return;
     Sound.play('click');
-    const pr = this.state.props[i];
-    if (this.debt.sel.has(i)) {
-      this.debt.sel.delete(i);
-      this.cellLabel(i, 'Retirée', '#5b6185');
-    } else {
-      this.debt.sel.add(i);
-      this.cellLabel(i, '+' + fmt((pr && pr.sell) || 0), '#2ecc71');
-    }
+    // Les prix sont déjà affichés en permanence sur les cases : l'étiquette passe au vert
+    if (this.debt.sel.has(i)) this.debt.sel.delete(i);
+    else this.debt.sel.add(i);
     this.debt.custom = true;
     this.renderActions(this.state);
     this.renderCells();

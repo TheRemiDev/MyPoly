@@ -77,6 +77,24 @@ class Game {
     this.seq = 0;
   }
 
+  /** Recrée la suite d'une dette après restauration (les fonctions ne se sauvegardent pas). */
+  rebuildAfterDebt() {
+    const spec = this.afterDebtSpec;
+    if (this.phase !== 'debt' || !spec) return;
+    if (spec.k === 'afterRent') {
+      const p = this.player(spec.pid);
+      this.afterDebt = () => (p ? this.afterRent(p, spec.cell) : this.endAction());
+    } else if (spec.k === 'charity') {
+      this.afterDebt = () => {
+        for (const id of spec.ids) {
+          const o = this.player(id);
+          if (o && !o.bankrupt) this.money(o, 30, 'card');
+        }
+        this.endAction();
+      };
+    } else this.afterDebt = () => this.endAction();
+  }
+
   // ---------------------------------------------------------------- helpers
   get cur() {
     return this.players[this.turn];
@@ -368,7 +386,7 @@ class Game {
    * Fait payer `amount` au joueur courant. Si les liquidités sont insuffisantes
    * mais que la vente de biens suffirait, le joueur passe en phase "dette".
    */
-  charge(p, amount, to, reason, then) {
+  charge(p, amount, to, reason, then, resume = { k: 'end' }) {
     amount = Math.round(amount);
     if (amount <= 0) return then();
     if (p.cash >= amount) {
@@ -386,6 +404,8 @@ class Game {
     }
     this.say(`${p.name} doit ${fmt(amount)} et doit vendre des propriétés.`, p.id);
     this.afterDebt = then;
+    // Description sérialisable de la suite (pour reprendre la partie après un redémarrage)
+    this.afterDebtSpec = resume;
     p.stats.wasInDebt = true;
     this.setPhase('debt', { amount, to: to ? to.id : null, reason });
   }
@@ -555,7 +575,7 @@ class Game {
     if (p.shield) {
       p.shield = false;
       this.say(`🛡️ Le bouclier de ${p.name} annule le loyer de ${fmt(rent)} !`, p.id);
-      this.emit({ t: 'shield', pid: p.id }, ANIM.small);
+      this.emit({ t: 'shield', pid: p.id, owner: owner ? owner.id : null, cell: i, amount: rent }, 2600);
       return this.afterRent(p, i);
     }
     if (p.coupon) {
@@ -570,7 +590,7 @@ class Game {
     }
     this.say(`${p.name} paie ${fmt(rent)} de loyer à ${owner.name} (${this.cellName(i)}).`, p.id);
     this.emit({ t: 'rent', pid: p.id, to: owner.id, cell: i, amount: rent }, ANIM.small);
-    this.charge(p, rent, owner, 'rent', () => this.afterRent(p, i));
+    this.charge(p, rent, owner, 'rent', () => this.afterRent(p, i), { k: 'afterRent', pid: p.id, cell: i });
   }
 
   afterRent(p, i) {
@@ -633,7 +653,7 @@ class Game {
         return this.charge(p, 30 * others.length, null, 'card', () => {
           for (const o of others) if (!o.bankrupt) this.money(o, 30, 'card');
           this.endAction();
-        });
+        }, { k: 'charity', ids: others.map((o) => o.id) });
       case 'repairs': {
         let total = 0;
         for (const i of this.owned(p)) {

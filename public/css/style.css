@@ -2206,3 +2206,44 @@ body:not(.in-game) {
 .game.debt-mode { --safe-y: 236px; }
 @media (max-aspect-ratio: 5/4) { .game.debt-mode { --safe-y: 230px; } }
 .cell.selectable.picked, .cell.picked { outline: 3px solid #2ecc71 !important; box-shadow: 0 0 0 3px rgba(46, 204, 113, .35), 0 0 22px rgba(46, 204, 113, .7) !important; }
+
+/* ---------------------------------------------------------------------
+   Performance : aucun flou d'arrière-plan au-dessus du plateau 3D.
+   Flouter une image WebGL qui change à chaque image coûte très cher
+   (chute du nombre d'images par seconde : avions et animations ralentis).
+   Fonds un peu plus opaques à la place, rendu visuellement équivalent.
+   --------------------------------------------------------------------- */
+.game .topbar .toolbar.tb2, .game .pcard.corner .pc-face, .game .debt-bar2, .game .notif, .game .popover,
+.game .waiting-turn, .game .ct-badge, .game .hz-dice-panel, .game .ct-banner, .game .ct-hint {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+.game .topbar .toolbar.tb2 { background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .02)), rgba(14, 16, 36, .92); }
+.game .debt-bar2 { background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .01)), rgba(14, 16, 38, .96); }
+/* Barre de temps de la vente : elle reste dans le cadre */
+.debt-bar2 .timer-bar { width: auto; }
+.db-progress span { padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-actions .btn { white-space: nowrap; }
+
+/* Bouclier : loyer bloqué */
+.shield-pop { position: absolute; left: 50%; top: 38%; translate: -50% -50%; z-index: 86; pointer-events: none; display: flex; align-items: center; gap: 16px; padding: 14px 26px 14px 14px; border-radius: 22px;
+  background: linear-gradient(135deg, rgba(63, 167, 255, .3), rgba(14, 16, 38, .95) 60%); border: 2px solid #7fdcff;
+  box-shadow: 0 0 0 4px rgba(127, 220, 255, .15), 0 0 50px rgba(63, 167, 255, .55), 0 18px 40px rgba(0, 0, 0, .55); animation: shieldIn .35s cubic-bezier(.23, 1, .32, 1) both; }
+.shield-pop.out { opacity: 0; transform: scale(.96); transition: opacity 220ms ease-out, transform 220ms ease-out; }
+@keyframes shieldIn { from { opacity: 0; transform: scale(.9); } }
+.shield-icon { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; background: radial-gradient(circle, rgba(127, 220, 255, .45), rgba(63, 167, 255, .1) 70%); box-shadow: 0 0 0 3px #7fdcff, 0 0 26px #3fa7ff; }
+.shield-icon span { animation: shieldBump .45s cubic-bezier(.23, 1, .32, 1) .35s both; }
+@keyframes shieldBump { 0% { transform: scale(1); } 40% { transform: scale(1.25) rotate(-8deg); } 100% { transform: scale(1); } }
+.shield-title { font-weight: 900; font-size: 1.5rem; letter-spacing: .08em; color: #bff0ff; text-shadow: 0 0 14px rgba(63, 167, 255, .9); }
+.shield-amount { display: flex; align-items: baseline; gap: 10px; font-weight: 900; }
+.shield-amount s { font-size: 1.3rem; color: #ff8a93; text-decoration-thickness: 3px; text-decoration-color: #ff4757; }
+.shield-amount b { font-size: 1.6rem; color: #7ef0ac; }
+.shield-amount b::before { content: '→ '; color: #9aa0c7; font-size: 1.1rem; }
+.shield-sub { color: #c9cdf0; font-size: .85rem; font-weight: 700; }
+.pcard.corner.shielded .pc-avatar { animation: shieldCard 1.6s ease-out; }
+@keyframes shieldCard { 0%, 70% { box-shadow: 0 0 0 3px #7fdcff, 0 0 0 8px rgba(127, 220, 255, .35), 0 0 34px #3fa7ff; } }
+.pawn.shield-bubble .pawn-token, .pawn.shield-bubble > * { box-shadow: 0 0 0 4px #7fdcff, 0 0 0 10px rgba(127, 220, 255, .3), 0 0 30px #3fa7ff !important; }
+@media (prefers-reduced-motion: reduce) { .shield-pop, .shield-icon span { animation: none; } }
+/* Prix de revente visibles sur chaque propriété pendant une vente (plateau 2D) */
+.cell .sale-tag { position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 6; padding: 0.25cqw 0.7cqw; border-radius: 99px; background: #1b1f45; color: #fff; font-weight: 900; font-size: max(8px, 1.05cqw); white-space: nowrap; box-shadow: 0 0 0 0.15cqw rgba(255, 255, 255, .85), 0 0.4cqw 1cqw rgba(0, 0, 0, .45); pointer-events: none; }
+.cell .sale-tag.on { background: #2ecc71; }
+.cell.picked::after { content: none !important; }
