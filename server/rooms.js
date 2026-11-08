@@ -13,6 +13,9 @@ const R = require('./game/random');
 const U = require('./users');
 const { userFromToken, parseCookie, COOKIE } = require('./auth');
 const site = require('./site');
+const persist = require('./persist');
+/** Temps laissé aux joueurs pour revenir après un redémarrage du serveur. */
+const RESUME_GRACE_MS = 90 * 1000;
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const BOT_NAMES = ['Robo Rita', 'Capitaine Cash', 'Baron Béton', 'Lady Loyer', 'Dr. Dé', 'Mme Monopole', 'Sir Spéculo', 'Zara Zillion', 'Max Magnat', 'Polly Bot'];
@@ -223,6 +226,7 @@ function removeSeat(room, key) {
 
 function deleteRoom(room, reason) {
   if (room.game) room.game.destroy();
+  clearTimeout(room.graceTimer);
   for (const t of room.leaveTimers.values()) clearTimeout(t);
   io.to('room:' + room.code).emit('room:closed', { reason: reason || 'La salle a été fermée.' });
   io.in('room:' + room.code).socketsLeave('room:' + room.code);
@@ -241,39 +245,97 @@ function sendCardUpdate(room, events) {
   }
 }
 
+/** Rappels du moteur de jeu d'une salle (diffusion des mises à jour, fin de partie). */
+function gameCallbacks(room) {
+  return {
+    onUpdate: room.kind === 'cartes'
+      ? ({ events }) => {
+          touch(room);
+          sendCardUpdate(room, events);
+        }
+      : (payload) => {
+          touch(room);
+          io.to('room:' + room.code).emit('game:update', payload);
+        },
+    onEnd: (result) => setImmediate(() => endGame(room, result)),
+  };
+}
+
 function startGame(room) {
   room.state = 'playing';
   room.result = null;
-  const code = room.code;
   const players = room.seats.map((s) => ({ id: s.key, userId: s.userId, name: s.name, color: s.color, pawn: s.pawn, isBot: s.isBot, role: s.role, vip: s.vip, level: s.level }));
-  if (room.kind === 'cartes') {
-    room.game = new CardGame({
-      players,
-      settings: room.settings,
-      onUpdate: ({ events }) => {
-        touch(room);
-        sendCardUpdate(room, events);
-      },
-      onEnd: (result) => setImmediate(() => endGame(room, result)),
-    });
-    for (const s of room.seats) if (!s.isBot && !isConnected(room, s.key)) room.game.player(s.key).connected = false;
-    broadcastRoom(room);
-    room.game.start();
-    return;
-  }
-  const Engine = room.kind === 'chevaux' ? HorseGame : Game;
-  room.game = new Engine({
-    players,
-    settings: room.settings,
-    onUpdate: (payload) => {
-      touch(room);
-      io.to('room:' + code).emit('game:update', payload);
-    },
-    onEnd: (result) => setImmediate(() => endGame(room, result)),
-  });
+  const Engine = { cartes: CardGame, chevaux: HorseGame }[room.kind] || Game;
+  room.game = new Engine({ players, settings: room.settings, ...gameCallbacks(room) });
   for (const s of room.seats) if (!s.isBot && !isConnected(room, s.key)) room.game.player(s.key).connected = false;
   broadcastRoom(room);
   room.game.start();
+}
+
+// ------------------------------------------------- sauvegarde / reprise
+/** Sauvegarde toutes les salles (appelée régulièrement et à l'arrêt du serveur). */
+function saveRooms() {
+  try {
+    persist.saveAll([...rooms.values()]);
+  } catch (e) {
+    console.error('[sauvegarde] échec', e);
+  }
+}
+
+/** Recharge les salles sauvegardées au démarrage : les parties reprennent où elles en étaient. */
+function restoreRooms() {
+  let n = 0;
+  for (const data of persist.loadAll()) {
+    if (rooms.has(data.code)) continue;
+    const { gameData, ...fields } = data;
+    const room = { ...fields, kind: fields.kind || 'poly', sockets: new Map(), leaveTimers: new Map(), game: null, lastActivity: Date.now() };
+    room.music = room.music || { current: null, queue: [] };
+    try {
+      if (gameData && room.state === 'playing') {
+        room.game = persist.restoreGame(room.kind, gameData, gameCallbacks(room));
+        if (room.game.over) room.game = null;
+      } else if (gameData && room.state === 'ended') {
+        room.game = persist.restoreGame(room.kind, gameData, gameCallbacks(room));
+      }
+    } catch (e) {
+      console.error('[reprise] partie illisible', room.code, e.message);
+      continue;
+    }
+    if (room.state === 'playing' && !room.game) room.state = 'lobby';
+    rooms.set(room.code, room);
+    n++;
+    // Les joueurs ont un délai pour revenir ; ensuite ils sont joués automatiquement (partie)
+    // ou retirés du salon.
+    room.graceTimer = setTimeout(() => {
+      if (!rooms.has(room.code)) return;
+      if (room.game) delete room.game.schedule; // fin de la pause : minuteur normal
+      for (const st of [...room.seats]) {
+        if (st.isBot || isConnected(room, st.key)) continue;
+        if (room.game && room.state === 'playing') room.game.setConnected(st.key, false);
+        else if (room.state === 'lobby') removeSeat(room, st.key);
+      }
+      if (!cleanupIfEmpty(room)) broadcastRoom(room);
+    }, RESUME_GRACE_MS);
+    if (room.game && room.state === 'playing') {
+      const g = room.game;
+      // Pendant le délai de retour, le tour d'un joueur humain pas encore reconnecté est en pause
+      // (ni chrono ni jeu automatique) ; les bots et les joueurs revenus jouent normalement.
+      for (const pl of g.players) if (!pl.isBot) pl.connected = true;
+      const proto = Object.getPrototypeOf(g);
+      g.schedule = function () {
+        const cur = this.cur;
+        if (!this.over && cur && !cur.isBot && !isConnected(room, cur.id)) {
+          clearTimeout(this.timer);
+          this.deadline = null;
+          return;
+        }
+        return proto.schedule.call(this);
+      };
+      room.game.say('🔄 Le serveur a redémarré : la partie reprend !');
+      room.game.flush();
+    }
+  }
+  if (n) console.log(`🔄 ${n} salle(s) restaurée(s) après redémarrage`);
 }
 
 function endGame(room, result) {
@@ -302,6 +364,9 @@ function endGame(room, result) {
 // ------------------------------------------------------------------ sockets
 function attach(server) {
   io = server;
+  restoreRooms();
+  // Sauvegarde régulière (en cas d'arrêt brutal) ; l'arrêt normal sauvegarde aussi
+  setInterval(saveRooms, 10000).unref();
 
   io.on('connection', (socket) => {
     const ident = identify(socket);
@@ -711,4 +776,4 @@ function counts() {
   return { rooms: rooms.size, playing, online: io ? io.engine.clientsCount : 0 };
 }
 
-module.exports = { attach, adminList, adminClose, announce, counts, kickGuests, DEFAULTS };
+module.exports = { saveRooms, attach, adminList, adminClose, announce, counts, kickGuests, DEFAULTS };
