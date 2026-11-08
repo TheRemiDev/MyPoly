@@ -9,6 +9,7 @@ const R = require('../game/random');
 const { DAYS, PAYDAY, MAIL, DEALS } = require('./data');
 
 const LOAN_UNIT = 1000;
+const SAVE_UNIT = 500;
 const fmt = (n) => Math.round(n).toLocaleString('fr-FR').replace(/ | /g, ' ') + ' €';
 
 class MonthGame {
@@ -32,6 +33,7 @@ class MonthGame {
       timeouts: 0,
       cash: settings.startCash,
       loans: 0,
+      savings: 0,
       bills: [],
       deals: [],
       day: 0,
@@ -39,7 +41,7 @@ class MonthGame {
       done: false,
       out: false,
       rank: 0,
-      stats: { rolls: 0, letters: 0, bought: 0, sold: 0, profit: 0, jackpots: 0, jackpotBest: 0, borrowed: 0, billsPaid: 0, betsWon: 0, tombolas: 0 },
+      stats: { rolls: 0, letters: 0, bought: 0, sold: 0, profit: 0, jackpots: 0, jackpotBest: 0, borrowed: 0, billsPaid: 0, betsWon: 0, tombolas: 0, savedBest: 0, savingsEarned: 0 },
     }));
     this.seq = 0;
     this.mailDeck = this.newDeck(MAIL);
@@ -61,6 +63,16 @@ class MonthGame {
     this.deadline = null;
     this.timer = null;
     this.startedAt = Date.now();
+  }
+
+  /** Partie restaurée après un redémarrage : complète les champs ajoutés depuis. */
+  afterRestore() {
+    if (this.settings.savingsRate === undefined) this.settings.savingsRate = 5;
+    for (const p of this.players) {
+      if (p.savings === undefined) p.savings = 0;
+      p.stats.savedBest ||= 0;
+      p.stats.savingsEarned ||= 0;
+    }
   }
 
   // ------------------------------------------------------------ utilitaires
@@ -89,7 +101,7 @@ class MonthGame {
   }
   worth(p) {
     const extra = this.settings.unsoldValue ? p.deals.reduce((s, d) => s + d.cost, 0) : 0;
-    return p.cash - p.loans + extra;
+    return p.cash + p.savings - p.loans + extra;
   }
   emit(ev, ms = 0) {
     ev.at = this.anim;
@@ -110,25 +122,33 @@ class MonthGame {
     p.loans += amount;
     p.cash += amount;
     p.stats.borrowed += amount;
-    this.emit({ t: 'loan', pid: p.id, amount, loans: p.loans, cash: p.cash }, 900);
+    this.emit({ t: 'loan', pid: p.id, amount, loans: p.loans, cash: p.cash }, 1600);
     this.say(`🏦 ${p.name} emprunte ${fmt(amount)} à la banque${why ? ' ' + why : ''}.`, p.id);
   }
   /** Paiement : à la banque, à la cagnotte ('pot') ou à un joueur. Emprunte si besoin. */
   pay(p, amount, reason, to = null) {
     amount = Math.round(amount);
     if (amount <= 0) return;
+    // Pas assez d'argent : on puise d'abord dans l'épargne, puis on emprunte
+    if (p.cash < amount && p.savings > 0) {
+      const take = Math.min(p.savings, amount - p.cash);
+      p.savings -= take;
+      p.cash += take;
+      this.emit({ t: 'withdraw', pid: p.id, amount: take, savings: p.savings, cash: p.cash, auto: true }, 1500);
+      this.say(`🐷 ${p.name} puise ${fmt(take)} dans son épargne pour payer.`, p.id);
+    }
     if (p.cash < amount) this.borrow(p, Math.ceil((amount - p.cash) / LOAN_UNIT) * LOAN_UNIT, 'pour payer');
     p.cash -= amount;
     const peer = to && to !== 'pot' ? to : null;
     if (peer) peer.cash += amount;
     if (to === 'pot') this.cagnotte += amount;
-    this.emit({ t: 'money', pid: p.id, delta: -amount, reason, cash: p.cash, to: peer ? peer.id : to === 'pot' ? 'pot' : 'bank', pot: this.cagnotte, peerCash: peer ? peer.cash : undefined }, 650);
+    this.emit({ t: 'money', pid: p.id, delta: -amount, reason, cash: p.cash, to: peer ? peer.id : to === 'pot' ? 'pot' : 'bank', pot: this.cagnotte, peerCash: peer ? peer.cash : undefined }, 900);
   }
   gain(p, amount, reason, from = 'bank') {
     amount = Math.round(amount);
     if (amount <= 0) return;
     p.cash += amount;
-    this.emit({ t: 'money', pid: p.id, delta: amount, reason, cash: p.cash, from, pot: this.cagnotte }, 650);
+    this.emit({ t: 'money', pid: p.id, delta: amount, reason, cash: p.cash, from, pot: this.cagnotte }, 900);
   }
 
   // ------------------------------------------------------------ déroulement
@@ -160,14 +180,14 @@ class MonthGame {
     const d = R.die();
     this.dice = d;
     p.stats.rolls++;
-    this.emit({ t: 'dice', pid: p.id, value: d }, 1100);
+    this.emit({ t: 'dice', pid: p.id, value: d }, 1400);
     if (d === 6 && this.settings.jackpotSix && this.cagnotte > 0) {
       const pot = this.cagnotte;
       this.cagnotte = 0;
       p.stats.jackpots++;
       p.stats.jackpotBest = Math.max(p.stats.jackpotBest, pot);
       this.say(`💰 ${p.name} fait 6 et rafle la cagnotte : ${fmt(pot)} !`, p.id);
-      this.emit({ t: 'jackpot', pid: p.id, amount: pot }, 1800);
+      this.emit({ t: 'jackpot', pid: p.id, amount: pot }, 2800);
       this.gain(p, pot, 'Cagnotte', 'pot');
     }
     const to = Math.min(PAYDAY, p.day + d);
@@ -186,14 +206,14 @@ class MonthGame {
     const path = [];
     for (let k = p.day + 1; k <= to; k++) path.push(k);
     if (!path.length) return;
-    this.emit({ t: 'move', pid: p.id, from: p.day, to, path }, 220 + path.length * 190);
+    this.emit({ t: 'move', pid: p.id, from: p.day, to, path }, 350 + path.length * 280);
     p.day = to;
   }
 
   /** Résout la case où le joueur vient d'arriver. */
   land(p) {
     const sp = DAYS[p.day];
-    this.emit({ t: 'space', pid: p.id, day: p.day, k: sp.k }, 250);
+    this.emit({ t: 'space', pid: p.id, day: p.day, k: sp.k }, 500);
     switch (sp.k) {
       case 'mail':
         return this.readMail(p, sp.n);
@@ -201,13 +221,13 @@ class MonthGame {
         const card = this.draw('deal');
         this.pending = { type: 'deal', card };
         this.phase = 'decide';
-        this.emit({ t: 'dealDraw', pid: p.id, card }, 1200);
+        this.emit({ t: 'dealDraw', pid: p.id, card }, 1700);
         return { ok: true };
       }
       case 'buyer':
         if (!p.deals.length) {
           this.say(`🛍️ Un acheteur passe chez ${p.name}… mais il n'a rien à vendre.`, p.id);
-          this.emit({ t: 'info', pid: p.id, icon: '🛍️', title: 'Un acheteur passe', text: 'Rien à lui vendre…' }, 1200);
+          this.emit({ t: 'info', pid: p.id, icon: '🛍️', title: 'Un acheteur passe', text: 'Rien à lui vendre…' }, 2400);
           return this.endTurn(p);
         }
         this.pending = { type: 'buyer' };
@@ -215,7 +235,7 @@ class MonthGame {
         return { ok: true };
       case 'bet':
         if (!this.settings.sundayBet) {
-          this.emit({ t: 'info', pid: p.id, icon: '😴', title: 'Dimanche', text: 'Grasse matinée !' }, 900);
+          this.emit({ t: 'info', pid: p.id, icon: '😴', title: 'Dimanche', text: 'Grasse matinée !' }, 1800);
           return this.endTurn(p);
         }
         this.pending = { type: 'bet' };
@@ -223,32 +243,32 @@ class MonthGame {
         return { ok: true };
       case 'birthday': {
         this.say(`🎂 C'est l'anniversaire de ${p.name} : chacun lui offre 100 € !`, p.id);
-        this.emit({ t: 'info', pid: p.id, icon: '🎂', title: `Joyeux anniversaire ${p.name} !`, text: 'Chaque joueur vous offre 100 €', kind: 'gold' }, 1400);
+        this.emit({ t: 'info', pid: p.id, icon: '🎂', title: `Joyeux anniversaire ${p.name} !`, text: `Chaque joueur offre 100 € à ${p.name}`, kind: 'gold' }, 2600);
         for (const q of this.active) if (q !== p) this.pay(q, 100, 'Cadeau d\'anniversaire', p);
         return this.endTurn(p);
       }
       case 'round': {
         this.say(`🍻 ${p.name} offre sa tournée : 100 € à chaque joueur.`, p.id);
-        this.emit({ t: 'info', pid: p.id, icon: '🍻', title: 'Tournée générale !', text: 'Vous offrez 100 € à chaque joueur', kind: 'danger' }, 1400);
+        this.emit({ t: 'info', pid: p.id, icon: '🍻', title: 'Tournée générale !', text: `${p.name} offre 100 € à chaque joueur`, kind: 'danger' }, 2600);
         for (const q of this.active) if (q !== p) this.pay(p, 100, 'Tournée générale', q);
         return this.endTurn(p);
       }
       case 'bonus':
         this.say(`⏱️ ${p.name} fait des heures sup : +500 €.`, p.id);
-        this.emit({ t: 'info', pid: p.id, icon: '⏱️', title: 'Heures supplémentaires', text: '+500 €', kind: 'gold' }, 1200);
+        this.emit({ t: 'info', pid: p.id, icon: '⏱️', title: 'Heures supplémentaires', text: '+500 €', kind: 'gold' }, 2400);
         this.gain(p, 500, 'Heures sup');
         return this.endTurn(p);
       case 'contest': {
         const v = R.die();
         const win = v >= 5;
-        this.emit({ t: 'roll', pid: p.id, value: v, icon: '📻', title: 'Jeu radio', text: win ? 'Gagné : 1 000 € !' : 'Perdu… il fallait 5 ou 6', win }, 2200);
+        this.emit({ t: 'roll', pid: p.id, value: v, icon: '📻', title: 'Jeu radio', text: win ? 'Gagné : 1 000 € !' : 'Perdu… il fallait 5 ou 6', win }, 3700);
         this.say(`📻 Jeu radio : ${p.name} fait ${v}${win ? ' et gagne 1 000 € !' : '… perdu.'}`, p.id);
         if (win) this.gain(p, 1000, 'Jeu radio');
         return this.endTurn(p);
       }
       case 'tough': {
         const v = R.die();
-        this.emit({ t: 'roll', pid: p.id, value: v, icon: '💥', title: 'Coup dur !', text: `Dégât des eaux : ${fmt(v * 100)} pour la cagnotte`, win: false }, 2200);
+        this.emit({ t: 'roll', pid: p.id, value: v, icon: '💥', title: 'Coup dur !', text: `Dégât des eaux : ${fmt(v * 100)} pour la cagnotte`, win: false }, 3700);
         this.say(`💥 Coup dur pour ${p.name} : ${fmt(v * 100)} dans la cagnotte.`, p.id);
         this.pay(p, v * 100, 'Coup dur', 'pot');
         return this.endTurn(p);
@@ -256,12 +276,12 @@ class MonthGame {
       case 'garage': {
         const v = R.die();
         const card = this.draw('deal');
-        this.emit({ t: 'roll', pid: p.id, value: v, icon: '🏷️', title: 'Vide-grenier', text: `${card.icon} ${card.name} pour ${fmt(v * 100)} (revente ${fmt(card.value)})`, win: true }, 2400);
+        this.emit({ t: 'roll', pid: p.id, value: v, icon: '🏷️', title: 'Vide-grenier', text: `${card.icon} ${card.name} pour ${fmt(v * 100)} (revente ${fmt(card.value)})`, win: true }, 3900);
         this.say(`🏷️ Vide-grenier : ${p.name} déniche ${card.name} pour ${fmt(v * 100)}.`, p.id);
         this.pay(p, v * 100, 'Vide-grenier');
         p.deals.push(card);
         p.stats.bought++;
-        this.emit({ t: 'bought', pid: p.id, card, price: v * 100 }, 600);
+        this.emit({ t: 'bought', pid: p.id, card, price: v * 100 }, 1200);
         return this.endTurn(p);
       }
       case 'tombola':
@@ -279,7 +299,7 @@ class MonthGame {
     for (let k = 0; k < n; k++) {
       const c = this.draw('mail');
       p.stats.letters++;
-      this.emit({ t: 'mail', pid: p.id, card: c, k: k + 1, n }, 1900);
+      this.emit({ t: 'mail', pid: p.id, card: c, k: k + 1, n }, 3600);
       switch (c.t) {
         case 'bill':
           p.bills.push(c);
@@ -345,7 +365,7 @@ class MonthGame {
 
   tombola(p) {
     if (!this.settings.tombola) {
-      this.emit({ t: 'info', pid: p.id, icon: '☀️', title: 'Journée tranquille', text: 'Rien à signaler' }, 900);
+      this.emit({ t: 'info', pid: p.id, icon: '☀️', title: 'Journée tranquille', text: 'Rien à signaler' }, 1800);
       return this.endTurn(p);
     }
     const list = this.active;
@@ -357,7 +377,7 @@ class MonthGame {
     }
     const v = R.die();
     const winner = v <= list.length ? list[v - 1] : null;
-    this.emit({ t: 'tombola', pid: p.id, value: v, winner: winner ? winner.id : null, pot, tickets: list.map((q) => q.id) }, 2800);
+    this.emit({ t: 'tombola', pid: p.id, value: v, winner: winner ? winner.id : null, pot, tickets: list.map((q) => q.id) }, 4600);
     if (winner) {
       winner.stats.tombolas++;
       this.say(`🎟️ Le ${v} sort : ${winner.name} remporte la tombola (${fmt(pot)}) !`, winner.id);
@@ -365,7 +385,7 @@ class MonthGame {
     } else {
       this.cagnotte += pot;
       this.say(`🎟️ Le ${v} sort : personne ! ${fmt(pot)} vont dans la cagnotte.`, p.id);
-      this.emit({ t: 'pot', amount: pot, pot: this.cagnotte }, 600);
+      this.emit({ t: 'pot', amount: pot, pot: this.cagnotte }, 900);
     }
     return this.endTurn(p);
   }
@@ -374,7 +394,15 @@ class MonthGame {
     const s = this.settings;
     const interest = Math.round((p.loans * s.loanRate) / 100);
     const billsTotal = p.bills.reduce((t, b) => t + b.amount, 0);
-    this.emit({ t: 'payday', pid: p.id, month: p.month, salary: s.salary, bills: p.bills.map((b) => ({ icon: b.icon, name: b.name, amount: b.amount })), billsTotal, interest, loans: p.loans }, 2600);
+    // Intérêts de l'épargne : ils s'ajoutent au livret
+    const earned = Math.round((p.savings * s.savingsRate) / 100);
+    this.emit({ t: 'payday', pid: p.id, month: p.month, salary: s.salary, bills: p.bills.map((b) => ({ icon: b.icon, name: b.name, amount: b.amount })), billsTotal, interest, loans: p.loans, earned, savings: p.savings + earned, rate: s.savingsRate }, 4800);
+    if (earned) {
+      p.savings += earned;
+      p.stats.savingsEarned += earned;
+      this.emit({ t: 'savings', pid: p.id, amount: earned, savings: p.savings, cash: p.cash }, 1200);
+      this.say(`🐷 L'épargne de ${p.name} rapporte ${fmt(earned)} (${s.savingsRate} %).`, p.id);
+    }
     this.say(`💶 Jour de paye pour ${p.name} : +${fmt(s.salary)}, factures ${fmt(billsTotal)}${interest ? `, intérêts ${fmt(interest)}` : ''}.`, p.id);
     this.gain(p, s.salary, 'Salaire');
     if (interest) this.pay(p, interest, 'Intérêts de l\'emprunt');
@@ -382,7 +410,7 @@ class MonthGame {
     p.stats.billsPaid += billsTotal;
     this.mailDiscard.push(...p.bills);
     p.bills = [];
-    if (p.loans > 0 && p.cash >= LOAN_UNIT) {
+    if ((p.loans > 0 && p.cash >= LOAN_UNIT) || p.cash >= SAVE_UNIT || p.savings > 0) {
       this.pending = { type: 'payday' };
       this.phase = 'decide';
       return { ok: true };
@@ -394,11 +422,11 @@ class MonthGame {
     if (p.month >= this.settings.months) {
       p.done = true;
       this.say(`🏁 ${p.name} termine son dernier mois avec ${fmt(this.worth(p))} de patrimoine.`, p.id);
-      this.emit({ t: 'done', pid: p.id, worth: this.worth(p) }, 1200);
+      this.emit({ t: 'done', pid: p.id, worth: this.worth(p) }, 2200);
     } else {
       p.month++;
       p.day = 0;
-      this.emit({ t: 'newMonth', pid: p.id, month: p.month }, 900);
+      this.emit({ t: 'newMonth', pid: p.id, month: p.month }, 1700);
       this.say(`📅 ${p.name} entame le mois ${p.month}/${this.settings.months}.`, p.id);
     }
     return this.endTurn(p);
@@ -414,11 +442,11 @@ class MonthGame {
         this.pay(p, c.cost, 'Achat : ' + c.name);
         p.deals.push(c);
         p.stats.bought++;
-        this.emit({ t: 'bought', pid: p.id, card: c, price: c.cost }, 700);
+        this.emit({ t: 'bought', pid: p.id, card: c, price: c.cost }, 1300);
       } else if (choice === 'pass') {
         this.say(`🙅 ${p.name} laisse passer ${c.name}.`, p.id);
         this.dealDiscard.push(c);
-        this.emit({ t: 'passed', pid: p.id, card: c }, 400);
+        this.emit({ t: 'passed', pid: p.id, card: c }, 600);
       } else return { error: 'Choix invalide.' };
       return this.endTurn(p);
     }
@@ -433,7 +461,7 @@ class MonthGame {
       p.stats.sold++;
       p.stats.profit += c.value - c.cost;
       this.say(`🤑 ${p.name} revend ${c.name} ${fmt(c.value)} (+${fmt(c.value - c.cost)} de bénéfice) !`, p.id);
-      this.emit({ t: 'sold', pid: p.id, card: c, profit: c.value - c.cost }, 1400);
+      this.emit({ t: 'sold', pid: p.id, card: c, profit: c.value - c.cost }, 3000);
       this.gain(p, c.value, 'Vente : ' + c.name);
       this.dealDiscard.push(c);
       return this.endTurn(p);
@@ -446,7 +474,7 @@ class MonthGame {
       if (choice !== 'bet') return { error: 'Choix invalide.' };
       const v = R.die();
       const win = v >= 4;
-      this.emit({ t: 'roll', pid: p.id, value: v, icon: '⚽', title: 'Match du dimanche', text: win ? 'Pari gagné : +500 € !' : 'Pari perdu : 500 € pour la cagnotte', win }, 2200);
+      this.emit({ t: 'roll', pid: p.id, value: v, icon: '⚽', title: 'Match du dimanche', text: win ? 'Pari gagné : +500 € !' : 'Pari perdu : 500 € pour la cagnotte', win }, 3700);
       this.say(`⚽ ${p.name} parie 500 € et fait ${v} : ${win ? 'gagné !' : 'perdu…'}`, p.id);
       if (win) {
         p.stats.betsWon++;
@@ -456,15 +484,36 @@ class MonthGame {
     }
     if (pd.type === 'payday') {
       if (choice === 'done') return this.endMonth(p);
+      // Épargne : dépôt ou retrait (par tranches de 100 €)
+      const [op, raw] = choice.split(':');
+      if (op === 'save' || op === 'withdraw') {
+        const amount = Math.floor(Number(raw) / 100) * 100;
+        if (!(amount > 0)) return { error: 'Montant invalide.' };
+        if (op === 'save') {
+          if (amount > p.cash) return { error: 'Pas assez d\'argent.' };
+          p.cash -= amount;
+          p.savings += amount;
+          p.stats.savedBest = Math.max(p.stats.savedBest, p.savings);
+          this.say(`🐷 ${p.name} met ${fmt(amount)} de côté (épargne : ${fmt(p.savings)}).`, p.id);
+          this.emit({ t: 'deposit', pid: p.id, amount, savings: p.savings, cash: p.cash }, 1300);
+        } else {
+          if (amount > p.savings) return { error: 'Épargne insuffisante.' };
+          p.savings -= amount;
+          p.cash += amount;
+          this.say(`🐷 ${p.name} retire ${fmt(amount)} de son épargne.`, p.id);
+          this.emit({ t: 'withdraw', pid: p.id, amount, savings: p.savings, cash: p.cash }, 1300);
+        }
+        return { ok: true };
+      }
       const max = Math.min(p.loans, Math.floor(p.cash / LOAN_UNIT) * LOAN_UNIT);
       const amount = choice === 'all' ? max : choice === 'one' ? Math.min(LOAN_UNIT, max) : 0;
       if (amount <= 0) return { error: 'Remboursement impossible.' };
       p.cash -= amount;
       p.loans -= amount;
       this.say(`🏦 ${p.name} rembourse ${fmt(amount)} à la banque.`, p.id);
-      this.emit({ t: 'repay', pid: p.id, amount, loans: p.loans, cash: p.cash }, 800);
-      if (p.loans > 0 && p.cash >= LOAN_UNIT) return { ok: true }; // peut encore rembourser
-      return this.endMonth(p);
+      this.emit({ t: 'repay', pid: p.id, amount, loans: p.loans, cash: p.cash }, 1300);
+      return { ok: true }; // le joueur peut encore épargner ou rembourser
+
     }
     return { error: 'Choix invalide.' };
   }
@@ -530,6 +579,7 @@ class MonthGame {
         netWorth: this.worth(p),
         cash: p.cash,
         loans: p.loans,
+        savings: p.savings,
         stats: p.stats,
       })),
     };
@@ -583,7 +633,16 @@ class MonthGame {
     if (pd.type === 'payday') {
       if (cautious) return 'done';
       const last = p.month >= this.settings.months;
-      return last || p.cash - Math.min(p.loans, Math.floor(p.cash / LOAN_UNIT) * LOAN_UNIT) >= 800 ? 'all' : p.cash >= 2000 ? 'one' : 'done';
+      const canRepay = p.loans > 0 && p.cash >= LOAN_UNIT;
+      if (canRepay) {
+        const max = Math.min(p.loans, Math.floor(p.cash / LOAN_UNIT) * LOAN_UNIT);
+        if (last || p.cash - max >= 800) return 'all';
+        if (p.cash >= 2000) return 'one';
+      }
+      // Bot prudent : garde 1 000 € en poche et épargne le reste (sauf au dernier mois)
+      const extra = Math.floor((p.cash - 1000) / SAVE_UNIT) * SAVE_UNIT;
+      if (!last && p.loans === 0 && extra >= SAVE_UNIT && this.settings.savingsRate > 0) return 'save:' + extra;
+      return 'done';
     }
     return null;
   }
@@ -607,7 +666,7 @@ class MonthGame {
     const tt = this.settings.turnTime * 1000;
     if (p.isBot) {
       this.deadline = null;
-      this.timer = setTimeout(() => this.autoAct(), base + 700 + R.int(0, 700));
+      this.timer = setTimeout(() => this.autoAct(), base + 1400 + R.int(0, 900));
       return;
     }
     if (!p.connected || p.afk) {
@@ -659,6 +718,7 @@ class MonthGame {
         afk: p.afk,
         cash: p.cash,
         loans: p.loans,
+        savings: p.savings,
         bills: p.bills.map((b) => ({ uid: b.uid, icon: b.icon, name: b.name, amount: b.amount })),
         deals: p.deals.map((d) => ({ uid: d.uid, icon: d.icon, name: d.name, cost: d.cost, value: d.value })),
         day: p.day,
@@ -674,7 +734,7 @@ class MonthGame {
       serverNow: Date.now(),
       over: this.over,
       winner: this.winner,
-      settings: { months: s.months, salary: s.salary, startCash: s.startCash, loanRate: s.loanRate, jackpotSix: s.jackpotSix, sundayBet: s.sundayBet, tombola: s.tombola, unsoldValue: s.unsoldValue },
+      settings: { months: s.months, salary: s.salary, savingsRate: s.savingsRate, startCash: s.startCash, loanRate: s.loanRate, jackpotSix: s.jackpotSix, sundayBet: s.sundayBet, tombola: s.tombola, unsoldValue: s.unsoldValue },
     };
   }
 

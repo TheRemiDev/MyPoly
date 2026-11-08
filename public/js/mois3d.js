@@ -22,14 +22,15 @@ const CALENDAR = [0, -0.05];
 const DECK = [2.3, -0.3];
 const BANK = [-2.15, 1.85];
 const JAR = [0.05, 1.95];
-const DIE = [2.15, 2.05];
+const DIE = [2.2, 2.15];
+const PIGGY = [-1.0, 2.5];
 
 /** Apparence et description des cases (partagées avec le plateau 2D). */
 export const SPACES = {
   start: { icon: '🚩', label: 'DÉPART', color: '#22b45e', name: 'Départ', desc: 'Le premier jour du mois. Bonne chance !' },
   mail: { icon: '✉️', label: 'COURRIER', color: '#3fa7ff', name: 'Courrier', desc: 'Ouvrez votre courrier : factures, amendes, chèques, publicités…' },
   deal: { icon: '🏷️', label: 'AFFAIRE', color: '#f59e0b', name: 'Affaire', desc: 'Une affaire à acheter… pour la revendre plus cher à un acheteur.' },
-  buyer: { icon: '🛍️', label: 'ACHETEUR', color: '#16a34a', name: 'Acheteur', desc: 'Revendez une de vos affaires à son prix de revente.' },
+  buyer: { icon: '🛍️', label: 'ACHETEUR', color: '#22b866', name: 'Acheteur', desc: 'Revendez une de vos affaires à son prix de revente.' },
   bet: { icon: '⚽', label: 'MATCH', color: '#ef4b5a', name: 'Match du dimanche', desc: 'Pariez 500 € : 4, 5 ou 6 au dé pour gagner 500 €.' },
   birthday: { icon: '🎂', label: 'ANNIVERSAIRE', color: '#ec4899', name: 'Anniversaire', desc: 'C\'est votre fête : chaque joueur vous offre 100 €.' },
   tombola: { icon: '🎟️', label: 'TOMBOLA', color: '#8b5cf6', name: 'Tombola', desc: 'Chacun achète un ticket de 100 €, le dé désigne le gagnant.' },
@@ -153,6 +154,268 @@ function pill(g, text, cx, cy, size, bg, fg = '#fff') {
 }
 const money = (n) => Math.round(n).toLocaleString('fr-FR').replace(/ | /g, ' ') + ' €';
 
+/** Titre et icône propres à chaque jour : aucune case ne se ressemble. */
+export const DAY_ART = {
+  1: { title: 'Facteur\ndu matin', icon: '✉️' },
+  2: { title: 'Petite\nannonce', icon: '📰' },
+  3: { title: 'Double\ncourrier', icon: '📬' },
+  4: { title: 'Joyeux\nanniversaire', icon: '🎂' },
+  5: { title: 'Bon plan', icon: '💡' },
+  6: { title: 'Le derby', icon: '⚽' },
+  7: { title: 'Le collec-\ntionneur', icon: '🧐' },
+  9: { title: 'Lettre\nrecommandée', icon: '📨' },
+  10: { title: 'Brocante', icon: '🏺' },
+  11: { title: 'Heures\nsup', icon: '⏱️' },
+  12: { title: 'Boîte\npleine !', icon: '📮' },
+  13: { title: 'Match\namical', icon: '🏟️' },
+  14: { title: 'L\'antiquaire', icon: '🕰️' },
+  15: { title: 'Avis de\npassage', icon: '📪' },
+  17: { title: 'Vente aux\nenchères', icon: '🔨' },
+  18: { title: 'Jeu radio', icon: '📻' },
+  19: { title: 'Carte\npostale', icon: '💌' },
+  20: { title: 'La coupe', icon: '🏆' },
+  21: { title: 'Client\npressé', icon: '🏃' },
+  22: { title: 'Lettre du\nnotaire', icon: '📜' },
+  23: { title: 'Soldes', icon: '🛒' },
+  25: { title: 'Dégât\ndes eaux', icon: '🚿' },
+  26: { title: 'Grosse\nenveloppe', icon: '📩' },
+  27: { title: 'Grande\nfinale', icon: '🥅' },
+  28: { title: 'Le\nrevendeur', icon: '🤝' },
+  29: { title: 'Marché\naux puces', icon: '🧺' },
+  30: { title: 'Dernier\ncourrier', icon: '📭' },
+  31: { title: 'Jour de\npaye', icon: '💶' },
+};
+const TAGS = { deal: 'À SAISIR', buyer: 'REVENTE', bet: 'PARI 500 €', birthday: '+100 € / JOUEUR', bonus: '+500 €', contest: '5 OU 6 : 1 000 €', tough: '−100 À 600 €' };
+
+/** Petit générateur pseudo-aléatoire déterministe (motifs identiques à chaque chargement). */
+function seeded(n) {
+  let x = (n * 9301 + 49297) % 233280;
+  return () => (x = (x * 9301 + 49297) % 233280) / 233280;
+}
+/** Fond illustré selon le thème de la case. */
+function paintTheme(g, W, H, k, color, day) {
+  const rnd = seeded(day + 7);
+  g.save();
+  rr(g, 0, 0, W, H, 26);
+  g.clip();
+  const base = g.createLinearGradient(0, 0, W * 0.4, H);
+  base.addColorStop(0, shade(color, 0.02));
+  base.addColorStop(1, shade(color, -0.2));
+  g.fillStyle = base;
+  g.fillRect(0, 0, W, H);
+  const m = Math.min(W, H);
+  if (k === 'mail') {
+    // Bordure « par avion » et enveloppes en filigrane
+    const t = m * 0.06;
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, W, H);
+    g.rect(t, t, W - 2 * t, H - 2 * t);
+    g.clip('evenodd');
+    for (let x = -H, n = 0; x < W + H; x += t * 1.2, n++) {
+      g.fillStyle = ['#e23b4b', '#ffffff', '#2f6fd6', '#ffffff'][n % 4];
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x + t * 1.2, 0);
+      g.lineTo(x + t * 1.2 + H, H);
+      g.lineTo(x + H, H);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    g.strokeStyle = 'rgba(255,255,255,.1)';
+    g.lineWidth = m * 0.015;
+    for (let k2 = 0; k2 < 4; k2++) {
+      const ex = rnd() * W;
+      const ey = rnd() * H;
+      const ew = m * 0.3;
+      g.strokeRect(ex, ey, ew, ew * 0.62);
+      g.beginPath();
+      g.moveTo(ex, ey);
+      g.lineTo(ex + ew / 2, ey + ew * 0.35);
+      g.lineTo(ex + ew, ey);
+      g.stroke();
+    }
+  } else if (k === 'deal') {
+    // Rayons de soleil (« bonne affaire »)
+    g.translate(W / 2, H * 0.42);
+    for (let a = 0; a < 16; a++) {
+      g.fillStyle = a % 2 ? 'rgba(255,255,255,.1)' : 'rgba(255,230,150,.08)';
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.arc(0, 0, Math.max(W, H), (a / 16) * Math.PI * 2, ((a + 1) / 16) * Math.PI * 2);
+      g.closePath();
+      g.fill();
+    }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+  } else if (k === 'buyer') {
+    // Losanges façon vitrine de boutique
+    g.strokeStyle = 'rgba(255,255,255,.08)';
+    g.lineWidth = 3;
+    const st = m * 0.18;
+    for (let x = -H; x < W + H; x += st) {
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x + H, H);
+      g.moveTo(x, H);
+      g.lineTo(x + H, 0);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(255,255,255,.12)';
+    g.fillRect(0, 0, W, m * 0.05);
+  } else if (k === 'bet') {
+    // Pelouse de stade
+    g.fillStyle = '#2e9e4f';
+    g.fillRect(0, 0, W, H);
+    const horiz = W > H;
+    const n = 6;
+    for (let s2 = 0; s2 < n; s2++) {
+      g.fillStyle = s2 % 2 ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)';
+      if (horiz) g.fillRect((W / n) * s2, 0, W / n, H);
+      else g.fillRect(0, (H / n) * s2, W, H / n);
+    }
+    g.strokeStyle = 'rgba(255,255,255,.45)';
+    g.lineWidth = m * 0.02;
+    g.strokeRect(m * 0.06, m * 0.06, W - m * 0.12, H - m * 0.12);
+    g.beginPath();
+    if (horiz) {
+      g.moveTo(W / 2, m * 0.06);
+      g.lineTo(W / 2, H - m * 0.06);
+    } else {
+      g.moveTo(m * 0.06, H / 2);
+      g.lineTo(W - m * 0.06, H / 2);
+    }
+    g.stroke();
+    g.beginPath();
+    g.arc(W / 2, H / 2, m * 0.2, 0, Math.PI * 2);
+    g.stroke();
+  } else if (k === 'birthday') {
+    // Confettis
+    const cols = ['#ffd166', '#7ef0ac', '#6cc0ff', '#ffffff', '#ff9ad5'];
+    for (let c = 0; c < 40; c++) {
+      g.save();
+      g.translate(rnd() * W, rnd() * H);
+      g.rotate(rnd() * Math.PI);
+      g.fillStyle = cols[c % cols.length];
+      g.globalAlpha = 0.55;
+      g.fillRect(-m * 0.02, -m * 0.008, m * 0.04, m * 0.016);
+      g.restore();
+    }
+  } else if (k === 'bonus') {
+    // Graduations d'horloge
+    g.strokeStyle = 'rgba(255,255,255,.14)';
+    g.lineWidth = m * 0.02;
+    for (let a = 0; a < 12; a++) {
+      const ang = (a / 12) * Math.PI * 2;
+      g.beginPath();
+      g.moveTo(W / 2 + Math.cos(ang) * m * 0.42, H * 0.42 + Math.sin(ang) * m * 0.42);
+      g.lineTo(W / 2 + Math.cos(ang) * m * 0.5, H * 0.42 + Math.sin(ang) * m * 0.5);
+      g.stroke();
+    }
+  } else if (k === 'contest') {
+    // Ondes radio
+    g.strokeStyle = 'rgba(255,255,255,.13)';
+    g.lineWidth = m * 0.025;
+    for (let r = 1; r <= 6; r++) {
+      g.beginPath();
+      g.arc(W / 2, H * 0.4, r * m * 0.12, Math.PI * 1.15, Math.PI * 1.85);
+      g.stroke();
+      g.beginPath();
+      g.arc(W / 2, H * 0.4, r * m * 0.12, Math.PI * 0.15, Math.PI * 0.85);
+      g.stroke();
+    }
+  } else if (k === 'tough') {
+    // Gouttes d'eau et fissure
+    g.fillStyle = 'rgba(160,210,255,.22)';
+    for (let d = 0; d < 14; d++) {
+      const x = rnd() * W;
+      const y = rnd() * H;
+      const r = m * (0.02 + rnd() * 0.03);
+      g.beginPath();
+      g.moveTo(x, y - r * 2);
+      g.quadraticCurveTo(x + r, y, x, y + r);
+      g.quadraticCurveTo(x - r, y, x, y - r * 2);
+      g.fill();
+    }
+    g.strokeStyle = 'rgba(0,0,0,.25)';
+    g.lineWidth = m * 0.015;
+    g.beginPath();
+    let x = W * 0.1;
+    let y = H * 0.15;
+    g.moveTo(x, y);
+    for (let s2 = 0; s2 < 7; s2++) {
+      x += W * 0.12;
+      y += (rnd() - 0.3) * H * 0.16;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  } else if (k === 'payday') {
+    // Billets de banque en motif
+    for (let b = 0; b < 7; b++) {
+      g.save();
+      g.translate(rnd() * W, rnd() * H);
+      g.rotate((rnd() - 0.5) * 1.2);
+      g.fillStyle = 'rgba(190,255,200,.16)';
+      rr(g, -m * 0.2, -m * 0.1, m * 0.4, m * 0.2, m * 0.02);
+      g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.2)';
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(0, 0, m * 0.055, 0, Math.PI * 2);
+      g.stroke();
+      g.restore();
+    }
+    const gl = g.createLinearGradient(0, 0, W, H);
+    gl.addColorStop(0, 'rgba(255,215,100,.25)');
+    gl.addColorStop(1, 'rgba(255,215,100,0)');
+    g.fillStyle = gl;
+    g.fillRect(0, 0, W, H);
+  }
+  // Vignettage doux et liseré intérieur
+  const vg = g.createRadialGradient(W / 2, H / 2, m * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.25)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, W, H);
+  g.restore();
+  g.strokeStyle = 'rgba(255,255,255,.28)';
+  g.lineWidth = 5;
+  rr(g, 5, 5, W - 10, H - 10, 22);
+  g.stroke();
+}
+/** Médaillon rond (fond clair, anneau coloré) avec l'icône. */
+function medallion(g, icon, cx, cy, r, color) {
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.35)';
+  g.shadowBlur = r * 0.25;
+  g.shadowOffsetY = r * 0.1;
+  const rg = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+  rg.addColorStop(0, '#ffffff');
+  rg.addColorStop(1, '#efe6d2');
+  g.fillStyle = rg;
+  g.beginPath();
+  g.arc(cx, cy, r, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
+  g.lineWidth = r * 0.12;
+  g.strokeStyle = shade(color, -0.15);
+  g.beginPath();
+  g.arc(cx, cy, r * 0.94, 0, Math.PI * 2);
+  g.stroke();
+  emoji(g, icon, cx, cy + r * 0.04, r * 1.12);
+}
+/** Titre sur une ou deux lignes, blanc avec ombre portée. */
+function titleBlock(g, lines, cx, cy, maxW, size) {
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.45)';
+  g.shadowBlur = size * 0.2;
+  g.shadowOffsetY = size * 0.08;
+  const lh = size * 1.08;
+  const y0 = cy - ((lines.length - 1) * lh) / 2;
+  lines.forEach((t, k) => fitText(g, t.toUpperCase(), cx, y0 + k * lh, maxW, size, '#fff'));
+  g.restore();
+}
+
 export class Month3D extends Horse3D {
   constructor(container, cb = {}) {
     super(container, cb);
@@ -185,6 +448,7 @@ export class Month3D extends Horse3D {
     this.buildDeck();
     this.buildBank();
     this.buildJar();
+    this.buildPiggy();
   }
 
   // --------------------------------------------------------------- cases
@@ -195,7 +459,7 @@ export class Month3D extends Horse3D {
     const d = b.d - gap;
     const grp = new THREE.Group();
     grp.position.set(b.cx, BOARD_TOP, b.cz);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, TILE_H, d), new THREE.MeshStandardMaterial({ color: 0xe9dcbc, roughness: 0.7 }));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, TILE_H, d), new THREE.MeshStandardMaterial({ color: shade((SPACES[sp.k] || SPACES.start).color, -0.3), roughness: 0.6 }));
     body.position.y = TILE_H / 2;
     body.castShadow = body.receiveShadow = true;
     const canvas = makeCanvas(b.w * PX, b.d * PX);
@@ -219,21 +483,16 @@ export class Month3D extends Horse3D {
     const side = bandSide(i);
     const wd = weekday(i);
     const special = sp.k === 'payday';
-    // Fond
-    let grd;
-    if (i % 8 === 0 || special) {
-      grd = g.createRadialGradient(W / 2, H * 0.38, 10, W / 2, H / 2, Math.max(W, H) * 0.75);
-      grd.addColorStop(0, shade(st.color, 0.42));
-      grd.addColorStop(0.62, shade(st.color, 0.08));
-      grd.addColorStop(1, shade(st.color, -0.14));
-    } else {
-      grd = g.createLinearGradient(0, 0, W, H);
-      grd.addColorStop(0, '#fffdf6');
-      grd.addColorStop(1, shade(st.color, 0.44));
+    // Angles : grand dégradé lumineux
+    if (i % 8 === 0) {
+      const grd = g.createRadialGradient(W / 2, H * 0.36, 10, W / 2, H / 2, Math.max(W, H) * 0.75);
+      grd.addColorStop(0, shade(st.color, 0.25));
+      grd.addColorStop(0.6, shade(st.color, -0.02));
+      grd.addColorStop(1, shade(st.color, -0.22));
+      g.fillStyle = grd;
+      rr(g, 0, 0, W, H, 26);
+      g.fill();
     }
-    g.fillStyle = grd;
-    rr(g, 0, 0, W, H, 26);
-    g.fill();
 
     // Angles : grande illustration
     if (i % 8 === 0) {
@@ -269,8 +528,11 @@ export class Month3D extends Horse3D {
       return;
     }
 
+    // Fond illustré propre au thème de la case
+    paintTheme(g, W, H, sp.k, st.color, i);
+    const art = DAY_ART[i] || { title: st.label, icon: st.icon };
     // Bandeau du jour (côté intérieur)
-    const bw = Math.round(Math.min(W, H) * 0.3);
+    const bw = Math.round(Math.min(W, H) * 0.28);
     let band;
     let body;
     if (side === 'top') { band = { x: 0, y: 0, w: W, h: bw }; body = { x: 0, y: bw, w: W, h: H - bw }; }
@@ -281,50 +543,51 @@ export class Month3D extends Horse3D {
     rr(g, 0, 0, W, H, 26);
     g.clip();
     const bg2 = g.createLinearGradient(band.x, band.y, band.x + band.w, band.y + band.h);
-    bg2.addColorStop(0, shade(st.color, 0.1));
-    bg2.addColorStop(1, shade(st.color, -0.1));
+    bg2.addColorStop(0, shade(st.color, -0.3));
+    bg2.addColorStop(1, shade(st.color, -0.38));
     g.fillStyle = bg2;
     g.fillRect(band.x, band.y, band.w, band.h);
+    g.fillStyle = 'rgba(255,255,255,.18)';
+    if (side === 'top') g.fillRect(0, bw - 3, W, 3);
+    if (side === 'bottom') g.fillRect(0, H - bw, W, 3);
+    if (side === 'left') g.fillRect(bw - 3, 0, 3, H);
+    if (side === 'right') g.fillRect(W - bw, 0, 3, H);
     g.restore();
+    const sunday = wd === 6;
     const horiz = band.w > band.h;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
     if (horiz) {
-      g.font = `900 ${bw * 0.62}px ${FONT}`;
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
+      g.font = `900 ${bw * 0.6}px ${FONT}`;
       g.fillStyle = '#fff';
-      g.fillText(String(i), band.x + band.w * 0.68, band.y + band.h * 0.54);
+      g.fillText(String(i), band.x + band.w * 0.7, band.y + band.h * 0.54);
       g.font = `900 ${bw * 0.3}px ${FONT}`;
-      g.fillStyle = 'rgba(255,255,255,.9)';
-      g.fillText(WEEKDAYS[wd], band.x + band.w * 0.3, band.y + band.h * 0.54);
+      g.fillStyle = sunday ? '#ffd166' : 'rgba(255,255,255,.75)';
+      g.fillText(WEEKDAYS[wd], band.x + band.w * 0.32, band.y + band.h * 0.54);
     } else {
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
       g.fillStyle = '#fff';
-      g.font = `900 ${bw * 0.56}px ${FONT}`;
-      g.fillText(String(i), band.x + band.w / 2, band.y + band.h * 0.6);
+      g.font = `900 ${bw * 0.55}px ${FONT}`;
+      g.fillText(String(i), band.x + band.w / 2, band.y + band.h * 0.62);
       g.font = `900 ${bw * 0.27}px ${FONT}`;
-      g.fillStyle = 'rgba(255,255,255,.9)';
+      g.fillStyle = sunday ? '#ffd166' : 'rgba(255,255,255,.75)';
       g.fillText(WEEKDAYS[wd], band.x + band.w / 2, band.y + band.h * 0.3);
     }
-
-    // Contenu
+    // Contenu : médaillon, titre propre au jour, pastille d'effet
     const m = Math.min(body.w, body.h);
-    const label = st.label;
-    const dark = special ? '#ffffff' : shade(st.color, -0.3);
-    const extra = sp.k === 'mail' ? `×${sp.n}` : special ? '+ SALAIRE' : '';
+    const tag = special ? 'SALAIRE' : sp.k === 'mail' ? `${sp.n} LETTRE${sp.n > 1 ? 'S' : ''}` : TAGS[sp.k] || '';
+    const titleLines = art.title.split('\n');
     if (body.w > body.h * 1.12) {
-      // Case large (colonnes) : icône côté extérieur, texte côté intérieur
       const outerRight = side === 'left';
-      if (!special) emoji(g, st.icon, outerRight ? body.x + body.w * 0.78 : body.x + body.w * 0.22, body.y + body.h * 0.5, Math.min(body.h * 0.46, body.w * 0.3));
-      const tx = outerRight ? body.x + body.w * 0.04 : body.x + body.w * 0.4;
-      const tw = body.w * 0.56;
-      fitText(g, special ? 'JOUR DE' : label, tx + tw / 2, body.y + body.h * (extra ? 0.38 : 0.5), tw, m * 0.2, dark);
-      if (special) fitText(g, 'PAYE', tx + tw / 2, body.y + body.h * 0.62, tw, m * 0.26, '#fff');
-      else if (extra) pill(g, extra, tx + tw / 2, body.y + body.h * 0.7, m * 0.13, st.color);
+      const mx = outerRight ? body.x + body.w * 0.78 : body.x + body.w * 0.22;
+      if (!special) medallion(g, art.icon, mx, body.y + body.h * 0.47, Math.min(body.h * 0.3, body.w * 0.19), st.color);
+      const tx = outerRight ? body.x + body.w * 0.04 : body.x + body.w * 0.41;
+      const tw = body.w * 0.55;
+      titleBlock(g, titleLines, tx + tw / 2, body.y + body.h * 0.4, tw, m * 0.17);
+      if (tag) pill(g, tag, tx + tw / 2, body.y + body.h * 0.76, m * 0.1, 'rgba(0,0,0,.38)', '#fff');
     } else {
-      emoji(g, st.icon, body.x + body.w / 2, body.y + body.h * 0.32, Math.min(body.h * 0.3, body.w * 0.46));
-      fitText(g, special ? 'PAYE' : label, body.x + body.w / 2, body.y + body.h * 0.66, body.w * 0.88, m * 0.17, dark);
-      if (extra) pill(g, extra, body.x + body.w / 2, body.y + body.h * 0.86, m * 0.11, special ? '#0f7a37' : st.color);
+      medallion(g, art.icon, body.x + body.w / 2, body.y + body.h * 0.3, Math.min(body.h * 0.19, body.w * 0.3), st.color);
+      titleBlock(g, titleLines, body.x + body.w / 2, body.y + body.h * 0.64, body.w * 0.88, m * 0.15);
+      if (tag) pill(g, tag, body.x + body.w / 2, body.y + body.h * 0.88, m * 0.085, 'rgba(0,0,0,.38)', '#fff');
     }
   }
 
@@ -509,6 +772,7 @@ export class Month3D extends Horse3D {
     spot(BANK, 230, '🏦 BANQUE', '#c7cdfa');
     spot(JAR, 240, '💰 CAGNOTTE', '#ffd166');
     spot(DIE, 170, '', '#ffffff');
+    spot(PIGGY, 150, '🐷 ÉPARGNE', '#ff9ad5');
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.maxAniso;
@@ -781,6 +1045,61 @@ export class Month3D extends Horse3D {
     this.tween(160, (t) => b.scale.set(0.72 * (1 + Math.sin(t * Math.PI) * 0.08), 0.72 * (1 - Math.sin(t * Math.PI) * 0.06), 0.72 * (1 + Math.sin(t * Math.PI) * 0.08)));
   }
 
+  /** Tirelire cochon (épargne des joueurs). */
+  buildPiggy() {
+    const g = new THREE.Group();
+    const pink = new THREE.MeshStandardMaterial({ color: 0xff8fc4, roughness: 0.32, metalness: 0.05 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0xd9568f, roughness: 0.4 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 28, 20), pink);
+    body.scale.set(1.25, 0.95, 1);
+    body.position.y = 0.36;
+    const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, 0.1, 20), pink);
+    snout.rotation.z = Math.PI / 2;
+    snout.position.set(0.39, 0.36, 0);
+    const nose = new THREE.Mesh(new THREE.CircleGeometry(0.09, 20), dark);
+    nose.rotation.y = Math.PI / 2;
+    nose.position.set(0.442, 0.36, 0);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3 });
+    for (const z of [-0.12, 0.12]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), eyeMat);
+      eye.position.set(0.3, 0.48, z);
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.13, 4), pink);
+      ear.position.set(0.18, 0.62, z * 1.3);
+      ear.rotation.set(z > 0 ? 0.3 : -0.3, 0, -0.3);
+      g.add(eye, ear);
+    }
+    for (const [x, z] of [[0.2, 0.15], [0.2, -0.15], [-0.2, 0.15], [-0.2, -0.15]]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.14, 12), pink);
+      leg.position.set(x, 0.07, z);
+      g.add(leg);
+    }
+    const tail = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.015, 8, 16, Math.PI * 1.6), dark);
+    tail.position.set(-0.38, 0.42, 0);
+    tail.rotation.y = Math.PI / 2;
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.04), new THREE.MeshStandardMaterial({ color: 0x5a1f3d }));
+    slot.position.set(0, 0.645, 0);
+    g.add(body, snout, nose, tail, slot);
+    g.traverse((o) => o.isMesh && (o.castShadow = o.receiveShadow = true));
+    g.position.set(PIGGY[0], BOARD_TOP + 0.02, PIGGY[1]);
+    g.rotation.y = -0.5;
+    g.scale.setScalar(0.95);
+    this.piggy = g;
+    this.boardGroup.add(g);
+  }
+  /** La tirelire sautille (dépôt ou intérêts). */
+  piggyShine() {
+    const g = this.piggy;
+    if (!g) return;
+    this.tween(520, (t) => {
+      g.position.y = BOARD_TOP + 0.02 + Math.abs(Math.sin(t * Math.PI * 2)) * 0.18 * (1 - t);
+      g.rotation.y = -0.5 + Math.sin(t * Math.PI * 2) * 0.2;
+    });
+    this.burst(rcAt(PIGGY[0], PIGGY[1]), '#ff9ad5', 16, BOARD_TOP + 0.4);
+  }
+  piggyScreen() {
+    return this.worldScreen(PIGGY[0], BOARD_TOP + 0.9, PIGGY[1]);
+  }
+
   /** Bocal en verre de la cagnotte, avec ses pièces et son montant. */
   buildJar() {
     const grp = new THREE.Group();
@@ -1023,6 +1342,7 @@ export class Month3D extends Horse3D {
   // ------------------------------------------------------------------ argent
   pointOf(who) {
     if (who === 'pot') return new THREE.Vector3(JAR[0], BOARD_TOP + 0.95, JAR[1]);
+    if (who === 'piggy') return new THREE.Vector3(PIGGY[0], BOARD_TOP + 0.68, PIGGY[1]);
     if (who === 'bank' || !who) return new THREE.Vector3(BANK[0], BOARD_TOP + 0.55, BANK[1] + 0.2);
     return this.pawnWorld(who).add(new THREE.Vector3(0, 0.3, 0));
   }
@@ -1047,6 +1367,7 @@ export class Month3D extends Horse3D {
       }, k * 60).then(() => {
         this.scene.remove(m);
         if (to === 'bank') this.bankBump();
+        if (to === 'piggy' && k === n - 1) this.piggyShine();
       }));
       if (from === 'bank' && k === 0) this.bankBump();
     }

@@ -2673,7 +2673,6 @@ body:not(.in-game) {
 .mo-mini { position: absolute; left: calc(var(--k, 0) * 7px); top: calc(var(--k, 0) * -2px); width: 36px; height: 40px; display: grid; place-items: center; border-radius: 6px; font-size: 1.05rem; box-shadow: 0 3px 8px rgba(0, 0, 0, .4); rotate: calc((var(--k, 0) - 1.5) * 5deg); }
 .mo-mini.letter { width: 40px; height: 28px; top: calc(6px + var(--k, 0) * -2px); background: #fbf3e1; border: 1px solid #d8c69f; }
 .mo-mini.deal { background: linear-gradient(160deg, #ffd45a, #f08a00); border: 2px solid #fff; }
-.mo-mini.empty { background: rgba(255, 255, 255, .06); border: 1px dashed rgba(255, 255, 255, .25); box-shadow: none; filter: grayscale(1); opacity: .6; rotate: 0deg; }
 
 /* Fiches des joueurs */
 .mo-pcard .mo-cash { font-variant-numeric: tabular-nums; }
@@ -2731,9 +2730,9 @@ body:not(.in-game) {
 .mo-deal.sm .mo-deal-name { font-size: .85rem; }
 .mo-deal.sm .mo-deal-prices b { font-size: .82rem; }
 .mo-deal.sm .mo-deal-profit { display: none; }
-.mo-deal.pick { cursor: pointer; transition: transform .2s cubic-bezier(.2, .9, .3, 1.2), box-shadow .2s; }
-@media (hover: hover) and (pointer: fine) { .mo-deal.pick:hover { transform: translateY(-6px) rotate(-1.5deg); box-shadow: 0 0 0 3px #7ef0ac, 0 16px 30px rgba(0, 0, 0, .45); } }
-.mo-deal.pick:active { transform: scale(.97); }
+.mo-deal.mo-pickable { cursor: pointer; transition: transform .2s cubic-bezier(.2, .9, .3, 1.2), box-shadow .2s; }
+@media (hover: hover) and (pointer: fine) { .mo-deal.mo-pickable:hover { transform: translateY(-6px) rotate(-1.5deg); box-shadow: 0 0 0 3px #7ef0ac, 0 16px 30px rgba(0, 0, 0, .45); } }
+.mo-deal.mo-pickable:active { transform: scale(.97); }
 .mo-deal-sell { margin-top: 8px; padding: 6px; border-radius: 10px; background: #16a34a; color: #fff; font-weight: 900; font-size: .85rem; }
 .mo-sold-stamp { position: absolute; left: 50%; top: 44%; translate: -50% -50%; rotate: -14deg; padding: 6px 18px; border: 5px solid #16a34a; border-radius: 12px; color: #16a34a; background: rgba(255, 255, 255, .9); font-weight: 900; font-size: 1.8rem; letter-spacing: .08em; animation: moStamp .4s cubic-bezier(.2, .9, .3, 1.4) .15s both; }
 @keyframes moStamp { from { scale: 2.4; opacity: 0; } to { scale: 1; opacity: 1; } }
@@ -2859,3 +2858,50 @@ body:not(.in-game) {
 .mo-tip-who { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .mo-tip-who span { padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 800; background: color-mix(in srgb, var(--c) 40%, transparent); }
 @media (pointer: coarse) { .mo-tip { display: none; } }
+/* Accueil à 4 affiches : les boutons s'empilent quand l'affiche est étroite */
+.hp-poster { container-type: inline-size; }
+.hp-poster-btns .btn { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 340px) {
+  .hp-poster-btns { grid-template-columns: 1fr; }
+  .hp-poster-body { padding: 16px 18px 20px; }
+  .hp-poster h3 { font-size: 1.5rem; }
+}
+/* Piles vides (aucune facture / aucune affaire) : pastille centrée, sans débordement */
+.mo-pile-cards { display: grid; place-items: center; overflow: visible; }
+.mo-none { position: static; width: 40px; height: 40px; rotate: 0deg; display: grid; place-items: center; border-radius: 12px; font-size: 1.25rem; line-height: 1;
+  background: rgba(255, 255, 255, .05); border: 1.5px dashed rgba(255, 255, 255, .22); box-shadow: none; filter: grayscale(.6); opacity: .75; }
+.mo-pile.bills .mo-none { border-color: rgba(255, 179, 185, .35); }
+.mo-pile.deals .mo-none { border-color: rgba(255, 209, 102, .35); }
+@media (max-aspect-ratio: 5/4) { .mo-none { width: 34px; height: 34px; font-size: 1.05rem; } }
+/* Panneau de décision : les cartes gardent leur taille, le panneau défile si l'écran est court */
+.mo-decide { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.mo-decide > * { flex-shrink: 0; }
+.mo-deal-row { max-height: none; overflow: visible; }
+@media (max-height: 700px) {
+  .mo-decide { padding: 14px 18px 16px; gap: 8px; }
+  .mo-deal.big { width: 200px; padding: 10px; }
+  .mo-deal.big .mo-deal-icon { font-size: 2.8rem; }
+  .mo-deal.sm { width: 132px; }
+}
+/* Fin de mois : épargne */
+.pc-chip.mo-savechip { background: rgba(255, 143, 196, .35); }
+.ct-bubble.save { background: linear-gradient(180deg, #ffb3d9, #e0559a); color: #fff; border: 3px solid #fff; }
+.mo-payslip-row.save b { color: #d6338a; }
+.mo-accounts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.mo-acc { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 8px; border-radius: 16px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .1); text-align: center; }
+.mo-acc-ico { font-size: 1.6rem; line-height: 1.2; }
+.mo-acc small { color: #aab0d6; font-weight: 800; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+.mo-acc b { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.mo-acc em { font-style: normal; font-size: .72rem; color: #8f95c2; }
+.mo-acc.save { background: rgba(255, 143, 196, .1); border-color: rgba(255, 143, 196, .35); }
+.mo-acc.save b { color: #ffb3d9; }
+.mo-acc.loan b { color: #ff9aa3; }
+.mo-acc.cash b { color: #7ef0ac; }
+.mo-bank-ops { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.mo-bank-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 14px; background: rgba(0, 0, 0, .22); }
+.mo-bank-lbl { font-weight: 900; font-size: .85rem; margin-right: 4px; min-width: 104px; }
+.mo-decide-note.soft { color: #aab0d6; font-weight: 600; font-size: .78rem; }
+@media (max-width: 560px) { .mo-accounts { grid-template-columns: 1fr 1fr 1fr; gap: 6px; } .mo-acc b { font-size: .95rem; } .mo-bank-lbl { min-width: 0; width: 100%; } }
+.mo-deal-prices b, .mo-deal-sell { white-space: nowrap; }
+.mo-deal.sm .mo-deal-prices b { font-size: .76rem; }
+.mo-deal.sm .mo-deal-sell { font-size: .78rem; }
