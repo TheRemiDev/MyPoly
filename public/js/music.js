@@ -1,5 +1,5 @@
 // Musique de la salle : lecteur YouTube synchronisé sur l'heure du serveur.
-// L'hôte choisit les titres ; chaque joueur règle son propre volume ou coupe le son.
+// L'hôte choisit les titres (ou ouvre la file à tous) ; chaque joueur règle son volume.
 import { storage } from './util.js';
 
 let apiPromise = null;

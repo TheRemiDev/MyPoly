@@ -2597,3 +2597,44 @@ body:not(.in-game) {
 .adm-recent { display: flex; flex-direction: column; gap: 6px; font-size: .88rem; }
 .adm-recent > div { display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .04); }
 @media (max-width: 800px) { .adm-split { grid-template-columns: 1fr; } }
+
+/* Trophée « Zéro Absolu » */
+.zero-pop { position: absolute; left: 50%; top: 42%; translate: -50% -50%; z-index: 87; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 46px 22px; border-radius: 28px;
+  background: radial-gradient(circle at 50% 0%, rgba(127, 220, 255, .35), rgba(12, 20, 46, .96) 70%); border: 2px solid #bff0ff;
+  box-shadow: 0 0 0 6px rgba(127, 220, 255, .15), 0 0 70px rgba(127, 220, 255, .55), 0 24px 60px rgba(0, 0, 0, .6); overflow: hidden; animation: zeroIn .5s cubic-bezier(.34, 1.56, .64, 1) both; }
+.zero-pop.out { opacity: 0; transform: scale(.95); filter: blur(3px); transition: opacity 260ms ease-out, transform 260ms ease-out, filter 260ms ease-out; }
+@keyframes zeroIn { from { opacity: 0; transform: scale(.6); filter: blur(8px) brightness(2); } }
+.zero-badge { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; font-size: 40px; background: radial-gradient(circle at 35% 30%, #ffffff, #bff0ff 55%, #3fa7ff); box-shadow: 0 0 0 4px #fff, 0 0 30px #7fdcff; animation: zeroShake .6s ease-in-out .3s 2; }
+@keyframes zeroShake { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+.zero-title { font-size: 76px; font-weight: 900; line-height: .95; letter-spacing: -.03em; color: transparent; background: linear-gradient(180deg, #ffffff, #bff0ff 50%, #3fa7ff); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-stroke: 2px #0b2b4a; filter: drop-shadow(0 4px 0 #0b2b4a) drop-shadow(0 0 20px rgba(127, 220, 255, .8)); }
+.zero-sub { color: #dff6ff; font-weight: 700; }
+.zero-sub b { letter-spacing: .14em; color: #fff; }
+.zero-trophy { margin-top: 6px; padding: 4px 14px; border-radius: 99px; background: linear-gradient(135deg, #ffe08a, #f0a522); color: #3b2a00; font-weight: 900; font-size: .8rem; }
+.zero-snow { position: absolute; inset: 0; pointer-events: none; }
+.zero-snow i { position: absolute; top: -12px; font-style: normal; color: #e6f8ff; font-size: 14px; opacity: .85; animation: zeroFall 2.2s linear var(--d) infinite; }
+@keyframes zeroFall { to { transform: translate(var(--x), 260px) rotate(180deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .zero-pop, .zero-badge, .zero-snow i { animation: none; } }
+
+/* ------------------------------------------------------------ musique ouverte à tous */
+.music-open { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); cursor: pointer; transition: background .2s, border-color .2s; }
+.music-open.on { background: rgba(46, 204, 113, .1); border-color: rgba(46, 204, 113, .35); }
+.music-open-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.music-open-txt b { font-size: .86rem; }
+.music-open-txt small { font-size: .74rem; }
+.music-badge { font-size: .8rem; font-weight: 700; padding: 7px 10px; border-radius: 10px; background: rgba(46, 204, 113, .12); color: #7ef0ac; border: 1px solid rgba(46, 204, 113, .3); }
+.music-q-head { display: flex; justify-content: space-between; align-items: center; }
+.music-q-head .link-btn { background: none; border: 0; color: #ff8a8e; font-size: .75rem; font-weight: 700; cursor: pointer; padding: 0; }
+.music-q-head .link-btn:hover { text-decoration: underline; }
+.music-list { display: flex; flex-direction: column; gap: 4px; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.music-q { justify-content: flex-start; }
+.music-q.mine { box-shadow: inset 3px 0 0 #7ef0ac; }
+.music-q-n { flex: none; width: 18px; text-align: center; opacity: .55; font-variant-numeric: tabular-nums; font-size: .74rem; }
+.music-q-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.music-q-txt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-q-txt small { font-size: .68rem; opacity: .55; }
+.music-q .icon-btn { flex: none; }
+.pop-body .music-panel { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pop-body .music-panel > * { flex: none; }
+.pop-body .music-list { max-height: 24dvh; }
+.popover:has(> .pop-body > .music-panel:not([hidden])) { max-height: min(78dvh, 640px); }
