@@ -68,6 +68,8 @@ class MonthGame {
   /** Partie restaurée après un redémarrage : complète les champs ajoutés depuis. */
   afterRestore() {
     if (this.settings.savingsRate === undefined) this.settings.savingsRate = 5;
+    if (this.settings.saveUntil === undefined) this.settings.saveUntil = 20;
+    if (this.settings.withdrawFee === undefined) this.settings.withdrawFee = 10;
     for (const p of this.players) {
       if (p.savings === undefined) p.savings = 0;
       p.stats.savedBest ||= 0;
@@ -125,17 +127,56 @@ class MonthGame {
     this.emit({ t: 'loan', pid: p.id, amount, loans: p.loans, cash: p.cash }, 1600);
     this.say(`🏦 ${p.name} emprunte ${fmt(amount)} à la banque${why ? ' ' + why : ''}.`, p.id);
   }
+  /** Frais de retrait de l'épargne (gratuit le jour de paye). */
+  withdrawFee(p, amount) {
+    if (p.day === PAYDAY) return 0;
+    return Math.round((amount * (this.settings.withdrawFee || 0)) / 100);
+  }
+  /**
+   * Dépôt ou retrait sur le livret d'épargne (par tranches de 100 €).
+   * Dépôts : jusqu'au jour limite du mois, et le jour de paye. Retraits : à tout moment, avec frais hors jour de paye.
+   */
+  bankOp(p, op, raw) {
+    const amount = Math.floor(Number(raw) / 100) * 100;
+    if (!(amount > 0)) return { error: 'Montant invalide.' };
+    const s = this.settings;
+    if (op === 'save') {
+      if (p.day !== PAYDAY && p.day > s.saveUntil) return { error: `Les dépôts sont fermés après le ${s.saveUntil} du mois (ils rouvrent le jour de paye).` };
+      if (amount > p.cash) return { error: 'Pas assez d\'argent.' };
+      p.cash -= amount;
+      p.savings += amount;
+      p.stats.savedBest = Math.max(p.stats.savedBest, p.savings);
+      this.say(`🐷 ${p.name} met ${fmt(amount)} de côté (épargne : ${fmt(p.savings)}).`, p.id);
+      this.emit({ t: 'deposit', pid: p.id, amount, savings: p.savings, cash: p.cash }, 1300);
+      return { ok: true };
+    }
+    if (op === 'withdraw') {
+      if (amount > p.savings) return { error: 'Épargne insuffisante.' };
+      const fee = this.withdrawFee(p, amount);
+      p.savings -= amount;
+      p.cash += amount - fee;
+      this.say(`🐷 ${p.name} retire ${fmt(amount)} de son épargne${fee ? ` (frais : ${fmt(fee)})` : ''}.`, p.id);
+      this.emit({ t: 'withdraw', pid: p.id, amount, fee, savings: p.savings, cash: p.cash }, 1300);
+      return { ok: true };
+    }
+    return { error: 'Opération inconnue.' };
+  }
+
   /** Paiement : à la banque, à la cagnotte ('pot') ou à un joueur. Emprunte si besoin. */
   pay(p, amount, reason, to = null) {
     amount = Math.round(amount);
     if (amount <= 0) return;
     // Pas assez d'argent : on puise d'abord dans l'épargne, puis on emprunte
     if (p.cash < amount && p.savings > 0) {
-      const take = Math.min(p.savings, amount - p.cash);
+      // Retrait brut nécessaire, frais compris (sauf le jour de paye)
+      const rate = p.day === PAYDAY ? 0 : (this.settings.withdrawFee || 0) / 100;
+      const need = amount - p.cash;
+      const take = Math.min(p.savings, Math.ceil(need / (1 - rate) / 10) * 10);
+      const fee = this.withdrawFee(p, take);
       p.savings -= take;
-      p.cash += take;
-      this.emit({ t: 'withdraw', pid: p.id, amount: take, savings: p.savings, cash: p.cash, auto: true }, 1500);
-      this.say(`🐷 ${p.name} puise ${fmt(take)} dans son épargne pour payer.`, p.id);
+      p.cash += take - fee;
+      this.emit({ t: 'withdraw', pid: p.id, amount: take, fee, savings: p.savings, cash: p.cash, auto: true }, 1500);
+      this.say(`🐷 ${p.name} puise ${fmt(take)} dans son épargne pour payer${fee ? ` (frais : ${fmt(fee)})` : ''}.`, p.id);
     }
     if (p.cash < amount) this.borrow(p, Math.ceil((amount - p.cash) / LOAN_UNIT) * LOAN_UNIT, 'pour payer');
     p.cash -= amount;
@@ -170,6 +211,10 @@ class MonthGame {
     let res;
     if (type === 'roll') res = this.doRoll(p);
     else if (type === 'choose') res = this.decide(p, String(data.choice || ''));
+    else if (type === 'save' || type === 'withdraw') {
+      // Livret d'épargne : avant de lancer le dé (le jour de paye, depuis le panneau de la banque)
+      res = this.phase === 'roll' ? this.bankOp(p, type, data.amount) : { error: 'Terminez d\'abord votre action en cours.' };
+    }
     else res = { error: 'Action inconnue.' };
     if (!res || !res.error) this.flush();
     return res || { ok: true };
@@ -487,22 +532,8 @@ class MonthGame {
       // Épargne : dépôt ou retrait (par tranches de 100 €)
       const [op, raw] = choice.split(':');
       if (op === 'save' || op === 'withdraw') {
-        const amount = Math.floor(Number(raw) / 100) * 100;
-        if (!(amount > 0)) return { error: 'Montant invalide.' };
-        if (op === 'save') {
-          if (amount > p.cash) return { error: 'Pas assez d\'argent.' };
-          p.cash -= amount;
-          p.savings += amount;
-          p.stats.savedBest = Math.max(p.stats.savedBest, p.savings);
-          this.say(`🐷 ${p.name} met ${fmt(amount)} de côté (épargne : ${fmt(p.savings)}).`, p.id);
-          this.emit({ t: 'deposit', pid: p.id, amount, savings: p.savings, cash: p.cash }, 1300);
-        } else {
-          if (amount > p.savings) return { error: 'Épargne insuffisante.' };
-          p.savings -= amount;
-          p.cash += amount;
-          this.say(`🐷 ${p.name} retire ${fmt(amount)} de son épargne.`, p.id);
-          this.emit({ t: 'withdraw', pid: p.id, amount, savings: p.savings, cash: p.cash }, 1300);
-        }
+        const r = this.bankOp(p, op, Number(raw));
+        if (r.error) return r;
         return { ok: true };
       }
       const max = Math.min(p.loans, Math.floor(p.cash / LOAN_UNIT) * LOAN_UNIT);
@@ -734,7 +765,7 @@ class MonthGame {
       serverNow: Date.now(),
       over: this.over,
       winner: this.winner,
-      settings: { months: s.months, salary: s.salary, savingsRate: s.savingsRate, startCash: s.startCash, loanRate: s.loanRate, jackpotSix: s.jackpotSix, sundayBet: s.sundayBet, tombola: s.tombola, unsoldValue: s.unsoldValue },
+      settings: { months: s.months, salary: s.salary, savingsRate: s.savingsRate, saveUntil: s.saveUntil, withdrawFee: s.withdrawFee, startCash: s.startCash, loanRate: s.loanRate, jackpotSix: s.jackpotSix, sundayBet: s.sundayBet, tombola: s.tombola, unsoldValue: s.unsoldValue },
     };
   }
 

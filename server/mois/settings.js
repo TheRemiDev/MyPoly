@@ -9,6 +9,8 @@ const DEFAULTS = {
   salary: 3500, // salaire versé le 31
   loanRate: 10, // intérêts mensuels des emprunts (%)
   savingsRate: 5, // intérêts mensuels de l'épargne (%)
+  saveUntil: 20, // dépôts possibles jusqu'à ce jour du mois (et le jour de paye)
+  withdrawFee: 10, // frais de retrait hors jour de paye (%)
   jackpotSix: true, // un 6 au dé remporte la cagnotte
   sundayBet: true, // match du dimanche (pari)
   tombola: true, // tombola : tout le monde participe
@@ -25,6 +27,8 @@ const LIMITS = {
   salary: [1000, 20000],
   loanRate: [0, 30],
   savingsRate: [0, 20],
+  saveUntil: [0, 30],
+  withdrawFee: [0, 50],
 };
 
 function sanitize(input, base = DEFAULTS) {

@@ -19,6 +19,8 @@ export const MONTH_SETTINGS_UI = [
     { key: 'startCash', label: 'Argent de départ', type: 'select', options: [[0, '0 €'], [1000, '1 000 €'], [2000, '2 000 €'], [3000, '3 000 €'], [5000, '5 000 €']] },
     { key: 'salary', label: 'Salaire mensuel', type: 'select', options: [[2000, '2 000 €'], [2500, '2 500 €'], [3500, '3 500 €'], [5000, '5 000 €']] },
     { key: 'loanRate', label: 'Intérêts des emprunts', type: 'select', options: [[0, '0 %'], [5, '5 % / mois'], [10, '10 % / mois'], [15, '15 % / mois'], [20, '20 % / mois']] },
+    { key: 'saveUntil', label: 'Dépôts sur l\'épargne', type: 'select', options: [[10, 'Jusqu\'au 10 du mois'], [15, 'Jusqu\'au 15 du mois'], [20, 'Jusqu\'au 20 du mois'], [25, 'Jusqu\'au 25 du mois'], [30, 'Tout le mois'], [0, 'Seulement le jour de paye']] },
+    { key: 'withdrawFee', label: 'Frais de retrait', type: 'select', hint: 'Hors jour de paye (toujours gratuit le 31)', options: [[0, 'Aucun'], [5, '5 %'], [10, '10 %'], [15, '15 %'], [20, '20 %']] },
     { key: 'savingsRate', label: 'Intérêts de l\'épargne', type: 'select', options: [[0, '0 % (pas d\'intérêts)'], [2, '2 % / mois'], [5, '5 % / mois'], [8, '8 % / mois'], [10, '10 % / mois']] },
   ] },
   { group: 'Règles', items: [
@@ -126,7 +128,8 @@ export class MonthTable {
     this.hintEl = h('div.hz-hint');
     this.billsEl = h('button.mo-pile.bills', { onclick: () => this.showWallet('bills') });
     this.dealsEl = h('button.mo-pile.deals', { onclick: () => this.showWallet('deals') });
-    this.actionEl = h('div.mo-dock', this.billsEl, h('div.hz-action.mo-action', this.die, this.hintEl, this.rollBtn), this.dealsEl);
+    this.saveEl = h('button.mo-pile.savings', { onclick: () => this.openSavings() });
+    this.actionEl = h('div.mo-dock', this.saveEl, this.billsEl, h('div.hz-action.mo-action', this.die, this.hintEl, this.rollBtn), this.dealsEl);
     this.decideEl = h('div.mo-decide', { hidden: true });
     this.showEl = h('div.mo-show');
     this.fx = h('div.fx-layer.hz-fx.mo-fx', this.showEl);
@@ -207,7 +210,7 @@ export class MonthTable {
           h('li', '🏷️ Affaire : achète un objet, puis revends-le plus cher sur une case 🛍️ Acheteur.'),
           h('li', `💶 Jour de paye : +${euro(s.salary)} de salaire, puis tu règles tes factures${s.loanRate ? ` et ${s.loanRate} % d'intérêts sur tes emprunts` : ''}.`),
           h('li', '🏦 Pas assez d\'argent ? La banque te prête automatiquement par tranches de 1 000 €. Rembourse-les le jour de paye.'),
-          h('li', `🐷 Le jour de paye, mets de l'argent sur ton livret d'épargne : il rapporte ${s.savingsRate ?? 5} % à chaque paye et te dépanne automatiquement avant tout emprunt.`),
+          h('li', `🐷 Livret d'épargne (bouton « Mon épargne », avant de lancer le dé) : dépose jusqu'au ${s.saveUntil ?? 20} du mois ou le jour de paye. Il rapporte ${s.savingsRate ?? 5} % à chaque paye. Retrait possible à tout moment, avec ${s.withdrawFee ?? 10} % de frais (gratuit le jour de paye). Il te dépanne automatiquement avant tout emprunt.`),
           s.jackpotSix ? h('li', '💰 Amendes et coups durs remplissent la cagnotte : fais un 6 au dé pour la rafler !') : null,
           s.sundayBet ? h('li', '⚽ Le dimanche, parie 500 € : 4, 5 ou 6 pour gagner 500 €.') : null,
           s.tombola ? h('li', '🎟️ Tombola : chacun paie 100 €, le dé désigne le gagnant (sinon tout va dans la cagnotte).') : null,
@@ -396,8 +399,16 @@ export class MonthTable {
   /** Mes factures et mes affaires, sous le plateau. */
   renderWallet() {
     const me = this.player(this.me);
-    this.billsEl.hidden = this.dealsEl.hidden = !me;
+    this.billsEl.hidden = this.dealsEl.hidden = this.saveEl.hidden = !me;
     if (!me) return;
+    const st = this.state;
+    const canBank = this.myTurn() && st.phase === 'roll';
+    this.saveEl.classList.toggle('ready', canBank);
+    this.saveEl.innerHTML = '';
+    this.saveEl.append(
+      h('div.mo-pile-cards', h('span.mo-piggy', '🐷')),
+      h('div.mo-pile-txt', h('small', 'Mon épargne'), h('b', euro(me.savings || 0)))
+    );
     const total = me.bills.reduce((s, b) => s + b.amount, 0);
     this.billsEl.innerHTML = '';
     this.billsEl.append(
@@ -410,6 +421,57 @@ export class MonthTable {
       h('div.mo-pile-txt', h('small', 'Mes affaires'), h('b', me.deals.length ? `${me.deals.length} · ${euro(me.deals.reduce((s, d) => s + d.value, 0))}` : 'Aucune'))
     );
   }
+  /** Livret d'épargne : dépôt (jusqu'au jour limite) et retrait (avec frais hors jour de paye). */
+  openSavings() {
+    const st = this.state;
+    const me = this.player(this.me);
+    if (!st || !me) return;
+    const s = st.settings;
+    const canAct = this.myTurn() && st.phase === 'roll';
+    const day = me.day;
+    const depositOpen = day === PAYDAY || day <= s.saveUntil;
+    const feeRate = day === PAYDAY ? 0 : s.withdrawFee || 0;
+    const fee = (a) => Math.round((a * feeRate) / 100);
+    let close = null;
+    const run = async (type, amount) => {
+      const res = await this.act(type, { amount });
+      if (res && !res.error && close) close();
+    };
+    const chip = (label, sub, type, amount, ok) => h('button.mo-sav-chip' + (ok ? '' : '.off'), { disabled: !ok || !canAct, onclick: () => run(type, amount) }, h('b', label), sub ? h('small', sub) : null);
+    const cashAll = Math.floor(me.cash / 100) * 100;
+    const body = h('div.mo-sav',
+      h('div.mo-sav-head',
+        h('div.mo-sav-pig', '🐷'),
+        h('div', h('small', 'Livret d\'épargne'), h('b', euro(me.savings || 0)), h('em', s.savingsRate ? `+${s.savingsRate} % à chaque jour de paye` : 'sans intérêts')),
+        h('div.mo-sav-cash', h('small', 'En poche'), h('b', euro(me.cash)))
+      ),
+      !canAct ? h('div.mo-sav-note', this.myTurn() ? 'Terminez votre action en cours pour utiliser votre livret.' : 'Vous pourrez utiliser votre livret pendant votre tour, avant de lancer le dé.') : null,
+      h('div.mo-sav-sec',
+        h('div.mo-sav-title', '⬇️ Déposer', h('small', depositOpen ? (day === PAYDAY ? 'jour de paye' : `possible jusqu'au ${s.saveUntil} du mois`) : `fermé après le ${s.saveUntil} (réouverture le jour de paye)`)),
+        h('div.mo-sav-row',
+          chip('500 €', null, 'save', 500, depositOpen && me.cash >= 500),
+          chip('1 000 €', null, 'save', 1000, depositOpen && me.cash >= 1000),
+          chip(`Tout`, euro(cashAll), 'save', cashAll, depositOpen && cashAll >= 100)
+        )
+      ),
+      h('div.mo-sav-sec',
+        h('div.mo-sav-title', '⬆️ Retirer', h('small', feeRate ? `frais de ${feeRate} % (gratuit le jour de paye)` : 'sans frais')),
+        h('div.mo-sav-row',
+          chip('500 €', feeRate ? `−${euro(fee(500))} de frais` : 'gratuit', 'withdraw', 500, me.savings >= 500),
+          chip('1 000 €', feeRate ? `−${euro(fee(1000))} de frais` : 'gratuit', 'withdraw', 1000, me.savings >= 1000),
+          chip('Tout', me.savings ? (feeRate ? `${euro(me.savings)} · −${euro(fee(me.savings))}` : euro(me.savings)) : '—', 'withdraw', me.savings, me.savings >= 100)
+        )
+      ),
+      h('div.mo-sav-note.soft', '💡 Si vous manquez d\'argent pour payer, l\'épargne est utilisée automatiquement avant tout emprunt (frais compris).')
+    );
+    const pr = modal({ title: '🐷 Mon livret d\'épargne', body, buttons: [{ label: 'Fermer', value: null }] });
+    close = () => {
+      const ov = document.querySelector('#modals .modal-overlay:last-child');
+      if (ov && ov._close) ov._close(null);
+    };
+    return pr;
+  }
+
   showWallet(which) {
     const me = this.player(this.me);
     if (!me) return;
@@ -441,6 +503,7 @@ export class MonthTable {
     if (!st) return;
     const cur = this.player(st.current);
     const mine = this.myTurn();
+    this.renderWallet();
     this.actionEl.style.setProperty('--c', cur ? cur.color : '#fff');
     if (!this.rolling) showFace(this.die, (this.disp && this.disp.dice) || st.dice || 6);
     this.die.hidden = !!this.b3;
@@ -526,7 +589,7 @@ export class MonthTable {
             p.cash >= 500 ? btn('+500 €', 'save:500') : null,
             p.cash >= 1000 ? btn('+1 000 €', 'save:1000') : null,
             all500 >= 1500 ? btn(`Tout (${euro(all500)})`, 'save:' + all500) : null,
-            p.savings > 0 ? btn(`Retirer ${euro(p.savings)}`, 'withdraw:' + p.savings) : null,
+            p.savings > 0 ? btn(`Retirer ${euro(p.savings)} (gratuit)`, 'withdraw:' + p.savings) : null,
             p.cash < 500 && !p.savings ? h('small.muted', 'Pas assez d\'argent ce mois-ci') : null
           ),
           p.loans > 0 ? h('div.mo-bank-row', h('span.mo-bank-lbl', '🏦 Rembourser'),
@@ -814,7 +877,7 @@ export class MonthTable {
           Sound.play('buy');
         } else if (ev.t === 'withdraw') {
           if (this.b3) this.b3.coins('piggy', ev.pid, Math.min(10, 3 + Math.floor(ev.amount / 400)));
-          this.bubble({ x: pt.x, y: pt.y - 30 }, `🐷 ${euro(ev.amount)} retirés`, '.save', 2400);
+          this.bubble({ x: pt.x, y: pt.y - 30 }, `🐷 ${euro(ev.amount)} retirés${ev.fee ? ` (−${euro(ev.fee)} de frais)` : ''}`, '.save', 2600);
           const p2 = this.player(ev.pid);
           if (ev.auto && p2) this.announce({ icon: '🐷', title: `${p2.name} casse sa tirelire`, text: `${euro(ev.amount)} puisés dans l'épargne pour payer`, color: p2.color, pid: p2.id, ms: 3300 });
           Sound.play('cash');

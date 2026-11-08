@@ -2905,3 +2905,41 @@ body:not(.in-game) {
 .mo-deal-prices b, .mo-deal-sell { white-space: nowrap; }
 .mo-deal.sm .mo-deal-prices b { font-size: .76rem; }
 .mo-deal.sm .mo-deal-sell { font-size: .78rem; }
+/* Fin de mois : livret d'épargne */
+.mo-pile.savings b { color: #ffb3d9; }
+.mo-piggy { font-size: 1.7rem; line-height: 1; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .4)); }
+.mo-pile.savings.ready { border-color: rgba(255, 143, 196, .55); box-shadow: 0 0 0 1px rgba(255, 143, 196, .35), 0 8px 22px rgba(0, 0, 0, .35); }
+.mo-pile.savings.ready .mo-piggy { animation: moPig 2.4s ease-in-out infinite; }
+@keyframes moPig { 0%, 70%, 100% { transform: none; } 80% { transform: translateY(-4px) rotate(-8deg); } 90% { transform: translateY(0) rotate(6deg); } }
+.mo-sav { display: flex; flex-direction: column; gap: 12px; min-width: min(440px, 86vw); }
+.mo-sav-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 14px; border-radius: 18px; background: linear-gradient(135deg, rgba(255, 143, 196, .2), rgba(255, 143, 196, .05)); border: 1px solid rgba(255, 143, 196, .35); }
+.mo-sav-pig { font-size: 2.6rem; }
+.mo-sav-head > div { display: flex; flex-direction: column; }
+.mo-sav-head small { color: #c8cbec; font-weight: 800; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+.mo-sav-head b { font-size: 1.5rem; color: #ffb3d9; font-variant-numeric: tabular-nums; }
+.mo-sav-head em { font-style: normal; color: #aab0d6; font-size: .78rem; }
+.mo-sav-cash { text-align: right; }
+.mo-sav-cash b { font-size: 1.1rem; color: #7ef0ac; }
+.mo-sav-sec { display: flex; flex-direction: column; gap: 8px; }
+.mo-sav-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-weight: 900; }
+.mo-sav-title small { color: #aab0d6; font-weight: 700; font-size: .78rem; }
+.mo-sav-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mo-sav-chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .06); color: #fff; font: inherit; cursor: pointer; transition: transform .15s cubic-bezier(.2, .9, .3, 1.2), background .15s; }
+.mo-sav-chip b { font-size: 1rem; }
+.mo-sav-chip small { font-size: .7rem; color: #ffb3b9; font-weight: 700; }
+@media (hover: hover) and (pointer: fine) { .mo-sav-chip:not(:disabled):hover { transform: translateY(-2px); background: rgba(255, 143, 196, .18); } }
+.mo-sav-chip:not(:disabled):active { transform: scale(.97); }
+.mo-sav-chip:disabled { opacity: .4; cursor: not-allowed; }
+.mo-sav-note { padding: 8px 12px; border-radius: 12px; background: rgba(255, 209, 102, .12); color: #ffd166; font-weight: 700; font-size: .82rem; }
+.mo-sav-note.soft { background: none; padding: 0; color: #aab0d6; font-weight: 600; font-size: .78rem; }
+@media (max-aspect-ratio: 5/4) { .mo-pile.savings .mo-pile-txt small { display: none; } }
+.mo-pile { min-width: 0; }
+.mo-sav-sec:first-of-type .mo-sav-chip small { color: #aab0d6; }
+@media (max-width: 1440px) and (min-aspect-ratio: 5/4) {
+  .mo-dock { gap: 8px; }
+  .mo-pile { padding: 7px 12px 7px 8px; gap: 8px; }
+  .mo-pile-cards { width: 40px; }
+  .mo-pile-txt small { font-size: .62rem; }
+  .mo-pile-txt b { font-size: .9rem; }
+  .mo-dock .hz-rollbtn { padding: 12px 22px !important; font-size: 1.15rem !important; }
+}
