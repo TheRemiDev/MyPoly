@@ -957,11 +957,11 @@ function rulesPage() {
             h('li', '🏷️ ', h('b', 'Affaire'), ' : achète un objet (vélo vintage, food truck…), puis revends-le plus cher sur une case 🛍️ ', h('b', 'Acheteur'), '.'),
             h('li', '💶 ', h('b', 'Le 31, c\'est la paye'), ' : tu touches ton salaire, puis tu règles tes factures et les intérêts de tes emprunts.'),
             h('li', '🏦 Plus d\'argent ? La banque te prête automatiquement par tranches de 1 000 €, à rembourser le jour de paye.'),
-            h('li', '🐷 ', h('b', 'Épargne'), ' : le jour de paye, mets de l\'argent sur ton livret. Il rapporte des intérêts à chaque paye et te dépanne automatiquement avant tout emprunt.'),
+            h('li', '🐷 ', h('b', 'Épargne'), ' : avant de lancer le dé, dépose de l\'argent sur ton livret (jusqu\'au 20 du mois, ou le jour de paye). Il rapporte des intérêts à chaque paye. Tu peux retirer à tout moment, avec des frais (gratuit le jour de paye). Il te dépanne automatiquement avant tout emprunt.'),
             h('li', '💰 Fais un ', h('b', '6'), ' au dé pour rafler la cagnotte, alimentée par les amendes, coups durs et paris perdus.'),
             h('li', '⚽ Match du dimanche, 🎟️ tombola, 🎂 anniversaire, 🍻 tournée générale, 📦 vide-grenier, 📻 jeu radio : chaque jour réserve sa surprise.')
           ),
-          h('p.muted', 'Réglables : durée en mois, argent de départ, salaire, taux des emprunts et de l\'épargne, cagnotte sur un 6, match du dimanche, tombola, valeur des affaires invendues.')
+          h('p.muted', 'Réglables : durée en mois, argent de départ, salaire, taux des emprunts et de l\'épargne, date limite des dépôts, frais de retrait, cagnotte sur un 6, match du dimanche, tombola, valeur des affaires invendues.')
         ),
         h('div.rule-tip', '💡 Une affaire non revendue ne vaut rien à la fin : pense à garder un acheteur sous le coude pour ton dernier mois.')
       ),

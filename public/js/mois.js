@@ -8,6 +8,7 @@ import * as Sound from './sound.js';
 import { navigate } from './app.js';
 import { webglAvailable } from './board3d.js';
 import { Month3D, SPACES, WEEKDAYS, DAY_ART } from './mois3d.js';
+import { art, loadArt } from './mois-art.js';
 
 export const MONTH_SETTINGS_UI = [
   { group: 'Partie', items: [
@@ -19,6 +20,8 @@ export const MONTH_SETTINGS_UI = [
     { key: 'startCash', label: 'Argent de départ', type: 'select', options: [[0, '0 €'], [1000, '1 000 €'], [2000, '2 000 €'], [3000, '3 000 €'], [5000, '5 000 €']] },
     { key: 'salary', label: 'Salaire mensuel', type: 'select', options: [[2000, '2 000 €'], [2500, '2 500 €'], [3500, '3 500 €'], [5000, '5 000 €']] },
     { key: 'loanRate', label: 'Intérêts des emprunts', type: 'select', options: [[0, '0 %'], [5, '5 % / mois'], [10, '10 % / mois'], [15, '15 % / mois'], [20, '20 % / mois']] },
+    { key: 'saveUntil', label: 'Dépôts sur l\'épargne', type: 'select', options: [[10, 'Jusqu\'au 10 du mois'], [15, 'Jusqu\'au 15 du mois'], [20, 'Jusqu\'au 20 du mois'], [25, 'Jusqu\'au 25 du mois'], [30, 'Tout le mois'], [0, 'Seulement le jour de paye']] },
+    { key: 'withdrawFee', label: 'Frais de retrait', type: 'select', hint: 'Hors jour de paye (toujours gratuit le 31)', options: [[0, 'Aucun'], [5, '5 %'], [10, '10 %'], [15, '15 %'], [20, '20 %']] },
     { key: 'savingsRate', label: 'Intérêts de l\'épargne', type: 'select', options: [[0, '0 % (pas d\'intérêts)'], [2, '2 % / mois'], [5, '5 % / mois'], [8, '8 % / mois'], [10, '10 % / mois']] },
   ] },
   { group: 'Règles', items: [
@@ -66,7 +69,7 @@ function miniDie(v) {
 function dealCard(c, { cls = '', foot = null, onclick = null } = {}) {
   return h('div.mo-deal' + cls, { onclick },
     h('div.mo-deal-tag', 'AFFAIRE'),
-    h('div.mo-deal-icon', c.icon),
+    h('div.mo-deal-icon', art(c.icon)),
     h('div.mo-deal-name', c.name),
     h('div.mo-deal-prices',
       h('div', h('small', 'Achat'), h('b', euro(c.cost))),
@@ -89,8 +92,8 @@ const MAIL_EFFECT = {
 function letterCard(c, sub = '') {
   const [txt, amount, cls] = (MAIL_EFFECT[c.t] || MAIL_EFFECT.ad)(c);
   return h('div.mo-letter.' + cls,
-    h('div.mo-letter-head', h('span', '✉️ COURRIER'), sub ? h('small', sub) : null, h('i.mo-stamp')),
-    h('div.mo-letter-icon', c.icon),
+    h('div.mo-letter-head', h('span', art('envelope', 'inl'), 'COURRIER'), sub ? h('small', sub) : null, h('i.mo-stamp')),
+    h('div.mo-letter-icon', art(c.icon)),
     h('div.mo-letter-name', c.name),
     h('div.mo-letter-txt', txt),
     h('div.mo-letter-amount', amount)
@@ -126,7 +129,8 @@ export class MonthTable {
     this.hintEl = h('div.hz-hint');
     this.billsEl = h('button.mo-pile.bills', { onclick: () => this.showWallet('bills') });
     this.dealsEl = h('button.mo-pile.deals', { onclick: () => this.showWallet('deals') });
-    this.actionEl = h('div.mo-dock', this.billsEl, h('div.hz-action.mo-action', this.die, this.hintEl, this.rollBtn), this.dealsEl);
+    this.saveEl = h('button.mo-pile.savings', { onclick: () => this.openSavings() });
+    this.actionEl = h('div.mo-dock', this.saveEl, this.billsEl, h('div.hz-action.mo-action', this.die, this.hintEl, this.rollBtn), this.dealsEl);
     this.decideEl = h('div.mo-decide', { hidden: true });
     this.showEl = h('div.mo-show');
     this.fx = h('div.fx-layer.hz-fx.mo-fx', this.showEl);
@@ -199,19 +203,19 @@ export class MonthTable {
   showRules() {
     const s = (this.state && this.state.settings) || this.room.settings;
     modal({
-      title: '📅 Règles de Fin de mois',
+      title: h('span.mo-mtitle', art('calendar', 'inl'), 'Règles de Fin de mois'),
       body: h('div.rules-summary',
         h('p', `Chaque tour, lance le dé et avance dans le mois. Le 31, c'est la paye ! La partie dure ${s.months} mois : `, h('b', 'le joueur le plus riche à la fin (argent + épargne − emprunts) gagne.')),
         h('ul',
-          h('li', '✉️ Courrier : factures à régler le jour de paye, amendes, bonnes surprises…'),
-          h('li', '🏷️ Affaire : achète un objet, puis revends-le plus cher sur une case 🛍️ Acheteur.'),
-          h('li', `💶 Jour de paye : +${euro(s.salary)} de salaire, puis tu règles tes factures${s.loanRate ? ` et ${s.loanRate} % d'intérêts sur tes emprunts` : ''}.`),
-          h('li', '🏦 Pas assez d\'argent ? La banque te prête automatiquement par tranches de 1 000 €. Rembourse-les le jour de paye.'),
-          h('li', `🐷 Le jour de paye, mets de l'argent sur ton livret d'épargne : il rapporte ${s.savingsRate ?? 5} % à chaque paye et te dépanne automatiquement avant tout emprunt.`),
-          s.jackpotSix ? h('li', '💰 Amendes et coups durs remplissent la cagnotte : fais un 6 au dé pour la rafler !') : null,
-          s.sundayBet ? h('li', '⚽ Le dimanche, parie 500 € : 4, 5 ou 6 pour gagner 500 €.') : null,
-          s.tombola ? h('li', '🎟️ Tombola : chacun paie 100 €, le dé désigne le gagnant (sinon tout va dans la cagnotte).') : null,
-          h('li', '🎂 Anniversaire, 🍻 tournée générale, 📦 vide-grenier, 📻 jeu radio, 💥 coup dur… le mois réserve des surprises !'),
+          h('li', art('✉️', 'inl'), 'Courrier : factures à régler le jour de paye, amendes, bonnes surprises…'),
+          h('li', art('🏷️', 'inl'), 'Affaire : achète un objet, puis revends-le plus cher sur une case 🛍️ Acheteur.'),
+          h('li', art('💶', 'inl'), `Jour de paye : +${euro(s.salary)} de salaire, puis tu règles tes factures${s.loanRate ? ` et ${s.loanRate} % d'intérêts sur tes emprunts` : ''}.`),
+          h('li', art('🏦', 'inl'), 'Pas assez d\'argent ? La banque te prête automatiquement par tranches de 1 000 €. Rembourse-les le jour de paye.'),
+          h('li', art('🐷', 'inl'), `Livret d'épargne (bouton « Mon épargne », avant de lancer le dé) : dépose jusqu'au ${s.saveUntil ?? 20} du mois ou le jour de paye. Il rapporte ${s.savingsRate ?? 5} % à chaque paye. Retrait possible à tout moment, avec ${s.withdrawFee ?? 10} % de frais (gratuit le jour de paye). Il te dépanne automatiquement avant tout emprunt.`),
+          s.jackpotSix ? h('li', art('💰', 'inl'), 'Amendes et coups durs remplissent la cagnotte : fais un 6 au dé pour la rafler !') : null,
+          s.sundayBet ? h('li', art('⚽', 'inl'), 'Le dimanche, parie 500 € : 4, 5 ou 6 pour gagner 500 €.') : null,
+          s.tombola ? h('li', art('🎟️', 'inl'), 'Tombola : chacun paie 100 €, le dé désigne le gagnant (sinon tout va dans la cagnotte).') : null,
+          h('li', art('🎂', 'inl'), 'Anniversaire, tournée générale, vide-grenier, jeu radio, coup dur… le mois réserve des surprises !'),
           h('li', s.unsoldValue ? 'En fin de partie, une affaire non revendue compte pour son prix d\'achat.' : 'Attention : en fin de partie, les affaires invendues ne valent rien !')
         ),
         h('div.muted', 'Raccourci : Espace pour lancer le dé. Faites glisser pour tourner la caméra, double-clic pour la recentrer.')
@@ -297,16 +301,25 @@ export class MonthTable {
 
   // ================================================================ plateau
   buildBoard() {
-    if (this.b3) return this.b3.buildBoard(this.state.board);
+    if (this.b3) {
+      // Les illustrations des cases sont chargées avant de dessiner le plateau
+      loadArt().then(() => {
+        if (this.dead) return;
+        this.b3.buildBoard(this.state.board);
+        this.b3.setPot(this.disp.pot ?? this.state.cagnotte);
+        this.renderPawns(false);
+      });
+      return;
+    }
     // Plateau 2D de secours : la feuille du calendrier
     const b = this.boardEl;
     b.innerHTML = '';
-    this.potEl = h('div.mo-cell.pot', h('span.mo-pot-ico', '🫙'), h('b.mo-pot-val'), h('small', 'CAGNOTTE'));
+    this.potEl = h('div.mo-cell.pot', h('span.mo-pot-ico', art('jar')), h('b.mo-pot-val'), h('small', 'CAGNOTTE'));
     this.cellEls = this.state.board.map((sp, d) => {
       const s = SPACES[sp.k] || SPACES.start;
       return h('div.mo-cell.k-' + sp.k + (d % 7 === 6 ? '.sun' : ''), { style: { '--k': s.color } },
         d && d < PAYDAY ? h('b.mo-cell-n', String(d)) : null,
-        h('span.mo-cell-ico', s.icon),
+        h('span.mo-cell-ico', art((DAY_ART[d] && DAY_ART[d].icon) || s.icon)),
         h('small.mo-cell-l', sp.k === 'mail' ? `${s.label} ×${sp.n}` : s.label),
         h('div.mo-cell-pawns')
       );
@@ -396,34 +409,93 @@ export class MonthTable {
   /** Mes factures et mes affaires, sous le plateau. */
   renderWallet() {
     const me = this.player(this.me);
-    this.billsEl.hidden = this.dealsEl.hidden = !me;
+    this.billsEl.hidden = this.dealsEl.hidden = this.saveEl.hidden = !me;
     if (!me) return;
+    const st = this.state;
+    const canBank = this.myTurn() && st.phase === 'roll';
+    this.saveEl.classList.toggle('ready', canBank);
+    this.saveEl.innerHTML = '';
+    this.saveEl.append(
+      h('div.mo-pile-cards', h('span.mo-piggy', art('pig'))),
+      h('div.mo-pile-txt', h('small', 'Mon épargne'), h('b', euro(me.savings || 0)))
+    );
     const total = me.bills.reduce((s, b) => s + b.amount, 0);
     this.billsEl.innerHTML = '';
     this.billsEl.append(
-      h('div.mo-pile-cards', me.bills.slice(-4).map((b, k) => h('span.mo-mini.letter', { style: { '--k': k } }, b.icon)), me.bills.length ? null : h('span.mo-none', '🧾')),
+      h('div.mo-pile-cards', me.bills.slice(-4).map((b, k) => h('span.mo-mini.letter', { style: { '--k': k } }, art(b.icon))), me.bills.length ? null : h('span.mo-none', art('bill'))),
       h('div.mo-pile-txt', h('small', 'Mes factures'), h('b', me.bills.length ? euro(total) : 'Aucune'))
     );
     this.dealsEl.innerHTML = '';
     this.dealsEl.append(
-      h('div.mo-pile-cards', me.deals.slice(-4).map((d, k) => h('span.mo-mini.deal', { style: { '--k': k } }, d.icon)), me.deals.length ? null : h('span.mo-none', '🏷️')),
+      h('div.mo-pile-cards', me.deals.slice(-4).map((d, k) => h('span.mo-mini.deal', { style: { '--k': k } }, art(d.icon))), me.deals.length ? null : h('span.mo-none', art('tag'))),
       h('div.mo-pile-txt', h('small', 'Mes affaires'), h('b', me.deals.length ? `${me.deals.length} · ${euro(me.deals.reduce((s, d) => s + d.value, 0))}` : 'Aucune'))
     );
   }
+  /** Livret d'épargne : dépôt (jusqu'au jour limite) et retrait (avec frais hors jour de paye). */
+  openSavings() {
+    const st = this.state;
+    const me = this.player(this.me);
+    if (!st || !me) return;
+    const s = st.settings;
+    const canAct = this.myTurn() && st.phase === 'roll';
+    const day = me.day;
+    const depositOpen = day === PAYDAY || day <= s.saveUntil;
+    const feeRate = day === PAYDAY ? 0 : s.withdrawFee || 0;
+    const fee = (a) => Math.round((a * feeRate) / 100);
+    let close = null;
+    const run = async (type, amount) => {
+      const res = await this.act(type, { amount });
+      if (res && !res.error && close) close();
+    };
+    const chip = (label, sub, type, amount, ok) => h('button.mo-sav-chip' + (ok ? '' : '.off'), { disabled: !ok || !canAct, onclick: () => run(type, amount) }, h('b', label), sub ? h('small', sub) : null);
+    const cashAll = Math.floor(me.cash / 100) * 100;
+    const body = h('div.mo-sav',
+      h('div.mo-sav-head',
+        h('div.mo-sav-pig', art('pig')),
+        h('div', h('small', 'Livret d\'épargne'), h('b', euro(me.savings || 0)), h('em', s.savingsRate ? `+${s.savingsRate} % à chaque jour de paye` : 'sans intérêts')),
+        h('div.mo-sav-cash', h('small', 'En poche'), h('b', euro(me.cash)))
+      ),
+      !canAct ? h('div.mo-sav-note', this.myTurn() ? 'Terminez votre action en cours pour utiliser votre livret.' : 'Vous pourrez utiliser votre livret pendant votre tour, avant de lancer le dé.') : null,
+      h('div.mo-sav-sec',
+        h('div.mo-sav-title', '⬇️ Déposer', h('small', depositOpen ? (day === PAYDAY ? 'jour de paye' : `possible jusqu'au ${s.saveUntil} du mois`) : `fermé après le ${s.saveUntil} (réouverture le jour de paye)`)),
+        h('div.mo-sav-row',
+          chip('500 €', null, 'save', 500, depositOpen && me.cash >= 500),
+          chip('1 000 €', null, 'save', 1000, depositOpen && me.cash >= 1000),
+          chip(`Tout`, euro(cashAll), 'save', cashAll, depositOpen && cashAll >= 100)
+        )
+      ),
+      h('div.mo-sav-sec',
+        h('div.mo-sav-title', '⬆️ Retirer', h('small', feeRate ? `frais de ${feeRate} % (gratuit le jour de paye)` : 'sans frais')),
+        h('div.mo-sav-row',
+          chip('500 €', feeRate ? `−${euro(fee(500))} de frais` : 'gratuit', 'withdraw', 500, me.savings >= 500),
+          chip('1 000 €', feeRate ? `−${euro(fee(1000))} de frais` : 'gratuit', 'withdraw', 1000, me.savings >= 1000),
+          chip('Tout', me.savings ? (feeRate ? `${euro(me.savings)} · −${euro(fee(me.savings))}` : euro(me.savings)) : '—', 'withdraw', me.savings, me.savings >= 100)
+        )
+      ),
+      h('div.mo-sav-note.soft', '💡 Si vous manquez d\'argent pour payer, l\'épargne est utilisée automatiquement avant tout emprunt (frais compris).')
+    );
+    const pr = modal({ title: h('span.mo-mtitle', art('pig', 'inl'), 'Mon livret d\'épargne'), body, buttons: [{ label: 'Fermer', value: null }] });
+    close = () => {
+      const ov = document.querySelector('#modals .modal-overlay:last-child');
+      if (ov && ov._close) ov._close(null);
+    };
+    return pr;
+  }
+
   showWallet(which) {
     const me = this.player(this.me);
     if (!me) return;
     if (which === 'bills') {
       const total = me.bills.reduce((s, b) => s + b.amount, 0);
       modal({
-        title: '🧾 Mes factures',
+        title: h('span.mo-mtitle', art('bill', 'inl'), 'Mes factures'),
         body: me.bills.length
-          ? h('div.mo-wallet', h('p.muted', 'Elles seront réglées automatiquement le jour de paye.'), h('div.mo-wallet-list', me.bills.map((b) => h('div.mo-wallet-row', h('span', b.icon), h('span', b.name), h('b', euro(b.amount))))), h('div.mo-wallet-total', 'Total', h('b', euro(total))))
+          ? h('div.mo-wallet', h('p.muted', 'Elles seront réglées automatiquement le jour de paye.'), h('div.mo-wallet-list', me.bills.map((b) => h('div.mo-wallet-row', art(b.icon, 'inl'), h('span', b.name), h('b', euro(b.amount))))), h('div.mo-wallet-total', 'Total', h('b', euro(total))))
           : h('p', 'Aucune facture en attente. Profitez-en !'),
       });
     } else {
       modal({
-        title: '🏷️ Mes affaires',
+        title: h('span.mo-mtitle', art('tag', 'inl'), 'Mes affaires'),
         body: me.deals.length
           ? h('div.mo-wallet', h('p.muted', 'Revendez-les sur une case 🛍️ Acheteur avant la fin de la partie.'), h('div.mo-deal-grid', me.deals.map((d) => dealCard(d, { cls: '.sm' }))))
           : h('p', 'Aucune affaire. Achetez-en sur les cases 🏷️ Affaire pour les revendre plus cher.'),
@@ -441,6 +513,7 @@ export class MonthTable {
     if (!st) return;
     const cur = this.player(st.current);
     const mine = this.myTurn();
+    this.renderWallet();
     this.actionEl.style.setProperty('--c', cur ? cur.color : '#fff');
     if (!this.rolling) showFace(this.die, (this.disp && this.disp.dice) || st.dice || 6);
     this.die.hidden = !!this.b3;
@@ -477,7 +550,7 @@ export class MonthTable {
       const short = Math.max(0, c.cost - p.cash);
       const loan = Math.ceil(short / 1000) * 1000;
       el.append(
-        h('div.mo-decide-title', '🏷️ Une affaire à saisir !'),
+        h('div.mo-decide-title', art('tag', 'ttl'), 'Une affaire à saisir !'),
         who,
         dealCard(c, { cls: '.big' }),
         mine ? h('div.mo-decide-note', loan ? `⚠️ Il vous manque ${euro(short)} : la banque vous prêtera ${euro(loan)}.` : `Il vous restera ${euro(p.cash - c.cost)}.`) : null,
@@ -488,7 +561,7 @@ export class MonthTable {
       );
     } else if (pd.type === 'buyer') {
       el.append(
-        h('div.mo-decide-title', '🛍️ Un acheteur est intéressé !'),
+        h('div.mo-decide-title', art('bagFast', 'ttl'), 'Un acheteur est intéressé !'),
         who,
         h('div.mo-decide-sub', mine ? 'Choisissez l\'affaire à lui revendre :' : `${p.name} choisit quoi revendre`),
         h('div.mo-deal-row', p.deals.map((d) => dealCard(d, { cls: '.sm' + (mine ? '.mo-pickable' : ''), onclick: mine ? () => choose(d.uid) : null, foot: mine ? h('div.mo-deal-sell', `Vendre ${euro(d.value)}`) : null }))),
@@ -496,10 +569,10 @@ export class MonthTable {
       );
     } else if (pd.type === 'bet') {
       el.append(
-        h('div.mo-decide-title', '⚽ Match du dimanche'),
+        h('div.mo-decide-title', art('ball', 'ttl'), 'Match du dimanche'),
         who,
         h('div.mo-bet',
-          h('div.mo-bet-ball', '⚽'),
+          h('div.mo-bet-ball', art('ball')),
           h('p', 'Pariez ', h('b', '500 €'), ' sur le match : faites ', h('b', '4, 5 ou 6'), ' au dé pour gagner ', h('b', '500 €'), '. Sinon, la mise part dans la cagnotte.')
         ),
         mine ? h('div.mo-decide-btns',
@@ -514,19 +587,19 @@ export class MonthTable {
       const account = (cls, icon, label, value, sub) => h('div.mo-acc.' + cls, h('span.mo-acc-ico', icon), h('small', label), h('b', euro(value)), h('em', sub));
       const btn = (label, choice, cls = '.ghost') => h('button.btn.sm' + cls, { onclick: () => choose(choice) }, label);
       el.append(
-        h('div.mo-decide-title', '💶 Jour de paye : votre banque'),
+        h('div.mo-decide-title', art('bank', 'ttl'), 'Jour de paye : votre banque'),
         who,
         h('div.mo-accounts',
-          account('cash', '👛', 'Porte-monnaie', p.cash, 'disponible'),
-          account('save', '🐷', 'Livret d\'épargne', p.savings || 0, rate ? `+${rate} % chaque paye` : 'sans intérêts'),
-          account('loan', '🏦', 'Emprunts', p.loans, p.loans ? `${st.settings.loanRate} % d'intérêts / mois` : 'aucun crédit')
+          account('cash', art('wallet'), 'Porte-monnaie', p.cash, 'disponible'),
+          account('save', art('pig'), 'Livret d\'épargne', p.savings || 0, rate ? `+${rate} % chaque paye` : 'sans intérêts'),
+          account('loan', art('loan'), 'Emprunts', p.loans, p.loans ? `${st.settings.loanRate} % d'intérêts / mois` : 'aucun crédit')
         ),
         mine ? h('div.mo-bank-ops',
           h('div.mo-bank-row', h('span.mo-bank-lbl', '🐷 Épargner'),
             p.cash >= 500 ? btn('+500 €', 'save:500') : null,
             p.cash >= 1000 ? btn('+1 000 €', 'save:1000') : null,
             all500 >= 1500 ? btn(`Tout (${euro(all500)})`, 'save:' + all500) : null,
-            p.savings > 0 ? btn(`Retirer ${euro(p.savings)}`, 'withdraw:' + p.savings) : null,
+            p.savings > 0 ? btn(`Retirer ${euro(p.savings)} (gratuit)`, 'withdraw:' + p.savings) : null,
             p.cash < 500 && !p.savings ? h('small.muted', 'Pas assez d\'argent ce mois-ci') : null
           ),
           p.loans > 0 ? h('div.mo-bank-row', h('span.mo-bank-lbl', '🏦 Rembourser'),
@@ -616,6 +689,7 @@ export class MonthTable {
   }
   announce(o) {
     this.v.evPid = o.pid;
+    if (typeof o.icon === 'string') o = { ...o, icon: art(o.icon, 'notif') };
     this.v.announce(o);
   }
   rectOf(el) {
@@ -675,7 +749,7 @@ export class MonthTable {
     const s = SPACES[sp.k] || SPACES.start;
     const here = this.state.players.filter((p) => !p.out && (this.disp.days[p.id] ?? p.day) === day);
     this.tipEl.replaceChildren(
-      h('div.mo-tip-head', { style: { '--k': s.color } }, h('span', s.icon), h('b', day === 0 ? 'Départ' : `${dayLabel(day)} · ${DAY_ART[day] && sp.k !== 'payday' ? DAY_ART[day].title.replace(/-?\n/g, (x) => (x.startsWith('-') ? '' : ' ')) : s.name}`)),
+      h('div.mo-tip-head', { style: { '--k': s.color } }, art((DAY_ART[day] && DAY_ART[day].icon) || s.icon), h('b', day === 0 ? 'Départ' : `${dayLabel(day)} · ${DAY_ART[day] && sp.k !== 'payday' ? DAY_ART[day].title.replace(/-?\n/g, (x) => (x.startsWith('-') ? '' : ' ')) : s.name}`)),
       h('div.mo-tip-txt', sp.k === 'mail' ? `${sp.n} lettre${sp.n > 1 ? 's' : ''} à ouvrir : factures, amendes, chèques, publicités…` : s.desc),
       here.length ? h('div.mo-tip-who', here.map((p) => h('span', { style: { '--c': p.color } }, p.pawn, ' ', p.name))) : null
     );
@@ -814,7 +888,7 @@ export class MonthTable {
           Sound.play('buy');
         } else if (ev.t === 'withdraw') {
           if (this.b3) this.b3.coins('piggy', ev.pid, Math.min(10, 3 + Math.floor(ev.amount / 400)));
-          this.bubble({ x: pt.x, y: pt.y - 30 }, `🐷 ${euro(ev.amount)} retirés`, '.save', 2400);
+          this.bubble({ x: pt.x, y: pt.y - 30 }, `🐷 ${euro(ev.amount)} retirés${ev.fee ? ` (−${euro(ev.fee)} de frais)` : ''}`, '.save', 2600);
           const p2 = this.player(ev.pid);
           if (ev.auto && p2) this.announce({ icon: '🐷', title: `${p2.name} casse sa tirelire`, text: `${euro(ev.amount)} puisés dans l'épargne pour payer`, color: p2.color, pid: p2.id, ms: 3300 });
           Sound.play('cash');
@@ -858,7 +932,7 @@ export class MonthTable {
         const dieWrap = h('div.mo-event-die', miniDie(1));
         const txt = h('div.mo-event-txt', { style: { opacity: 0 } }, ev.text);
         const node = h('div.mo-event' + (ev.win ? '.win' : '.lose'), { style: { '--c': p ? p.color : '#fff' } },
-          h('div.mo-event-icon', ev.icon), h('div.mo-event-title', ev.title), dieWrap, txt, p ? h('div.mo-show-for', p.name) : null);
+          h('div.mo-event-icon', art(ev.icon)), h('div.mo-event-title', ev.title), dieWrap, txt, p ? h('div.mo-show-for', p.name) : null);
         const shown = this.showcase(node, { ms: 2600 });
         await sleep(350);
         for (let k = 0; k < 10; k++) {
@@ -876,9 +950,9 @@ export class MonthTable {
         Sound.play('dice');
         const players = ev.tickets.map((id) => this.player(id) || {});
         const tickets = players.map((q, k) => h('div.mo-ticket', { style: { '--c': q.color || '#888' } }, h('b', String(k + 1)), h('span', q.pawn || ''), h('small', q.name || '?')));
-        for (let k = players.length; k < 6; k++) tickets.push(h('div.mo-ticket.void', h('b', String(k + 1)), h('span', '🫙'), h('small', 'Cagnotte')));
+        for (let k = players.length; k < 6; k++) tickets.push(h('div.mo-ticket.void', h('b', String(k + 1)), h('span', art('jar')), h('small', 'Cagnotte')));
         const dieWrap = h('div.mo-event-die', miniDie(1));
-        const node = h('div.mo-event.tombola', h('div.mo-event-icon', '🎟️'), h('div.mo-event-title', `Tombola · ${euro(ev.pot)} à gagner`), h('div.mo-tickets', tickets), dieWrap);
+        const node = h('div.mo-event.tombola', h('div.mo-event-icon', art('ticket')), h('div.mo-event-title', `Tombola · ${euro(ev.pot)} à gagner`), h('div.mo-tickets', tickets), dieWrap);
         const shown = this.showcase(node, { ms: 3200 });
         await sleep(400);
         for (let k = 0; k < 12; k++) {
@@ -898,10 +972,10 @@ export class MonthTable {
         const net = ev.salary - ev.billsTotal - ev.interest;
         const node = h('div.mo-payslip', { style: { '--c': p ? p.color : '#16a34a' } },
           h('div.mo-payslip-head', h('b', 'FICHE DE PAIE'), h('small', `${p ? p.name : ''} · mois ${ev.month}`)),
-          h('div.mo-payslip-row.plus', h('span', '💼 Salaire'), h('b', '+' + euro(ev.salary))),
-          ev.bills.length ? ev.bills.map((b) => h('div.mo-payslip-row.minus.small', h('span', `${b.icon} ${b.name}`), h('b', '−' + euro(b.amount)))) : h('div.mo-payslip-row.small', h('span', '🧾 Aucune facture'), h('b', '0 €')),
-          ev.interest ? h('div.mo-payslip-row.minus', h('span', `🏦 Intérêts (${euro(ev.loans)} empruntés)`), h('b', '−' + euro(ev.interest))) : null,
-          ev.earned ? h('div.mo-payslip-row.plus.save', h('span', `🐷 Intérêts du livret (${ev.rate} %)`), h('b', '+' + euro(ev.earned))) : null,
+          h('div.mo-payslip-row.plus', h('span', art('banknote', 'inl'), 'Salaire'), h('b', '+' + euro(ev.salary))),
+          ev.bills.length ? ev.bills.map((b) => h('div.mo-payslip-row.minus.small', h('span', art(b.icon, 'inl'), b.name), h('b', '−' + euro(b.amount)))) : h('div.mo-payslip-row.small', h('span', art('bill', 'inl'), 'Aucune facture'), h('b', '0 €')),
+          ev.interest ? h('div.mo-payslip-row.minus', h('span', art('bank', 'inl'), `Intérêts (${euro(ev.loans)} empruntés)`), h('b', '−' + euro(ev.interest))) : null,
+          ev.earned ? h('div.mo-payslip-row.plus.save', h('span', art('pig', 'inl'), `Intérêts du livret (${ev.rate} %)`), h('b', '+' + euro(ev.earned))) : null,
           h('div.mo-payslip-total', h('span', 'Reste'), h('b' + (net < 0 ? '.neg' : ''), (net >= 0 ? '+' : '−') + euro(Math.abs(net)))),
           h('div.mo-paid-stamp', 'PAYÉ')
         );
