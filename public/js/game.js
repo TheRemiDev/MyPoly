@@ -6,6 +6,7 @@ import { navigate, toggleFullscreen, winLabel } from './app.js';
 import { Board3D, webglAvailable } from './board3d.js';
 import { melenchonURL } from './melenchon.js';
 import { drawLogo } from './logo.js';
+import { icon } from './icons.js';
 import { CardTable, CARD_SETTINGS_UI, CARD_PRESETS } from './cartes.js';
 import { HorseTable, HORSE_SETTINGS_UI, HORSE_PRESETS } from './chevaux.js';
 
@@ -622,7 +623,7 @@ class RoomView {
     this.popTitle = h('b');
     this.popover = h('div.popover', { hidden: true },
       h('div.pop-head', this.popTitle, h('button.icon-btn.pop-close', { title: 'Fermer', onclick: () => this.togglePop(null) }, '✕')),
-      h('div.pop-body', this.logEl, this.chatBox, this.emoteGrid, (this.musicPop = this.buildMusic()))
+      h('div.pop-body', this.logEl, this.chatBox, this.emoteGrid, (this.musicPop = this.buildMusic()), (this.adminPop = h('div.admin-pop')))
     );
     this.pop = null;
     this.endOverlay = h('div.end-overlay', { hidden: true });
@@ -1013,7 +1014,12 @@ class RoomView {
     if (!this.popover) return;
     const p = this.pop;
     this.popover.hidden = !p;
-    this.popTitle.textContent = { chat: '💬 Discussion', log: '📜 Journal de la partie', emote: '😀 Réagir', music: '🎵 Musique' }[p] || '';
+    this.popTitle.textContent = { chat: '💬 Discussion', log: '📜 Journal de la partie', emote: '😀 Réagir', music: '🎵 Musique', admin: '🛡️ Pouvoirs d\'admin' }[p] || '';
+    this.popover.classList.toggle('wide', p === 'admin');
+    if (this.adminPop) {
+      this.adminPop.hidden = p !== 'admin';
+      if (p === 'admin') this.renderAdmin();
+    }
     this.logEl.hidden = p !== 'log';
     this.chatBox.hidden = p !== 'chat';
     this.emoteGrid.hidden = p !== 'emote';
@@ -1026,28 +1032,112 @@ class RoomView {
     if (p === 'log') this.logEl.scrollTop = 1e9;
   }
 
+  get isAdmin() {
+    return !!(store.user && store.user.role === 'admin');
+  }
+  /** Panneau admin : faire renaître un joueur en faillite, offrir de l'argent. */
+  renderAdmin() {
+    const box = this.adminPop;
+    if (!box || !this.state) return;
+    box.innerHTML = '';
+    box.append(h('p.admin-pop-hint', 'Tout le monde sera prévenu de votre décision.'));
+    for (const p of this.state.players) {
+      const input = h('input.input.sm.admin-amount', { type: 'number', min: 1, max: 100000, step: 50, value: p.bankrupt ? this.room.settings.startMoney : 500, 'aria-label': 'Montant en K' });
+      const send = async (action) => {
+        const amount = Number(input.value);
+        const res = await emit('admin:game', { action, pid: p.id, amount });
+        if (res && res.error) {
+          Sound.play('error');
+          toast(res.error, 'error');
+        } else {
+          toast(action === 'revive' ? `✨ ${p.name} renaît avec ${fmt(amount)}` : `🎁 ${fmt(amount)} offerts à ${p.name}`, 'success');
+          this.togglePop(null);
+        }
+      };
+      box.append(h('div.admin-row' + (p.bankrupt ? '.dead' : ''), { style: { '--c': p.color } },
+        h('span.admin-avatar', p.bankrupt ? '💀' : p.pawn),
+        h('div.admin-who', h('b', p.name), h('small', p.bankrupt ? 'En faillite' : fmt(this.disp.cash[p.id] ?? p.cash))),
+        h('div.admin-act', input, h('span.admin-k', 'K'),
+          p.bankrupt
+            ? h('button.btn.sm.admin-btn.revive', { onclick: () => send('revive') }, '✨ Faire renaître')
+            : h('button.btn.sm.admin-btn.give', { onclick: () => send('give') }, '🎁 Donner'))
+      ));
+    }
+  }
+
+  /** Annonce à tous les joueurs d'une décision d'un administrateur. */
+  async adminShow(ev, p) {
+    const revive = ev.kind === 'revive';
+    if (revive) Sound.play('win');
+    else Sound.play('cash');
+    this.announce({ icon: revive ? '✨' : '🎁', title: revive ? `${p.name} renaît !` : `${p.name} reçoit ${fmt(ev.amount)}`, text: revive ? `${ev.by} l'a fait réapparaître avec ${fmt(ev.amount)}` : `Cadeau de ${ev.by} (admin)`, color: p.color, kind: 'gold', ms: 4000, pid: p.id });
+    if (document.hidden) return;
+    const pop = h('div.admin-decree' + (revive ? '.revive' : '.give'), { style: { '--c': p.color } },
+      h('div.admin-decree-card',
+        h('div.admin-decree-tag', '🛡️ DÉCISION DE L\'ADMIN'),
+        h('div.admin-decree-icon', revive ? '✨' : '🎁'),
+        h('div.admin-decree-who', h('span.admin-decree-pawn', p.pawn), p.name),
+        h('div.admin-decree-title', revive ? 'revient dans la partie !' : `reçoit ${fmt(ev.amount)} !`),
+        h('div.admin-decree-text', revive ? `${ev.by} a décidé de le faire réapparaître avec ${fmt(ev.amount)}.` : `${ev.by} a décidé de lui offrir ${fmt(ev.amount)}.`)
+      )
+    );
+    this.gameEl.append(pop);
+    if (revive) confetti(1600);
+    await sleep(revive ? 2400 : 2000);
+    pop.classList.add('out');
+    setTimeout(() => pop.remove(), 300);
+  }
+
+  /**
+   * Barre d'outils commune aux trois jeux : îlot en verre avec groupes
+   * (salle · social · vue · réglages · sortie) et icônes au trait.
+   * opts = { info, view: '2D'|'3D'|null, camera: fn|null, rules: fn, forfeit: fn|null }
+   */
+  buildToolbar(opts) {
+    const tb = this.toolbar;
+    if (!tb) return;
+    tb.innerHTML = '';
+    tb.classList.add('tb2');
+    const btn = (name, title, onclick, { on = false, cls = '', badge = null, label = null } = {}) =>
+      h('button.tb-btn' + (on ? '.on' : '') + cls, { title, 'aria-label': title, onclick }, h('span.tb-ico', { html: icon(name) }), label ? h('span.tb-label', label) : null, badge ? h('span.tb-badge', badge) : null);
+    const sep = () => h('i.tb-sep');
+    const m = this.music;
+    const muted = m && m.track && (m.muted || m.volume === 0);
+    if (this.melCounter) tb.append(this.melCounter, sep());
+    tb.append(
+      h('div.tb-room', { title: 'Copier le lien d\'invitation', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') },
+        h('span.tb-ico', { html: icon('link') }), h('b', this.code), opts.info ? h('span.tb-sub', opts.info) : null),
+      sep(),
+      btn('chat', 'Discussion', () => this.togglePop('chat'), { on: this.pop === 'chat', badge: this.unread ? String(this.unread) : null }),
+      btn('log', 'Journal de la partie', () => this.togglePop('log'), { on: this.pop === 'log' }),
+      btn('emote', 'Réagir', () => this.togglePop('emote'), { on: this.pop === 'emote' }),
+      btn(muted ? 'musicOff' : 'music', 'Musique', () => this.togglePop('music'), { on: this.pop === 'music', cls: (m && m.track ? '.playing' : '') + (m && m.blocked ? '.blocked' : '') }),
+      sep(),
+      opts.view ? btn(opts.view === '2D' ? 'square' : 'cube', opts.view === '2D' ? 'Passer au plateau 2D' : 'Passer au plateau 3D', () => this.toggleView(), { label: opts.view }) : null,
+      opts.camera ? btn('camera', 'Recentrer la caméra (double-clic sur le plateau)', opts.camera) : null,
+      btn('rules', 'Règles', opts.rules),
+      btn(Sound.isEnabled() ? 'sound' : 'soundOff', 'Son', () => {
+        Sound.toggle();
+        this.renderToolbar();
+      }),
+      btn('fullscreen', 'Plein écran (F)', toggleFullscreen),
+      this.isAdmin && this.room && this.room.kind === 'poly' && this.room.state === 'playing' ? btn('shield', 'Pouvoirs d\'admin', () => this.togglePop('admin'), { on: this.pop === 'admin', cls: '.admin' }) : null,
+      sep(),
+      opts.forfeit ? btn('flag', 'Abandonner', opts.forfeit, { cls: '.danger' }) : btn('exit', 'Quitter', () => navigate('/'), { cls: '.danger' })
+    );
+  }
+
   renderToolbar() {
     if (this.cards) return this.cards.renderToolbar();
     if (!this.toolbar) return;
     const me = this.player(this.me);
-    this.toolbar.innerHTML = '';
-    if (this.melCounter) this.toolbar.append(this.melCounter);
-    this.toolbar.append(
-      h('div.tb-code', { title: 'Copier le lien d\'invitation', onclick: () => copy(location.origin + '/r/' + this.code, 'Lien copié !') }, '🔗 ', this.code),
-      h('div.tb-info', this.state ? `Tour ${this.state.round}` : ''),
-      h('button.icon-btn' + (this.pop === 'chat' ? '.on' : ''), { title: 'Discussion', onclick: () => this.togglePop('chat') }, '💬', this.unread ? h('span.tb-badge', String(this.unread)) : null),
-      h('button.icon-btn' + (this.pop === 'log' ? '.on' : ''), { title: 'Journal de la partie', onclick: () => this.togglePop('log') }, '📜'),
-      h('button.icon-btn' + (this.pop === 'emote' ? '.on' : ''), { title: 'Réagir', onclick: () => this.togglePop('emote') }, '😀'),
-      h('button.icon-btn.music-btn' + (this.pop === 'music' ? '.on' : '') + (this.music && this.music.track ? '.playing' : '') + (this.music && this.music.blocked ? '.blocked' : ''), { title: 'Musique', onclick: () => this.togglePop('music') }, this.music && this.music.track && (this.music.muted || this.music.volume === 0) ? '🔇' : '🎵'),
-      h('button.icon-btn.view-btn', { title: this.b3 ? 'Passer au plateau 2D' : 'Passer au plateau 3D', onclick: () => this.toggleView() }, this.b3 ? '2D' : '3D'),
-      h('button.icon-btn', { hidden: !this.b3, title: 'Recentrer la caméra (double-clic sur le plateau)', onclick: () => this.b3 && this.b3.resetView() }, '🎥'),
-      h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
-      h('button.icon-btn', { title: 'Son', onclick: (e) => (e.target.textContent = Sound.toggle() ? '🔊' : '🔇') }, Sound.isEnabled() ? '🔊' : '🔇'),
-      h('button.icon-btn', { title: 'Plein écran (F)', onclick: toggleFullscreen }, '⛶'),
-      me && !me.bankrupt && this.room.state === 'playing'
-        ? h('button.icon-btn.danger', { title: 'Abandonner', onclick: () => this.forfeit() }, '🏳️')
-        : h('button.icon-btn', { title: 'Quitter', onclick: () => navigate('/') }, '🚪')
-    );
+    this.buildToolbar({
+      info: this.state ? `Tour ${this.state.round}` : '',
+      view: this.b3 ? '2D' : '3D',
+      camera: this.b3 ? () => this.b3.resetView() : null,
+      rules: () => this.showRules(),
+      forfeit: me && !me.bankrupt && this.room.state === 'playing' ? () => this.forfeit() : null,
+    });
   }
 
   showRules() {
@@ -1384,6 +1474,9 @@ class RoomView {
         await sleep(500);
         return;
       }
+      case 'admin':
+        if (p) await this.adminShow(ev, p);
+        return;
       case 'win':
         Sound.play('win');
         return;

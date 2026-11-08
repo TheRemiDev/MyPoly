@@ -618,6 +618,22 @@ function attach(server) {
       reply(cb, res);
     });
 
+    // Actions réservées aux administrateurs (MyPoly) : faire renaître un joueur, offrir de l'argent
+    socket.on('admin:game', (data, cb) => {
+      const room = current();
+      if (ident.role !== 'admin') return reply(cb, { error: 'Action réservée aux administrateurs.' });
+      if (!room || !room.game || room.state !== 'playing' || room.kind !== 'poly') return reply(cb, { error: 'Aucune partie de MyPoly en cours.' });
+      const amount = Math.round(Number(data && data.amount));
+      if (!Number.isFinite(amount) || amount < 1 || amount > 100000) return reply(cb, { error: 'Montant invalide (1 à 100 000 K).' });
+      const who = ident.name;
+      const res = data.action === 'revive' ? room.game.adminRevive(String(data.pid || ''), amount, who) : data.action === 'give' ? room.game.adminGive(String(data.pid || ''), amount, who) : { error: 'Action inconnue.' };
+      if (res.ok) {
+        const p = room.game.player(String(data.pid));
+        systemChat(room, data.action === 'revive' ? `✨ ${who} (admin) fait renaître ${p.name} avec ${amount}K.` : `🎁 ${who} (admin) offre ${amount}K à ${p.name}.`);
+      }
+      reply(cb, res);
+    });
+
     socket.on('game:forfeit', (cb) => {
       const room = current();
       if (!room || !room.game || room.state !== 'playing') return reply(cb, { error: 'Aucune partie en cours.' });
