@@ -170,6 +170,14 @@ export function roleTags(p, { level = true, compact = false } = {}) {
   if (level && p.level) tags.push(h('span.tag.tag-level', { title: 'Niveau' }, 'Nv ' + p.level));
   return tags;
 }
+/** Banderoles de rôle posées sur les fiches des joueurs (ADMIN, STAFF, VIP). */
+export function roleRibbons(p) {
+  const list = [];
+  if (p.role === 'admin') list.push(h('span.pc-ribbon.r-admin', { title: 'Administrateur' }, 'ADMIN'));
+  else if (p.role === 'staff') list.push(h('span.pc-ribbon.r-staff', { title: 'Membre du staff' }, 'STAFF'));
+  if (p.vip) list.push(h('span.pc-ribbon.r-vip', { title: 'Membre VIP' }, 'VIP'));
+  return list.length ? h('div.pc-ribbons', list) : null;
+}
 export function nameClass(p) {
   return p.vip ? 'name-vip' : p.role === 'admin' || p.role === 'staff' ? 'name-staff' : '';
 }

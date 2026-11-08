@@ -376,8 +376,11 @@ class Game {
       return then();
     }
     if (p.cash + this.liquidation(p) < amount) {
-      this.say(`${p.name} ne peut pas payer ${fmt(amount)}…`, p.id);
-      this.bankrupt(p, to);
+      // Explication détaillée : la fortune affichée compte les biens à leur prix d'achat,
+      // mais une propriété ne se revend qu'à moitié prix.
+      const liq = this.liquidation(p);
+      this.say(`${p.name} doit payer ${fmt(amount)} : ${fmt(p.cash)} en liquide + ${fmt(liq)} en revendant tout (les biens se revendent à moitié prix) = ${fmt(p.cash + liq)}. Pas assez…`, p.id);
+      this.bankrupt(p, to, { owed: amount, cash: p.cash, liq });
       if (p === this.cur) this.endAction();
       return;
     }
@@ -424,10 +427,11 @@ class Game {
     if (hadMono) this.announceMonopolyLost(p, country);
     this.say(`${p.name} vend ${this.cellName(i)} pour ${fmt(v)}.`, p.id);
   }
-  bankrupt(p, creditor) {
+  bankrupt(p, creditor, info = null) {
     if (p.bankrupt) return;
-    if (creditor && p.cash > 0 && !creditor.bankrupt) this.money(creditor, p.cash, 'bankrupt');
-    p.cash = 0;
+    // Le créancier récupère tout : l'argent restant + la valeur de revente de toutes les propriétés
+    const payee = creditor && !creditor.bankrupt && creditor !== p ? creditor : null;
+    const total = Math.max(0, p.cash) + this.liquidation(p);
     const lost = this.owned(p).map((i) => ({ cell: i, level: this.props[i].level }));
     for (const { cell: i } of lost) {
       this.props[i] = { owner: null, level: 0 };
@@ -437,8 +441,14 @@ class Game {
     p.jailed = false;
     p.stats.eliminated = ++this.eliminations;
     // Les propriétés perdues sont détaillées pour animer leur démolition une à une
-    this.emit({ t: 'bankrupt', pid: p.id, to: creditor ? creditor.id : null, cells: lost }, 1800 + lost.length * 450);
+    this.emit({ t: 'bankrupt', pid: p.id, to: creditor ? creditor.id : null, cells: lost, info }, 1800 + lost.length * 450);
     this.say(`💥 ${p.name} fait faillite !`, p.id);
+    if (payee && total > 0) {
+      p.cash = total;
+      this.transfer(p, payee, total, 'bankrupt');
+      this.say(`💰 ${payee.name} récupère ${fmt(total)} (argent et propriétés revendues de ${p.name}).`, payee.id);
+    }
+    p.cash = 0;
     if (creditor) creditor.stats.knockouts = (creditor.stats.knockouts || 0) + 1;
     const alive = this.alive();
     if (alive.length <= 1) this.finish(alive[0], 'last');
@@ -1181,6 +1191,7 @@ class Game {
         afk: q.afk,
         rank: q.rank,
         netWorth: this.netWorth(q),
+        resale: q.bankrupt ? 0 : q.cash + this.liquidation(q), // ce qu'il pourrait réellement payer en vendant tout
       })),
       props: this.props.map((s, i) => (s ? { owner: s.owner, level: s.level, rent: s.owner ? this.rent(i) : 0, value: this.invested(i), sell: this.sellValue(i), takeover: s.owner ? this.takeoverPrice(i) : 0 } : null)),
       current: p ? p.id : null,
