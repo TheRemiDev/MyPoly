@@ -11,7 +11,7 @@ export const store = {
 /** Règles enregistrées : sur le compte si connecté, sinon dans ce navigateur. */
 /** Règles enregistrées par le joueur, propres à chaque jeu ('poly' ou 'cartes'). */
 export function savedSettings(kind = 'poly') {
-  const key = { cartes: 'savedCardSettings', chevaux: 'savedHorseSettings' }[kind] || 'savedSettings';
+  const key = { cartes: 'savedCardSettings', chevaux: 'savedHorseSettings', mois: 'savedMonthSettings' }[kind] || 'savedSettings';
   if (store.user) return store.user[key] || null;
   try {
     return JSON.parse(storage(key) || 'null');

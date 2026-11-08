@@ -116,6 +116,20 @@ CREATE TABLE IF NOT EXISTS horse_stats (
   play_seconds INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS month_stats (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  games INTEGER NOT NULL DEFAULT 0,
+  wins INTEGER NOT NULL DEFAULT 0,
+  best_worth INTEGER NOT NULL DEFAULT 0,
+  deals_sold INTEGER NOT NULL DEFAULT 0,
+  profit INTEGER NOT NULL DEFAULT 0,
+  jackpots INTEGER NOT NULL DEFAULT 0,
+  borrowed INTEGER NOT NULL DEFAULT 0,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  best_streak INTEGER NOT NULL DEFAULT 0,
+  play_seconds INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor_id INTEGER,
@@ -132,6 +146,7 @@ if (!userCols.includes('display_name')) db.exec('ALTER TABLE users ADD COLUMN di
 if (!userCols.includes('saved_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_settings TEXT');
 if (!userCols.includes('saved_card_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_card_settings TEXT');
 if (!userCols.includes('saved_horse_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_horse_settings TEXT');
+if (!userCols.includes('saved_month_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_month_settings TEXT');
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_display_name ON users(display_name COLLATE NOCASE) WHERE display_name IS NOT NULL");
 
 module.exports = db;

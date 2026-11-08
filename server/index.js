@@ -65,6 +65,7 @@ app.get('/api/meta', (_req, res) => {
     limits: LIMITS,
     cardDefaults: require('./cartes/settings').DEFAULTS,
     horseDefaults: require('./chevaux/settings').DEFAULTS,
+    monthDefaults: require('./mois/settings').DEFAULTS,
   });
 });
 
@@ -84,15 +85,16 @@ app.get('/api/stats', (_req, res) => {
   const now = Date.now();
   if (!statsCache || now - statsCache.at > 20000) {
     const db = require('./db');
-    const kindOf = (wt) => (wt === 'cartes' || wt === 'chevaux' ? wt : 'poly');
+    const kindOf = (wt) => (wt === 'cartes' || wt === 'chevaux' || wt === 'mois' ? wt : 'poly');
     const recent = db.prepare('SELECT win_type, winner_name, players, ended_at, duration FROM games WHERE winner_name IS NOT NULL ORDER BY id DESC LIMIT 12').all()
       .map((g) => ({ kind: kindOf(g.win_type), winner: g.winner_name, players: JSON.parse(g.players).length, at: g.ended_at, duration: g.duration }));
-    const byKind = { poly: 0, cartes: 0, chevaux: 0 };
-    for (const r of db.prepare("SELECT CASE WHEN win_type IN ('cartes','chevaux') THEN win_type ELSE 'poly' END AS k, COUNT(*) AS n FROM games GROUP BY k").all()) byKind[r.k] = r.n;
+    const byKind = { poly: 0, cartes: 0, chevaux: 0, mois: 0 };
+    for (const r of db.prepare("SELECT CASE WHEN win_type IN ('cartes','chevaux','mois') THEN win_type ELSE 'poly' END AS k, COUNT(*) AS n FROM games GROUP BY k").all()) byKind[r.k] = r.n;
     const top = {
       poly: U.leaderboard('wins', 3),
       cartes: U.leaderboard('c_wins', 3),
       chevaux: U.leaderboard('h_wins', 3),
+      mois: U.leaderboard('m_wins', 3),
     };
     statsCache = {
       at: now,

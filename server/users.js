@@ -1,6 +1,6 @@
 'use strict';
 const db = require('./db');
-const { BADGES, evaluate, evaluateCards, evaluateHorses } = require('./badges');
+const { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth } = require('./badges');
 
 const PAWNS = ['🎩', '🚗', '🐕', '🚀', '🐱', '⛵', '🎸', '🦖', '🐧', '🍀', '⚽', '🎯'];
 const VIP_PAWNS = ['👑', '💎', '🦄', '🐉', '🦁', '🛸', '🔥', '⭐'];
@@ -52,9 +52,11 @@ const q = {
   stats: db.prepare('SELECT * FROM stats WHERE user_id = ?'),
   badges: db.prepare('SELECT badge, earned_at FROM user_badges WHERE user_id = ? ORDER BY earned_at'),
   history: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
-    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux') ORDER BY g.id DESC LIMIT 20`),
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux', 'mois') ORDER BY g.id DESC LIMIT 20`),
   historyHorses: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
     FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'chevaux' ORDER BY g.id DESC LIMIT 20`),
+  historyMonths: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'mois' ORDER BY g.id DESC LIMIT 20`),
   historyCards: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
     FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'cartes' ORDER BY g.id DESC LIMIT 20`),
 };
@@ -94,7 +96,9 @@ function profile(key) {
   const historyCards = q.historyCards.all(u.id).map(parse);
   const historyHorses = q.historyHorses.all(u.id).map(parse);
   const horses = horseStats.get(u.id) || null;
-  return { user: publicUser(u), stats, cards, horses, badges, history, historyCards, historyHorses };
+  const months = monthStats.get(u.id) || null;
+  const historyMonths = q.historyMonths.all(u.id).map(parse);
+  return { user: publicUser(u), stats, cards, horses, months, badges, history, historyCards, historyHorses, historyMonths };
 }
 
 const insertGame = db.prepare(`INSERT INTO games (room_code, started_at, ended_at, duration, rounds, win_type, winner_name, winner_user_id, settings, players)
@@ -265,7 +269,61 @@ const recordHorseGame = db.transaction((room, result, settings) => {
   return { gameId, rewards };
 });
 
+/** Enregistre une partie de Fin de mois : historique, statistiques, XP et badges. */
+const ensureMonthStats = db.prepare('INSERT OR IGNORE INTO month_stats (user_id) VALUES (?)');
+const monthStats = db.prepare('SELECT * FROM month_stats WHERE user_id = ?');
+const recordMonthGame = db.transaction((room, result, settings) => {
+  const now = Date.now();
+  const winner = result.players.find((p) => p.rank === 1);
+  const gameId = insertGame.run({
+    room_code: room,
+    started_at: now - result.duration * 1000,
+    ended_at: now,
+    duration: result.duration,
+    rounds: result.rounds,
+    win_type: 'mois',
+    winner_name: winner ? winner.name : null,
+    winner_user_id: winner ? winner.userId : null,
+    settings: JSON.stringify({ ...settings, kind: 'mois' }),
+    players: JSON.stringify(result.players.map((p) => ({ name: p.name, rank: p.rank, bot: p.isBot, userId: p.userId, netWorth: p.netWorth }))),
+  }).lastInsertRowid;
+  const rewards = {};
+  for (const me of result.players) {
+    if (!me.userId) continue;
+    const uid = me.userId;
+    ensureMonthStats.run(uid);
+    const old = monthStats.get(uid);
+    const won = me.rank === 1;
+    const streak = won ? old.current_streak + 1 : 0;
+    const st = me.stats || {};
+    db.prepare(`UPDATE month_stats SET games = games + 1, wins = wins + ?, best_worth = MAX(best_worth, ?), deals_sold = deals_sold + ?, profit = profit + ?,
+      jackpots = jackpots + ?, borrowed = borrowed + ?, current_streak = ?, best_streak = MAX(best_streak, ?), play_seconds = play_seconds + ? WHERE user_id = ?`).run(
+      won ? 1 : 0, Math.max(0, me.netWorth || 0), st.sold || 0, st.profit || 0, st.jackpots || 0, st.borrowed || 0, streak, streak, result.duration, uid
+    );
+    insertGP.run(gameId, uid, me.rank, me.netWorth || 0, 0);
+    const xp = 15 + (won ? 60 : 0) + (st.sold || 0) * 4;
+    addXp.run(xp, uid);
+    const owned = new Set(q.badges.all(uid).map((b) => b.badge));
+    const newBadges = evaluateMonth(monthStats.get(uid), me, result, owned);
+    for (const b of newBadges) insertBadge.run(uid, b, now);
+    rewards[uid] = { xp, ratingDelta: null, badges: newBadges.map((id) => BADGES.find((b) => b.id === id)) };
+  }
+  return { gameId, rewards };
+});
+
 function leaderboard(sort = 'rating', limit = 50) {
+  // Classements de Fin de mois
+  if (sort.startsWith('m_')) {
+    const mcols = { m_wins: 'm.wins', m_winrate: 'winrate', m_games: 'm.games', m_best: 'm.best_worth', m_sold: 'm.deals_sold' };
+    const mcol = mcols[sort] || 'm.wins';
+    return db
+      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, m.games, m.wins, m.best_streak, m.best_worth, m.deals_sold, m.jackpots,
+        CASE WHEN m.games > 0 THEN ROUND(100.0 * m.wins / m.games, 1) ELSE 0 END AS winrate
+        FROM month_stats m JOIN users u ON u.id = m.user_id WHERE u.banned = 0 AND m.games > 0 ${sort === 'm_winrate' ? 'AND m.games >= 5' : ''}
+        ORDER BY ${mcol} DESC, m.wins DESC LIMIT ?`)
+      .all(limit)
+      .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
+  }
   // Classements des Petits chevaux
   if (sort.startsWith('h_')) {
     const hcols = { h_wins: 'h.wins', h_winrate: 'winrate', h_games: 'h.games', h_captures: 'h.captures', h_home: 'h.horses_home' };
@@ -304,4 +362,4 @@ function leaderboard(sort = 'rating', limit = 50) {
     .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
 }
 
-module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, recordHorseGame, leaderboard, BADGES };
+module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, recordHorseGame, recordMonthGame, leaderboard, BADGES };

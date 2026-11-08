@@ -40,6 +40,15 @@ const BADGES = [
   { id: 'h_lucky', icon: '🎲', name: 'Pluie de 6', desc: 'Faire 10 fois 6 dans une même course', tier: 'bronze', game: 'chevaux' },
   { id: 'h_untouchable', icon: '🛡️', name: 'Intouchable', desc: 'Gagner une course sans perdre un seul cheval', tier: 'gold', game: 'chevaux' },
   { id: 'h_streak', icon: '🔥', name: 'Au galop', desc: '3 victoires de Petits chevaux d\'affilée', tier: 'silver', game: 'chevaux' },
+  // Fin de mois
+  { id: 'm_first_win', icon: '💶', name: 'Premier salaire', desc: 'Remporter une partie de Fin de mois', tier: 'bronze', game: 'mois' },
+  { id: 'm_wins_10', icon: '💼', name: 'Gestionnaire', desc: 'Remporter 10 parties de Fin de mois', tier: 'silver', game: 'mois' },
+  { id: 'm_wins_50', icon: '🏦', name: 'Banquier', desc: 'Remporter 50 parties de Fin de mois', tier: 'gold', game: 'mois' },
+  { id: 'm_jackpot', icon: '💰', name: 'Cagnotte !', desc: 'Rafler une cagnotte d\'au moins 1 000 €', tier: 'bronze', game: 'mois' },
+  { id: 'm_trader', icon: '🤑', name: 'Roi de la revente', desc: 'Revendre 5 affaires dans une même partie', tier: 'silver', game: 'mois' },
+  { id: 'm_debt_free', icon: '🕊️', name: 'Zéro crédit', desc: 'Gagner une partie de 3 mois ou plus sans jamais emprunter', tier: 'gold', game: 'mois' },
+  { id: 'm_rich', icon: '💎', name: 'Fin de mois dorée', desc: 'Terminer une partie avec 25 000 € de patrimoine', tier: 'gold', game: 'mois' },
+  { id: 'm_streak', icon: '🔥', name: 'Série gagnante', desc: '3 victoires de Fin de mois d\'affilée', tier: 'silver', game: 'mois' },
 ];
 
 /**
@@ -112,4 +121,21 @@ function evaluateHorses(s, me, game, owned) {
   return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
 }
 
-module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses };
+/** Badges de Fin de mois. */
+function evaluateMonth(s, me, game, owned) {
+  const won = me.rank === 1;
+  const st = me.stats || {};
+  const checks = {
+    m_first_win: s.wins >= 1,
+    m_wins_10: s.wins >= 10,
+    m_wins_50: s.wins >= 50,
+    m_jackpot: (st.jackpotBest || 0) >= 1000,
+    m_trader: (st.sold || 0) >= 5,
+    m_debt_free: won && (st.borrowed || 0) === 0 && (game.months || 0) >= 3 && game.players.length >= 2,
+    m_rich: (me.netWorth || 0) >= 25000,
+    m_streak: s.current_streak >= 3,
+  };
+  return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
+}
+
+module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth };
