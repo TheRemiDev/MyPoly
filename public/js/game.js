@@ -227,6 +227,7 @@ class RoomView {
     this.onKey = (e) => {
       if (e.target.matches('input, textarea, select')) return;
       if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+      if (this.cards) return; // Carton ! et Petits chevaux gèrent leurs propres raccourcis
       if ((e.key === ' ' || e.key === 'Enter') && this.canAct() && this.state.phase === 'roll') {
         e.preventDefault();
         this.action('roll');

@@ -371,14 +371,7 @@ export class Horse3D {
     cgrp.add(cbody, cface);
     g.add(cgrp);
     this.centerTop = BOARD_TOP + TILE_H * 1.6;
-    // Trophée doré au centre
-    const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd166, metalness: 0.9, roughness: 0.22, emissive: 0x4a3000, emissiveIntensity: 0.3 });
-    const cup = new THREE.Mesh(new THREE.LatheGeometry([[0, 0], [0.16, 0], [0.16, 0.03], [0.05, 0.06], [0.04, 0.18], [0.16, 0.26], [0.2, 0.44], [0.18, 0.46], [0.13, 0.3], [0, 0.26]].map(([a, b]) => new THREE.Vector2(a, b)), 32), goldMat);
-    cup.position.set(cx, this.centerTop, cz);
-    cup.scale.setScalar(1.35);
-    cup.castShadow = true;
-    g.add(cup);
-    this.trophy = cup;
+
   }
 
   // ------------------------------------------------------------------ chevaux
@@ -501,10 +494,10 @@ export class Horse3D {
       return new THREE.MeshStandardMaterial({ map: t, roughness: 0.3 });
     };
     const mats = [3, 4, 1, 6, 2, 5].map(faceTex);
-    this.die = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), mats);
+    this.die = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), mats);
     this.die.castShadow = true;
     this.scene.add(this.die);
-    this.dieRest = new THREE.Vector3(0.62, BOARD_TOP + TILE_H * 1.6 + 0.275, 0.5);
+    this.dieRest = new THREE.Vector3(0, BOARD_TOP + TILE_H * 1.6 + 0.25, 0);
     this.die.position.copy(this.dieRest);
     this.setDie(6);
   }
@@ -525,7 +518,8 @@ export class Horse3D {
     const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.3, Math.random() - 0.5).normalize();
     const spins = (3 + Math.random() * 2) * Math.PI * 2;
     const from = new THREE.Vector3((Math.random() - 0.5) * 3, 3, 3);
-    const to = new THREE.Vector3((Math.random() - 0.5) * 0.5, this.dieRest.y, (Math.random() - 0.5) * 0.5);
+    // Le dé retombe toujours sur l'arrivée centrale (jamais à cheval sur les cases)
+    const to = new THREE.Vector3((Math.random() - 0.5) * 0.4, this.dieRest.y, (Math.random() - 0.5) * 0.4);
     this.dieGlow = new THREE.Color(color);
     return this.tween(1050, (t) => {
       const e = ease.out(t);
@@ -788,7 +782,6 @@ export class Horse3D {
       m.arrow.rotation.y = time * 1.5;
       m.beam.material.opacity = 0.14 + Math.sin(time * 5) * 0.05;
     }
-    if (this.trophy) this.trophy.rotation.y = time * 0.6;
     let off = null;
     if (this.shakeT > 0) {
       this.shakeT = Math.max(0, this.shakeT - dt);
