@@ -171,11 +171,13 @@ export class HorseTable {
     this.onKey = (e) => {
       if (e.target.matches('input, textarea, select') || !this.state) return;
       if (e.key === ' ' || e.key === 'Enter') {
+        // Empêche aussi Espace d'« appuyer » sur le dernier bouton cliqué (chat, musique…)
         e.preventDefault();
-        this.roll();
+        if (!e.repeat) this.roll();
+        return;
       }
       const n = Number(e.key);
-      if (n >= 1 && n <= 4 && this.myMove()) this.move(n - 1);
+      if (!e.repeat && n >= 1 && n <= 4 && this.myMove()) this.move(n - 1);
     };
     document.addEventListener('keydown', this.onKey);
   }
@@ -273,6 +275,7 @@ export class HorseTable {
   }
 
   apply(st, instant) {
+    this.pending = false;
     const first = !this.state;
     this.state = st;
     this.v.state = st;
@@ -578,14 +581,21 @@ export class HorseTable {
     }
     return res;
   }
-  roll() {
-    if (!this.myTurn() || this.state.phase !== 'roll') return;
+  async roll() {
+    if (this.pending || !this.myTurn() || this.state.phase !== 'roll') return;
+    this.pending = true;
     this.rollBtn.hidden = true;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     Sound.play('click');
-    this.act('roll');
+    const res = await this.act('roll');
+    // En cas d'erreur, on rend la main ; sinon on attend la mise à jour du serveur
+    if (res && res.error) {
+      this.pending = false;
+      this.renderControls();
+    }
   }
-  move(i, pid = this.me) {
-    if (pid !== this.me) return;
+  async move(i, pid = this.me) {
+    if (pid !== this.me || this.pending) return;
     if (!this.myMove()) {
       if (this.myTurn() && this.state.phase === 'roll') toast('Lancez d\'abord le dé !', 'info', 1500);
       return;
@@ -597,7 +607,9 @@ export class HorseTable {
     }
     this.preview(null);
     Sound.play('click');
-    this.act('move', { horse: i });
+    this.pending = true;
+    const res = await this.act('move', { horse: i });
+    if (res && res.error) this.pending = false;
   }
 
   // ============================================================ animations
