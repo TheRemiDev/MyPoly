@@ -5,8 +5,10 @@ const { CardGame } = require('./cartes/engine');
 const CS = require('./cartes/settings');
 const { HorseGame } = require('./chevaux/engine');
 const HS = require('./chevaux/settings');
+const { MonthGame } = require('./mois/engine');
+const MS = require('./mois/settings');
 /** Jeux disponibles sur le site. */
-const KINDS = ['poly', 'cartes', 'chevaux'];
+const KINDS = ['poly', 'cartes', 'chevaux', 'mois'];
 const kindOf = (k) => (KINDS.includes(k) ? k : 'poly');
 const { sanitize, DEFAULTS } = require('./game/settings');
 const R = require('./game/random');
@@ -213,6 +215,7 @@ function musicNext(room) {
 function sanitizeFor(kind, input, base) {
   if (kind === 'cartes') return CS.sanitize(input, base);
   if (kind === 'chevaux') return HS.sanitize(input, base);
+  if (kind === 'mois') return MS.sanitize(input, base);
   return sanitize(input, base);
 }
 
@@ -324,7 +327,7 @@ function startGame(room) {
   room.state = 'playing';
   room.result = null;
   const players = room.seats.map((s) => ({ id: s.key, userId: s.userId, name: s.name, color: s.color, pawn: s.pawn, isBot: s.isBot, role: s.role, vip: s.vip, level: s.level }));
-  const Engine = { cartes: CardGame, chevaux: HorseGame }[room.kind] || Game;
+  const Engine = { cartes: CardGame, chevaux: HorseGame, mois: MonthGame }[room.kind] || Game;
   room.game = new Engine({ players, settings: room.settings, ...gameCallbacks(room) });
   for (const s of room.seats) if (!s.isBot && !isConnected(room, s.key)) room.game.player(s.key).connected = false;
   broadcastRoom(room);
@@ -404,10 +407,10 @@ function endGame(room, result) {
   let rewards = {};
   // On n'enregistre que des parties "réelles" (au moins 2 tours) pour éviter les abus
   const registered = result.players.some((p) => p.userId);
-  const real = room.kind === 'cartes' || room.kind === 'chevaux' ? result.turns >= 6 : result.rounds >= 2;
+  const real = room.kind === 'cartes' || room.kind === 'chevaux' || room.kind === 'mois' ? result.turns >= 6 : result.rounds >= 2;
   if (registered && real) {
     try {
-      const rec = { cartes: U.recordCardGame, chevaux: U.recordHorseGame }[room.kind] || U.recordGame;
+      const rec = { cartes: U.recordCardGame, chevaux: U.recordHorseGame, mois: U.recordMonthGame }[room.kind] || U.recordGame;
       ({ rewards } = rec(room.code, result, room.settings));
     } catch (e) {
       console.error('[stats] erreur enregistrement partie', e);

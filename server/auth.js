@@ -153,10 +153,16 @@ router.put('/me/settings', requireAuth, (req, res) => {
   const body = req.body || {};
   const cards = body.kind === 'cartes';
   const horses = body.kind === 'chevaux';
+  const months = body.kind === 'mois';
   // Chaque jeu a ses propres règles enregistrées
-  const col = cards ? 'saved_card_settings' : horses ? 'saved_horse_settings' : 'saved_settings';
+  const col = cards ? 'saved_card_settings' : horses ? 'saved_horse_settings' : months ? 'saved_month_settings' : 'saved_settings';
   if (body.settings === null) {
     db.prepare(`UPDATE users SET ${col} = NULL WHERE id = ?`).run(req.user.id);
+    return res.json({ user: me(U.getUser(req.user.id)) });
+  }
+  if (months) {
+    const c = require('./mois/settings').sanitize(body.settings);
+    db.prepare('UPDATE users SET saved_month_settings = ? WHERE id = ?').run(JSON.stringify(c), req.user.id);
     return res.json({ user: me(U.getUser(req.user.id)) });
   }
   if (horses) {
@@ -188,7 +194,7 @@ function savedOf(u, col = 'saved_settings') {
 }
 
 function me(u) {
-  return { ...U.publicUser(u), username: u.username, displayName: u.display_name || null, email: u.email, staff: U.isStaff(u), savedSettings: savedOf(u), savedCardSettings: savedOf(u, 'saved_card_settings'), savedHorseSettings: savedOf(u, 'saved_horse_settings') };
+  return { ...U.publicUser(u), username: u.username, displayName: u.display_name || null, email: u.email, staff: U.isStaff(u), savedSettings: savedOf(u), savedCardSettings: savedOf(u, 'saved_card_settings'), savedHorseSettings: savedOf(u, 'saved_horse_settings'), savedMonthSettings: savedOf(u, 'saved_month_settings') };
 }
 
 module.exports = { router, attachUser, requireAuth, requireStaff, userFromToken, parseCookie, createUser, COOKIE, me };

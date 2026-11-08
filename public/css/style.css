@@ -2638,3 +2638,224 @@ body:not(.in-game) {
 .pop-body .music-panel > * { flex: none; }
 .pop-body .music-list { max-height: 24dvh; }
 .popover:has(> .pop-body > .music-panel:not([hidden])) { max-height: min(78dvh, 640px); }
+
+/* =====================================================================
+   Fin de mois — 4e jeu : accueil, classement, règles
+   ===================================================================== */
+.hp-posters, .hp-champs, .rl-games, .game-switch { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1280px) and (min-width: 961px) { .hp-posters, .hp-champs { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 960px) { .rl-games { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) and (min-width: 701px) { .game-switch { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 960px) { .hp-posters, .hp-champs { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .game-switch { grid-template-columns: 1fr; } }
+.hp-stack-card.s3 { right: 6%; bottom: 14px; rotate: 9deg; z-index: 1; animation: hpFloat 7.5s ease-in-out -1s infinite; }
+.game-kind-tag.k-mois { background: rgba(63, 167, 255, .16); color: #9fd4ff; border: 1px solid rgba(63, 167, 255, .4); }
+
+/* =====================================================================
+   Fin de mois — écran de jeu
+   ===================================================================== */
+.month-game { --safe-y: 132px; }
+.month-game .mo-fx { pointer-events: none; z-index: 45; }
+
+/* Barre du bas : factures · dé · affaires */
+.mo-dock { --c: #fff; position: absolute; left: 50%; bottom: 14px; translate: -50% 0; z-index: 36; display: flex; align-items: flex-end; gap: 14px; pointer-events: none; }
+.mo-dock > * { pointer-events: auto; }
+.mo-dock .mo-action { position: static; translate: none; }
+.mo-pile { display: flex; align-items: center; gap: 10px; min-width: 168px; padding: 9px 14px 9px 10px; border-radius: 16px; border: 1px solid var(--panel-border); background: rgba(14, 17, 38, .86); color: #fff; font: inherit; cursor: pointer; box-shadow: 0 8px 22px rgba(0, 0, 0, .35); transition: transform .18s cubic-bezier(.2, .9, .3, 1.2), border-color .2s; }
+@media (hover: hover) and (pointer: fine) { .mo-pile:hover { transform: translateY(-3px); border-color: rgba(255, 255, 255, .35); } }
+.mo-pile:active { transform: scale(.97); }
+.mo-pile-cards { position: relative; width: 52px; height: 42px; flex: none; }
+.mo-pile-txt { display: flex; flex-direction: column; text-align: left; line-height: 1.15; }
+.mo-pile-txt small { font-size: .7rem; font-weight: 800; color: #aab0d6; text-transform: uppercase; letter-spacing: .05em; }
+.mo-pile-txt b { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.mo-pile.bills b { color: #ffb3b9; }
+.mo-pile.deals b { color: #ffd166; }
+.mo-mini { position: absolute; left: calc(var(--k, 0) * 7px); top: calc(var(--k, 0) * -2px); width: 36px; height: 40px; display: grid; place-items: center; border-radius: 6px; font-size: 1.05rem; box-shadow: 0 3px 8px rgba(0, 0, 0, .4); rotate: calc((var(--k, 0) - 1.5) * 5deg); }
+.mo-mini.letter { width: 40px; height: 28px; top: calc(6px + var(--k, 0) * -2px); background: #fbf3e1; border: 1px solid #d8c69f; }
+.mo-mini.deal { background: linear-gradient(160deg, #ffd45a, #f08a00); border: 2px solid #fff; }
+.mo-mini.empty { background: rgba(255, 255, 255, .06); border: 1px dashed rgba(255, 255, 255, .25); box-shadow: none; filter: grayscale(1); opacity: .6; rotate: 0deg; }
+
+/* Fiches des joueurs */
+.mo-pcard .mo-cash { font-variant-numeric: tabular-nums; }
+.mo-cash.bump { animation: moBump .45s cubic-bezier(.2, .9, .3, 1.3); }
+@keyframes moBump { 0% { transform: scale(1); } 40% { transform: scale(1.14); } 100% { transform: scale(1); } }
+.pc-chip.mo-loan { background: rgba(255, 90, 95, .4); }
+.pc-chip.mo-bill { background: rgba(255, 179, 185, .2); }
+.pc-chip.mo-dealchip { background: rgba(255, 176, 32, .35); }
+.pc-chip.mo-done { background: rgba(46, 204, 113, .4); }
+.pcard.done:not(.turn) { opacity: .85; }
+
+/* Bulles d'argent */
+.ct-bubble.gain { background: linear-gradient(180deg, #7ef0ac, #23b25f); color: #fff; border: 3px solid #fff; }
+.ct-bubble.loss { background: linear-gradient(180deg, #ff8a93, #d0283c); color: #fff; border: 3px solid #fff; }
+
+/* Grande carte au centre (lettre, affaire, fiche de paie…) */
+.mo-show { position: absolute; left: 50%; top: calc(var(--safe-top) + (100% - var(--safe-top) - var(--safe-y)) / 2); width: 0; height: 0; z-index: 46; }
+.mo-show-card { position: absolute; left: 0; top: 0; translate: -50% -50%; pointer-events: none; filter: drop-shadow(0 22px 40px rgba(0, 0, 0, .55)); }
+.mo-show-for { margin-top: 10px; text-align: center; font-weight: 900; color: #fff; font-size: .95rem; text-shadow: 0 2px 8px rgba(0, 0, 0, .6); }
+.mo-show-for::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c, #fff); margin-right: 6px; box-shadow: 0 0 0 2px #fff; }
+
+/* Lettre du courrier */
+.mo-letter { --t: #3fa7ff; position: relative; width: 270px; padding: 16px 18px 18px; border-radius: 14px; color: #2b2236; text-align: center;
+  background: repeating-linear-gradient(180deg, transparent 0 27px, rgba(63, 120, 200, .08) 27px 28px), linear-gradient(180deg, #fffdf6, #f6ecd6); border: 1px solid #e3d3ad; }
+.mo-letter.bill { --t: #e23b4b; }
+.mo-letter.loss { --t: #d0283c; }
+.mo-letter.gain { --t: #16a34a; }
+.mo-letter.neutral { --t: #6b7280; }
+.mo-letter-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .72rem; font-weight: 900; letter-spacing: .08em; color: #8a7650; border-bottom: 2px dashed #e0cfa6; padding-bottom: 8px; }
+.mo-letter-head small { font-size: .72rem; color: #b09b6f; }
+.mo-stamp { width: 30px; height: 36px; border-radius: 3px; background: radial-gradient(circle at 50% 45%, #fff 0 5px, transparent 6px), linear-gradient(160deg, #ff6b7a, #c9283a); outline: 2px dashed #fff; outline-offset: -4px; rotate: 6deg; }
+.mo-letter-icon { font-size: 3.4rem; margin: 10px 0 2px; }
+.mo-letter-name { font-size: 1.12rem; font-weight: 900; line-height: 1.2; }
+.mo-letter-txt { margin-top: 4px; font-size: .85rem; color: #6d6177; font-weight: 600; }
+.mo-letter-amount { display: inline-block; margin-top: 12px; padding: 6px 16px; border-radius: 99px; font-weight: 900; font-size: 1.35rem; color: #fff; background: var(--t); box-shadow: 0 4px 0 rgba(0, 0, 0, .15); font-variant-numeric: tabular-nums; }
+.mo-letter.neutral .mo-letter-amount { font-size: 1rem; }
+
+/* Carte affaire */
+.mo-deal { position: relative; width: 210px; padding: 14px 14px 12px; border-radius: 18px; text-align: center; color: #3b2400;
+  background: radial-gradient(circle at 50% 0%, #fff6d6, transparent 60%), linear-gradient(160deg, #ffd45a, #f59e0b); border: 4px solid #fff; box-shadow: 0 10px 24px rgba(0, 0, 0, .35); }
+.mo-deal-tag { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: .66rem; font-weight: 900; letter-spacing: .12em; color: #fff; background: #b45309; }
+.mo-deal-icon { font-size: 3.2rem; margin: 6px 0 0; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, .2)); }
+.mo-deal-name { font-weight: 900; font-size: 1.05rem; line-height: 1.15; min-height: 2.3em; display: grid; place-items: center; }
+.mo-deal-prices { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.mo-deal-prices > div { display: flex; flex-direction: column; padding: 5px 4px; border-radius: 10px; background: rgba(255, 255, 255, .55); }
+.mo-deal-prices small { font-size: .62rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; color: #8a5a00; }
+.mo-deal-prices b { font-size: .98rem; font-variant-numeric: tabular-nums; }
+.mo-deal-prices .sell { background: rgba(22, 163, 74, .16); }
+.mo-deal-prices .sell b { color: #0f7a37; }
+.mo-deal-profit { margin-top: 6px; font-size: .78rem; font-weight: 800; color: #0f7a37; }
+.mo-deal.big { width: 240px; }
+.mo-deal.big .mo-deal-icon { font-size: 4rem; }
+.mo-deal.sm { width: 150px; padding: 10px 10px 9px; border-width: 3px; border-radius: 14px; }
+.mo-deal.sm .mo-deal-icon { font-size: 2.2rem; }
+.mo-deal.sm .mo-deal-name { font-size: .85rem; }
+.mo-deal.sm .mo-deal-prices b { font-size: .82rem; }
+.mo-deal.sm .mo-deal-profit { display: none; }
+.mo-deal.pick { cursor: pointer; transition: transform .2s cubic-bezier(.2, .9, .3, 1.2), box-shadow .2s; }
+@media (hover: hover) and (pointer: fine) { .mo-deal.pick:hover { transform: translateY(-6px) rotate(-1.5deg); box-shadow: 0 0 0 3px #7ef0ac, 0 16px 30px rgba(0, 0, 0, .45); } }
+.mo-deal.pick:active { transform: scale(.97); }
+.mo-deal-sell { margin-top: 8px; padding: 6px; border-radius: 10px; background: #16a34a; color: #fff; font-weight: 900; font-size: .85rem; }
+.mo-sold-stamp { position: absolute; left: 50%; top: 44%; translate: -50% -50%; rotate: -14deg; padding: 6px 18px; border: 5px solid #16a34a; border-radius: 12px; color: #16a34a; background: rgba(255, 255, 255, .9); font-weight: 900; font-size: 1.8rem; letter-spacing: .08em; animation: moStamp .4s cubic-bezier(.2, .9, .3, 1.4) .15s both; }
+@keyframes moStamp { from { scale: 2.4; opacity: 0; } to { scale: 1; opacity: 1; } }
+
+/* Fiche de paie */
+.mo-payslip { position: relative; width: 320px; padding: 16px 18px 18px; border-radius: 14px; background: #fff; color: #23202b; box-shadow: inset 0 6px 0 var(--c); }
+.mo-payslip-head { display: flex; flex-direction: column; align-items: center; padding-bottom: 10px; margin-bottom: 8px; border-bottom: 2px dashed #ddd; }
+.mo-payslip-head b { font-size: 1.15rem; letter-spacing: .14em; }
+.mo-payslip-head small { color: #777; font-weight: 700; }
+.mo-payslip-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-weight: 700; font-size: .95rem; }
+.mo-payslip-row.small { font-size: .8rem; color: #666; padding: 2px 0 2px 10px; }
+.mo-payslip-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mo-payslip-row b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mo-payslip-row.plus b { color: #16a34a; }
+.mo-payslip-row.minus b { color: #d0283c; }
+.mo-payslip-total { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid #23202b; font-weight: 900; font-size: 1.2rem; }
+.mo-payslip-total b { color: #16a34a; }
+.mo-payslip-total b.neg { color: #d0283c; }
+.mo-paid-stamp { position: absolute; right: 16px; bottom: 58px; rotate: 12deg; padding: 4px 12px; border: 4px solid #16a34a; border-radius: 10px; color: #16a34a; font-weight: 900; font-size: 1.3rem; letter-spacing: .1em; opacity: .85; animation: moStamp .4s cubic-bezier(.2, .9, .3, 1.4) .9s both; }
+
+/* Fiches d'événement (jeu radio, coup dur, vide-grenier, pari, tombola) */
+.mo-event { width: 290px; padding: 18px 18px 16px; border-radius: 22px; text-align: center; color: #fff; background: linear-gradient(160deg, #2a2f63, #171a3a); border: 2px solid rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .05); }
+.mo-event-icon { font-size: 3rem; line-height: 1; }
+.mo-event-title { margin-top: 6px; font-weight: 900; font-size: 1.2rem; }
+.mo-event-die { display: flex; justify-content: center; margin: 12px 0 8px; }
+.mo-event-die.landed .mo-mdie { animation: moBump .4s cubic-bezier(.2, .9, .3, 1.4); }
+.mo-event-txt { font-weight: 800; font-size: 1rem; transition: opacity .25s; }
+.mo-event.win .mo-event-txt { color: #7ef0ac; }
+.mo-event.lose .mo-event-txt { color: #ff9aa3; }
+.mo-event .mo-show-for { margin-top: 8px; font-size: .82rem; opacity: .8; }
+.mo-mdie { width: 54px; height: 54px; padding: 8px; border-radius: 13px; background: linear-gradient(145deg, #fff, #dfe0ee); display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); place-items: center; box-shadow: 0 6px 14px rgba(0, 0, 0, .4); }
+.mo-mdie i { width: 9px; height: 9px; border-radius: 50%; }
+.mo-mdie i.on { background: #1b1030; }
+.mo-tickets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 12px; }
+.mo-ticket { --c: #888; position: relative; display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 10px; background: rgba(255, 255, 255, .07); border: 2px dashed color-mix(in srgb, var(--c) 70%, #fff); transition: transform .12s, background .12s; }
+.mo-ticket b { font-size: 1.1rem; }
+.mo-ticket span { font-size: 1.2rem; }
+.mo-ticket small { font-size: .66rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8; }
+.mo-ticket.void { opacity: .55; }
+.mo-ticket.lit { background: rgba(255, 255, 255, .22); transform: scale(1.06); }
+.mo-ticket.win { background: color-mix(in srgb, var(--c) 55%, transparent); border-style: solid; border-color: #ffd166; transform: scale(1.1); box-shadow: 0 0 18px rgba(255, 209, 102, .6); }
+
+/* Panneau de décision */
+.mo-decide { --c: #fff; position: absolute; left: 50%; top: calc(var(--safe-top) + (100dvh - var(--safe-top) - var(--safe-y)) / 2); translate: -50% -50%; z-index: 44; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  max-width: min(640px, calc(100vw - 2 * var(--safe-x) - 20px)); padding: 20px 24px 22px; border-radius: 26px; background: rgba(16, 19, 44, .9); border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent), 0 26px 60px rgba(0, 0, 0, .6); backdrop-filter: blur(6px); animation: moIn .32s cubic-bezier(.2, .9, .3, 1.15); }
+.mo-decide[hidden] { display: none; }
+.mo-decide.leaving { opacity: .55; pointer-events: none; transition: opacity .15s; }
+@keyframes moIn { from { opacity: 0; scale: .9; } to { opacity: 1; scale: 1; } }
+.mo-decide.spectate { top: auto; bottom: calc(var(--safe-y) + 8px); translate: -50% 0; transform-origin: bottom center; scale: .78; padding: 14px 18px 16px; }
+.mo-decide-title { font-size: 1.3rem; font-weight: 900; text-align: center; }
+.mo-decide-sub { color: #c8cbec; font-weight: 700; }
+.mo-decide-who { display: flex; align-items: center; gap: 8px; font-weight: 800; color: #dfe2ff; }
+.mo-decide-who .pc-pawn { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px var(--c); font-size: 1rem; }
+.mo-decide-note { font-size: .85rem; font-weight: 700; color: #ffd166; text-align: center; }
+.mo-decide-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.mo-deal-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; max-height: 46dvh; overflow-y: auto; padding: 6px; }
+.mo-bet { display: flex; align-items: center; gap: 14px; max-width: 420px; }
+.mo-bet p { margin: 0; color: #dfe2ff; line-height: 1.45; }
+.mo-bet-ball { font-size: 3.4rem; animation: moSpin 3s linear infinite; }
+@keyframes moSpin { to { rotate: 360deg; } }
+.mo-repay { display: grid; grid-template-columns: repeat(3, auto); gap: 18px; }
+.mo-repay div { display: flex; flex-direction: column; align-items: center; }
+.mo-repay small { color: #aab0d6; font-weight: 800; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+.mo-repay b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.mo-repay b.neg { color: #ff8a93; }
+
+/* Portefeuille (modale) */
+.mo-wallet-list { display: flex; flex-direction: column; gap: 6px; }
+.mo-wallet-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
+.mo-wallet-total { display: flex; justify-content: space-between; margin-top: 10px; padding: 10px 12px; border-top: 1px solid rgba(255, 255, 255, .15); font-weight: 800; }
+.mo-deal-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.mo-end-table { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; text-align: left; }
+.mo-end-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 7px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
+.mo-end-row small { color: #aab0d6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mo-end-row b { font-variant-numeric: tabular-nums; color: #7ef0ac; }
+
+/* Plateau 2D de secours (sans WebGL) */
+.month-game.webgl .mo-board-wrap { display: none; }
+.mo-board-wrap { position: absolute; left: 50%; top: calc(var(--safe-top) + 10px); translate: -50% 0; width: min(calc((100dvh - var(--safe-top) - var(--safe-y) - 20px) * 1.25), calc(100vw - 2 * var(--safe-x) - 20px)); }
+.mo-board { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 14px; border-radius: 20px; background: linear-gradient(180deg, #fffdf6, #f1e7cf); box-shadow: 0 0 0 8px #6b4420, 0 0 0 11px #e0b54f, 0 26px 50px rgba(0, 0, 0, .5); }
+.mo-board-head { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; padding: 8px; border-radius: 14px; color: #fff; background: linear-gradient(90deg, #ff8a3d, #ff4f79); }
+.mo-board-head b { font-size: 1.5rem; font-weight: 900; letter-spacing: .04em; }
+.mo-board-head small { opacity: .9; font-weight: 700; }
+.mo-wd { text-align: center; font-weight: 900; font-size: .75rem; color: #5b4b33; }
+.mo-wd.sun { color: #e23b4b; }
+.mo-cell { --k: #888; position: relative; aspect-ratio: 1.1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--k) 22%, #fff)); border-top: 5px solid var(--k); color: #2b2b3a; min-width: 0; }
+.mo-cell.k-start, .mo-cell.k-payday { background: linear-gradient(160deg, color-mix(in srgb, var(--k) 80%, #fff), var(--k)); color: #fff; border: 0; }
+.mo-cell-n { position: absolute; left: 6px; top: 3px; font-size: .9rem; font-weight: 900; }
+.mo-cell.sun .mo-cell-n { color: #e23b4b; }
+.mo-cell-ico { font-size: 1.5rem; }
+.mo-cell-l { font-size: .52rem; font-weight: 900; color: color-mix(in srgb, var(--k) 70%, #000); text-align: center; line-height: 1.1; }
+.mo-cell.k-start .mo-cell-l, .mo-cell.k-payday .mo-cell-l { color: #fff; }
+.mo-cell.cur { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--k); }
+.mo-cell-pawns { position: absolute; inset: auto 2px 2px; display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; }
+.mo-pawn { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px var(--c), 0 2px 5px rgba(0, 0, 0, .4); font-size: .75rem; }
+.mo-pawn.can { animation: moBump 1s ease-in-out infinite; }
+.mo-cell.pot { grid-column: span 3; aspect-ratio: auto; border: 3px dashed #d19a1a; background: rgba(255, 209, 102, .2); }
+.mo-pot-ico { font-size: 1.6rem; }
+.mo-pot-val { font-size: 1.1rem; color: #7a5200; }
+.mo-cell.pot small { font-weight: 900; color: #b86e00; font-size: .65rem; }
+
+@media (max-aspect-ratio: 5/4) {
+  .month-game { --safe-y: 150px; }
+  .mo-dock { bottom: 88px; gap: 8px; }
+  .mo-pile { min-width: 0; padding: 7px 10px 7px 8px; }
+  .mo-pile-cards { width: 40px; }
+  .mo-pile-txt small { font-size: .6rem; }
+  .mo-pile-txt b { font-size: .85rem; }
+  .mo-decide { max-width: calc(100vw - 16px); padding: 16px; }
+  .mo-decide.spectate { scale: .7; }
+  .mo-deal.big { width: 200px; }
+  .mo-letter, .mo-payslip, .mo-event { scale: .9; }
+}
+@media (prefers-reduced-motion: reduce) { .mo-bet-ball, .mo-pawn.can { animation: none; } }
+.mo-pile-txt small, .mo-pile-txt b, .mo-dock .hz-hint { white-space: nowrap; }
+/* Bulle d'aide au survol d'une case (Fin de mois) */
+.mo-tip { position: fixed; z-index: 60; translate: 14px 14px; max-width: 260px; padding: 10px 12px; border-radius: 14px; background: rgba(14, 17, 38, .94); border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 12px 30px rgba(0, 0, 0, .5); pointer-events: none; }
+.mo-tip[hidden] { display: none; }
+.mo-tip-head { display: flex; align-items: center; gap: 8px; font-size: .95rem; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 2px solid var(--k); }
+.mo-tip-head span { font-size: 1.3rem; }
+.mo-tip-txt { color: #c8cbec; font-size: .85rem; line-height: 1.35; }
+.mo-tip-who { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.mo-tip-who span { padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 800; background: color-mix(in srgb, var(--c) 40%, transparent); }
+@media (pointer: coarse) { .mo-tip { display: none; } }

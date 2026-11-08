@@ -175,7 +175,7 @@ async function homePage() {
     }
     return true;
   }
-  let kind = ['cartes', 'chevaux'].includes(storage('game')) ? storage('game') : 'poly';
+  let kind = ['cartes', 'chevaux', 'mois'].includes(storage('game')) ? storage('game') : 'poly';
   async function create(bots, k = kind) {
     kind = k;
     storage('game', k);
@@ -214,10 +214,16 @@ async function homePage() {
       roomsBox.append(
         h('div.room-card' + (r.state !== 'lobby' ? '.live' : ''),
           h('div.room-card-top',
-            h('div.room-card-name', h('span.room-card-kind', { cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux' }[r.kind] || '🎲 MyPoly'), r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
+            h('div.room-card-name', h('span.room-card-kind', { cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois' }[r.kind] || '🎲 MyPoly'), r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
             h('span.room-card-state', r.state === 'lobby' ? '🟢 En attente' : '🔴 En jeu')
           ),
-          r.kind === 'chevaux'
+          r.kind === 'mois'
+            ? h('div.room-card-meta',
+                h('span', '📅 ' + r.settings.months + ' mois'),
+                h('span', '⏱️ ' + (r.settings.turnTime ? r.settings.turnTime + ' s' : '∞')),
+                h('span', '💶 ' + r.settings.salary.toLocaleString('fr-FR') + ' €')
+              )
+            : r.kind === 'chevaux'
             ? h('div.room-card-meta',
                 h('span', '🐴 ' + r.settings.horsesToWin + ' cheva' + (r.settings.horsesToWin > 1 ? 'ux' : 'l')),
                 h('span', '⏱️ ' + (r.settings.turnTime ? r.settings.turnTime + ' s' : '∞')),
@@ -271,6 +277,7 @@ async function homePage() {
     { k: 'poly', name: 'MyPoly', tag: 'Achète le monde, ruine tes amis', color: '#ff8a3d', art: ART.poly, meta: ['👥 2 à 4', '⏱️ 30 min', '🏗️ Stratégie'], points: ['Plateau 3D, maisons qui poussent', 'Rachats, festivals, avions', '4 façons de gagner'] },
     { k: 'cartes', name: 'Carton !', tag: 'Vide ta main… et crie « Carton ! »', color: '#ff5a5f', art: ART.cartes, meta: ['👥 2 à 6', '⏱️ 10 min', '⚡ Rapide'], points: ['+2, +4, Jokers, Demi-tour', 'Prends ceux qui oublient de crier', 'Partie en une manche ou en points'] },
     { k: 'chevaux', name: 'Petits chevaux', tag: 'La course classique en 3D', color: '#2ecc71', art: ART.chevaux, meta: ['👥 2 à 4', '⏱️ 15 min', '🎲 Chance'], points: ['Sors tes chevaux sur un 6', 'Renvoie les autres à l\'écurie', 'Échelle jusqu\'au centre'] },
+    { k: 'mois', name: 'Fin de mois', tag: 'Tiendras-tu jusqu\'à la paye ?', color: '#3fa7ff', art: ART.mois, meta: ['👥 2 à 6', '⏱️ 25 min', '💶 Gestion'], points: ['Courrier, factures et imprévus', 'Achète malin, revends plus cher', 'Paye le 31 et cagnotte sur un 6'] },
   ];
   const poster = (g) => h('article.hp-poster', { style: { '--c': g.color } },
     h('div.hp-poster-art', { html: g.art }),
@@ -291,7 +298,7 @@ async function homePage() {
   const kpis = Object.fromEntries(['online', 'playing', 'games', 'players'].map((k) => [k, h('b', '…')]));
   const feed = h('div.hp-feed', h('div.muted', 'Chargement…'));
   const champs = h('div.hp-champs');
-  const KIND = { poly: ['🎲', 'MyPoly'], cartes: ['🃏', 'Carton !'], chevaux: ['🐴', 'Petits chevaux'] };
+  const KIND = { poly: ['🎲', 'MyPoly'], cartes: ['🃏', 'Carton !'], chevaux: ['🐴', 'Petits chevaux'], mois: ['📅', 'Fin de mois'] };
   const countUp = (el, v) => {
     const from = Number(el.dataset.v || 0);
     el.dataset.v = v;
@@ -326,7 +333,7 @@ async function homePage() {
       h('div', h('b', g.winner), ' a gagné une partie de ', h('b', KIND[g.kind][1]), h('small', `${g.players} joueurs · ${timeAgo(g.at)}`))
     )));
     champs.innerHTML = '';
-    for (const k of ['poly', 'cartes', 'chevaux']) {
+    for (const k of ['poly', 'cartes', 'chevaux', 'mois']) {
       const list = st.top[k] || [];
       champs.append(h('div.hp-champ',
         h('div.hp-champ-head', h('span', KIND[k][0]), h('b', KIND[k][1])),
@@ -352,7 +359,7 @@ async function homePage() {
         h('div.hp-hero-text',
           h('span.hp-live', h('i.live-dot'), kpis.online, ' joueurs en ligne'),
           h('h1.hp-title', 'Le salon de jeux', h('br'), h('span', 'entre amis.')),
-          h('p.hp-sub', 'MyPoly, Carton ! et Petits chevaux : trois jeux multijoueurs gratuits, en 3D, sans téléchargement. Crée une salle, envoie le code à tes potes… et que le meilleur gagne.'),
+          h('p.hp-sub', 'MyPoly, Carton !, Petits chevaux et Fin de mois : quatre jeux multijoueurs gratuits, en 3D, sans téléchargement. Crée une salle, envoie le code à tes potes… et que le meilleur gagne.'),
           h('div.hp-cta',
             h('button.btn.primary.xl', { onclick: scrollPlay }, '▶ Jouer maintenant'),
             !u ? h('a.btn.ghost.xl', { href: '/register', 'data-link': true }, 'Créer un compte') : h('a.btn.ghost.xl', { href: '/leaderboard', 'data-link': true }, '🏆 Classement')
@@ -370,7 +377,7 @@ async function homePage() {
       ),
       // ----------------------------------------------------------- jouer
       h('section.hp-play#jouer',
-        h('div.hp-section-head', h('span.hp-kicker', 'Choisis ton jeu'), h('h2', 'Trois jeux, une seule salle d\'amis')),
+        h('div.hp-section-head', h('span.hp-kicker', 'Choisis ton jeu'), h('h2', 'Quatre jeux, une seule salle d\'amis')),
         h('div.hp-bar', who, joinBox),
         h('div.hp-posters', GAMES_INFO.map(poster))
       ),
@@ -412,7 +419,7 @@ async function homePage() {
         h('div.hp-faq-list',
           faq('C\'est vraiment gratuit ?', 'Oui, entièrement. Pas de pub intrusive, pas d\'achat obligatoire : tu crées une salle et tu joues.'),
           faq('Faut-il un compte ?', store.site && store.site.guestsAllowed === false ? 'Oui, un compte gratuit est nécessaire. Il enregistre tes victoires, ton XP et tes badges.' : 'Non, tu peux jouer en invité avec un simple pseudo. Un compte gratuit enregistre tes victoires, ton XP et tes badges.'),
-          faq('Combien de joueurs ?', 'De 2 à 4 joueurs pour MyPoly et les Petits chevaux, jusqu\'à 6 pour Carton !. Des bots complètent la table si besoin.'),
+          faq('Combien de joueurs ?', 'De 2 à 4 joueurs pour MyPoly et les Petits chevaux, jusqu\'à 6 pour Carton ! et Fin de mois. Des bots complètent la table si besoin.'),
           faq('Ça marche sur mobile ?', 'Oui, tout fonctionne dans le navigateur du téléphone, de la tablette ou de l\'ordinateur. Rien à installer.'),
           faq('Et si quelqu\'un se déconnecte ?', 'La partie continue : il est joué automatiquement jusqu\'à son retour, et il retrouve sa place en rechargeant la page.')
         )
@@ -455,6 +462,14 @@ const ART = {
     <rect x="-12" y="-60" width="24" height="120" fill="#f3ead5"/><rect x="-60" y="-12" width="120" height="24" fill="#f3ead5"/>
     <polygon points="-12,-12 12,-12 12,12 -12,12" fill="#ffd166"/></g>
     ${[['#ff5a5f', 70, 92], ['#2ecc71', 128, 58], ['#3fa7ff', 104, 108]].map(([c, x, y], i) => `<g class="${i ? 'a-float2' : 'a-float'}" transform="translate(${x} ${y})"><ellipse cx="0" cy="12" rx="11" ry="4" fill="rgba(0,0,0,.3)"/><path d="M-8 10 h16 l-2 -6 c4 -3 5 -9 0 -14 c-3 -3 -9 -2 -11 1 l-4 4 l3 2 l-1 6 z" fill="${c}" stroke="#fff" stroke-width="2"/></g>`).join('')}</svg>`,
+  mois: `<svg viewBox="0 0 200 150" aria-hidden="true"><defs><linearGradient id="amh" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff8a3d"/><stop offset="1" stop-color="#ff4f79"/></linearGradient></defs>
+    <g transform="translate(98 80) rotate(-6)"><rect x="-58" y="-50" width="116" height="102" rx="10" fill="#c9b994"/><rect x="-60" y="-54" width="116" height="102" rx="10" fill="#fffaf0"/>
+    <rect x="-56" y="-50" width="108" height="24" rx="7" fill="url(#amh)"/><text x="-2" y="-34" text-anchor="middle" font-size="11" font-weight="900" fill="#fff">FIN DE MOIS</text>
+    ${Array.from({ length: 9 }, (_, i) => `<rect x="${-50 + i * 12}" y="-60" width="4" height="12" rx="2" fill="#aeb4c2"/>`).join('')}
+    ${Array.from({ length: 21 }, (_, i) => { const c = i % 7, r = Math.floor(i / 7); const pay = i === 20; return `<rect x="${-55 + c * 15.4}" y="${-21 + r * 22}" width="13.5" height="19" rx="3" fill="${pay ? '#16a34a' : ['#dbeeff', '#ffe9c2', '#d9f7e5', '#ffd9de'][(i * 3) % 4]}"/>${pay ? '<text x="40" y="31" text-anchor="middle" font-size="11" font-weight="900" fill="#fff">€</text>' : `<text x="${-52 + c * 15.4}" y="${-12 + r * 22}" font-size="6" font-weight="900" fill="${c === 6 ? '#e23b4b' : '#2b2b3a'}">${i + 10}</text>`}`; }).join('')}</g>
+    <g class="a-float"><rect x="18" y="22" width="44" height="30" rx="4" fill="#fbf3e1" stroke="#c8b48a" stroke-width="1.5" transform="rotate(-12 40 37)"/><path d="M20 26 l22 14 l20 -18" fill="none" stroke="#c8b48a" stroke-width="1.5" transform="rotate(-12 40 37)"/><circle cx="40" cy="38" r="4" fill="#e23b4b"/></g>
+    <g class="a-float2"><circle cx="168" cy="108" r="15" fill="#ffd166" stroke="#d19a1a" stroke-width="3"/><text x="168" y="113" text-anchor="middle" font-size="14" font-weight="900" fill="#7a5200">€</text></g>
+    <g class="a-float"><rect x="150" y="20" width="42" height="22" rx="4" fill="#5fd38d" stroke="#1e8f4e" stroke-width="2" transform="rotate(10 171 31)"/><circle cx="171" cy="31" r="6" fill="#1e8f4e" transform="rotate(10 171 31)"/></g></svg>`,
 };
 function step(n, icon, title, text) {
   return h('div.step', h('div.step-num', n), h('div.step-icon', icon), h('h3', title), h('p', text));
@@ -526,6 +541,7 @@ async function leaderboardPage() {
     poly: [['rating', 'Classement'], ['wins', 'Victoires'], ['winrate', '% victoires'], ['games', 'Parties'], ['best', 'Record fortune'], ['xp', 'Expérience']],
     cartes: [['c_wins', 'Victoires'], ['c_winrate', '% victoires'], ['c_games', 'Parties'], ['c_streak', 'Meilleure série'], ['c_cards', 'Cartes posées']],
     chevaux: [['h_wins', 'Victoires'], ['h_winrate', '% victoires'], ['h_games', 'Courses'], ['h_captures', 'Chevaux renvoyés'], ['h_home', 'Chevaux arrivés']],
+    mois: [['m_wins', 'Victoires'], ['m_winrate', '% victoires'], ['m_games', 'Parties'], ['m_best', 'Record de fortune'], ['m_sold', 'Affaires revendues']],
   };
   let game = TABS[storage('game')] ? storage('game') : 'poly';
   let sort = TABS[game][0][0];
@@ -534,12 +550,12 @@ async function leaderboardPage() {
   const gameTabs = h('div.game-switch');
   async function load() {
     gameTabs.innerHTML = '';
-    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux']]) {
+    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois']]) {
       gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => {
         game = k;
         sort = TABS[k][0][0];
         load();
-      } }, h('span.gs-icon', icon), h('b', label), h('small', { poly: 'Jeu de plateau', cartes: 'Jeu de cartes', chevaux: 'Jeu de course' }[k])));
+      } }, h('span.gs-icon', icon), h('b', label), h('small', { poly: 'Jeu de plateau', cartes: 'Jeu de cartes', chevaux: 'Jeu de course', mois: 'Jeu de gestion' }[k])));
     }
     tabBox.innerHTML = '';
     for (const [k, l] of TABS[game]) tabBox.append(h('button.tab' + (k === sort ? '.active' : ''), { onclick: () => ((sort = k), load()) }, l));
@@ -552,7 +568,8 @@ async function leaderboardPage() {
     }
     const valOf = (p) => ({ rating: p.rating + ' pts', wins: p.wins + ' victoires', winrate: p.winrate + ' %', games: p.games + ' parties', best: fmt(p.best_networth), xp: p.xp + ' XP',
         c_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), c_winrate: p.winrate + ' %', c_games: p.games + ' parties', c_streak: p.best_streak + ' d\'affilée', c_cards: p.cards_played + ' cartes',
-        h_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), h_winrate: p.winrate + ' %', h_games: p.games + ' courses', h_captures: p.captures + ' renvois', h_home: p.horses_home + ' chevaux' }[sort]);
+        h_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), h_winrate: p.winrate + ' %', h_games: p.games + ' courses', h_captures: p.captures + ' renvois', h_home: p.horses_home + ' chevaux',
+        m_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), m_winrate: p.winrate + ' %', m_games: p.games + ' parties', m_best: (p.best_worth || 0).toLocaleString('fr-FR') + ' €', m_sold: p.deals_sold + ' ventes' }[sort]);
     // Podium des trois premiers
     const top = players.slice(0, 3);
     table.append(h('div.lb-podium', [top[1], top[0], top[2]].map((p, k) => {
@@ -599,21 +616,21 @@ async function profilePage(key) {
     box.append(h('div.empty', '😕 ' + e.message));
     return;
   }
-  const { user: u, stats: s, cards: cs, horses: hs, badges, history } = data;
+  const { user: u, stats: s, cards: cs, horses: hs, months: ms, badges, history } = data;
   const mine = store.user && store.user.id === u.id;
   const owned = new Map(badges.map((b) => [b.badge, b.earned_at]));
   const xpCur = (u.level - 1) ** 2 * 100;
   const xpNext = u.level ** 2 * 100;
   const pct = Math.min(100, ((u.xp - xpCur) / (xpNext - xpCur)) * 100);
   // Un onglet par jeu : statistiques, badges et historique bien séparés
-  const counts = { poly: s.games || 0, cartes: (cs && cs.games) || 0, chevaux: (hs && hs.games) || 0 };
+  const counts = { poly: s.games || 0, cartes: (cs && cs.games) || 0, chevaux: (hs && hs.games) || 0, mois: (ms && ms.games) || 0 };
   let game = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
   const gameTabs = h('div.game-switch');
   const gameBox = h('div.profile-game');
-  const ctx = { s, cs, hs, owned, history, historyCards: data.historyCards || [], historyHorses: data.historyHorses || [] };
+  const ctx = { s, cs, hs, ms, owned, history, historyCards: data.historyCards || [], historyHorses: data.historyHorses || [], historyMonths: data.historyMonths || [] };
   const render = () => {
     gameTabs.innerHTML = '';
-    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux']]) {
+    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois']]) {
       const n = counts[k];
       gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => ((game = k), render()) }, h('span.gs-icon', icon), h('b', label), h('small', `${n} partie${n > 1 ? 's' : ''}`)));
     }
@@ -641,6 +658,7 @@ async function profilePage(key) {
 /** Contenu du profil propre à un jeu : statistiques, badges et dernières parties. */
 function profileGame(game, ctx) {
   if (game === 'chevaux') return profileHorses(ctx);
+  if (game === 'mois') return profileMonths(ctx);
   const { s, cs, owned, history, historyCards } = ctx;
   const cards = game === 'cartes';
   const c = cs || {};
@@ -741,8 +759,47 @@ function profileHorses({ hs, owned, historyHorses }) {
   ];
 }
 
+/** Profil : section Fin de mois. */
+function profileMonths({ ms, owned, historyMonths }) {
+  const c = ms || {};
+  const pct = (w, g) => (g ? Math.round((100 * w) / g) : 0) + ' %';
+  const eur = (n) => (n || 0).toLocaleString('fr-FR') + ' €';
+  const list = store.meta.badges.filter((b) => b.game === 'mois');
+  const got = list.filter((b) => owned.has(b.id)).length;
+  return [
+    h('div.stat-grid',
+      stat('📅', c.games || 0, 'Parties jouées'),
+      stat('🏆', c.wins || 0, 'Victoires'),
+      stat('📈', pct(c.wins, c.games), 'Taux de victoire'),
+      stat('🔥', c.best_streak || 0, 'Meilleure série'),
+      stat('💎', eur(c.best_worth), 'Record de fortune'),
+      stat('🤑', c.deals_sold || 0, 'Affaires revendues'),
+      stat('📈', eur(c.profit), 'Bénéfices sur les ventes'),
+      stat('💰', c.jackpots || 0, 'Cagnottes raflées'),
+      stat('🏦', eur(c.borrowed), 'Total emprunté'),
+      stat('⏱️', duration(c.play_seconds || 0), 'Temps de jeu')
+    ),
+    h('div.card', h('h2', `🎖️ Badges Fin de mois (${got}/${list.length})`),
+      h('div.badge-grid', list.map((b) => {
+        const at = owned.get(b.id);
+        return h('div.badge.tier-' + b.tier + (at ? '' : '.locked'), { title: b.desc + (at ? ` — obtenu ${timeAgo(at)}` : '') }, h('div.badge-icon', b.icon), h('div.badge-name', b.name), h('div.badge-desc', b.desc));
+      }))
+    ),
+    h('div.card', h('h2', '📜 Dernières parties de Fin de mois'),
+      historyMonths.length
+        ? h('div.history', historyMonths.map((g) =>
+            h('div.history-row.' + (g.rank === 1 ? 'won' : 'lost'),
+              h('div.history-rank', g.rank === 1 ? '🏆' : '#' + g.rank),
+              h('div.history-main', h('div', g.players.map((p) => p.name).join(' · ')), h('small.muted', `${timeAgo(g.ended_at)} · ${duration(g.duration)} · patrimoine ${eur(g.networth)}`)),
+              h('div.history-delta', g.rank === 1 ? '💶' : '')
+            )))
+        : h('div.empty', 'Aucune partie de Fin de mois pour l\'instant.')
+    ),
+  ];
+}
+
 export function winLabel(t) {
-  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', forfeit: 'Abandon des adversaires' }[t] || t || '—';
+  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', forfeit: 'Abandon des adversaires' }[t] || t || '—';
 }
 
 // --------------------------------------------------------------- paramètres
@@ -844,8 +901,8 @@ function rulesPage() {
       h('header.rl-hero',
         h('span.hp-kicker', '📖 Règles'),
         h('h1', 'Apprends à jouer en 2 minutes'),
-        h('p', 'Trois jeux, des règles simples. Tout ce qui est marqué « réglable » se change dans le salon de la partie.'),
-        h('div.rl-games', [['tour', 'poly', 'MyPoly', 'Le jeu de plateau', '#ff8a3d'], ['carton', 'cartes', 'Carton !', 'Le jeu de cartes', '#ff5a5f'], ['chevaux', 'chevaux', 'Petits chevaux', 'Le jeu de course', '#2ecc71']].map(([id, k, name, sub, c]) =>
+        h('p', 'Quatre jeux, des règles simples. Tout ce qui est marqué « réglable » se change dans le salon de la partie.'),
+        h('div.rl-games', [['tour', 'poly', 'MyPoly', 'Le jeu de plateau', '#ff8a3d'], ['carton', 'cartes', 'Carton !', 'Le jeu de cartes', '#ff5a5f'], ['chevaux', 'chevaux', 'Petits chevaux', 'Le jeu de course', '#2ecc71'], ['mois', 'mois', 'Fin de mois', 'Le jeu de gestion', '#3fa7ff']].map(([id, k, name, sub, c]) =>
           h('a.rl-game', { href: '#' + id, style: { '--c': c }, onclick: (e) => { e.preventDefault(); document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
             h('span.rl-game-art', { html: ART[k] }), h('b', name), h('small', sub), h('span.rl-go', 'Lire les règles ↓'))))
       ),
@@ -890,6 +947,23 @@ function rulesPage() {
         ),
         h('div.rule-tip', '💡 Ne laisse pas un cheval seul juste devant un adversaire : il risque de se faire renvoyer à l\'écurie.')
       ),
+      h('h2.rl-part', h('span', '📅'), 'Fin de mois — le jeu de gestion'),
+      h('section.rule-card#mois', { style: { '--rc': '#3fa7ff' } },
+        h('div.rule-head', h('span.rule-icon', '📅'), h('h2', 'Fin de mois — tiendras-tu jusqu\'à la paye ?')),
+        h('div.rule-body',
+          h('p', 'De 2 à 6 joueurs. Chacun traverse un mois calendrier, du 1er au 31, en lançant le dé. La partie dure 3 mois (réglable de 1 à 12) : ', h('b', 'le plus riche à la fin (argent − emprunts) gagne.')),
+          h('ul',
+            h('li', '✉️ ', h('b', 'Courrier'), ' : factures à régler le jour de paye, amendes (pour la cagnotte), chèques, publicités…'),
+            h('li', '🏷️ ', h('b', 'Affaire'), ' : achète un objet (vélo vintage, food truck…), puis revends-le plus cher sur une case 🛍️ ', h('b', 'Acheteur'), '.'),
+            h('li', '💶 ', h('b', 'Le 31, c\'est la paye'), ' : tu touches ton salaire, puis tu règles tes factures et les intérêts de tes emprunts.'),
+            h('li', '🏦 Plus d\'argent ? La banque te prête automatiquement par tranches de 1 000 €, à rembourser le jour de paye.'),
+            h('li', '💰 Fais un ', h('b', '6'), ' au dé pour rafler la cagnotte, alimentée par les amendes, coups durs et paris perdus.'),
+            h('li', '⚽ Match du dimanche, 🎟️ tombola, 🎂 anniversaire, 🍻 tournée générale, 📦 vide-grenier, 📻 jeu radio : chaque jour réserve sa surprise.')
+          ),
+          h('p.muted', 'Réglables : durée en mois, argent de départ, salaire, taux d\'intérêt, cagnotte sur un 6, match du dimanche, tombola, valeur des affaires invendues.')
+        ),
+        h('div.rule-tip', '💡 Une affaire non revendue ne vaut rien à la fin : pense à garder un acheteur sous le coude pour ton dernier mois.')
+      ),
       h('section.cta-band',
         h('div', h('h2', 'C\'est parti ?'), h('p', 'Crée une salle et invite tes amis en un clic.')),
         h('a.btn.primary.xl', { href: '/', 'data-link': true }, '🎲 Jouer maintenant')
@@ -932,7 +1006,7 @@ async function adminPage() {
       const o = await api('/admin/overview');
       const site = await api('/admin/site');
       const st = await api('/stats').catch(() => null);
-      const KIND = { poly: ['🎲', 'MyPoly', '#ff8a3d'], cartes: ['🃏', 'Carton !', '#ff5a5f'], chevaux: ['🐴', 'Petits chevaux', '#2ecc71'] };
+      const KIND = { poly: ['🎲', 'MyPoly', '#ff8a3d'], cartes: ['🃏', 'Carton !', '#ff5a5f'], chevaux: ['🐴', 'Petits chevaux', '#2ecc71'], mois: ['📅', 'Fin de mois', '#3fa7ff'] };
       const total = st ? Math.max(1, st.games) : 1;
       return panel('📊 Vue d\'ensemble', 'L\'activité de MyPoly en un coup d\'œil.',
         h('div.kpi-grid',
