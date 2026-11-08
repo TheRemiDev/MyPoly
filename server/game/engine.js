@@ -444,6 +444,43 @@ class Game {
     if (alive.length <= 1) this.finish(alive[0], 'last');
   }
 
+  // ------------------------------------------------------- actions admin
+  /** Un administrateur fait renaître un joueur en faillite avec la somme choisie. */
+  adminRevive(pid, amount, by) {
+    const p = this.player(pid);
+    if (this.over) return { error: 'La partie est terminée.' };
+    if (!p) return { error: 'Joueur introuvable.' };
+    if (!p.bankrupt) return { error: `${p.name} n'est pas en faillite.` };
+    p.bankrupt = false;
+    p.jailed = false;
+    p.jailTurns = 0;
+    p.travel = false;
+    p.afk = false;
+    p.timeouts = 0;
+    p.rank = 0;
+    p.cash = 0;
+    const from = p.pos;
+    p.pos = CORNERS.start;
+    this.emit({ t: 'admin', kind: 'revive', pid: p.id, by, amount }, 2600);
+    this.emit({ t: 'move', pid: p.id, from, to: p.pos, teleport: true }, ANIM.teleport);
+    this.money(p, amount, 'admin');
+    this.say(`✨ ${by} fait renaître ${p.name} avec ${fmt(amount)} !`, p.id);
+    this.flush();
+    return { ok: true };
+  }
+  /** Un administrateur offre de l'argent à un joueur. */
+  adminGive(pid, amount, by) {
+    const p = this.player(pid);
+    if (this.over) return { error: 'La partie est terminée.' };
+    if (!p) return { error: 'Joueur introuvable.' };
+    if (p.bankrupt) return { error: `${p.name} est en faillite : faites-le plutôt renaître.` };
+    this.emit({ t: 'admin', kind: 'give', pid: p.id, by, amount }, 2200);
+    this.money(p, amount, 'admin');
+    this.say(`🎁 ${by} offre ${fmt(amount)} à ${p.name} !`, p.id);
+    this.flush();
+    return { ok: true };
+  }
+
   // --------------------------------------------------------------- landing
   land(p) {
     if (this.over || p.bankrupt) return;

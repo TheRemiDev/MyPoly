@@ -202,21 +202,12 @@ export class CardTable {
     if (!v.toolbar) return;
     const st = this.state;
     const me = this.player(this.me);
-    v.toolbar.innerHTML = '';
-    v.toolbar.append(
-      h('div.tb-code', { title: 'Copier le lien d\'invitation', onclick: () => copy(location.origin + '/r/' + v.code, 'Lien copié !') }, '🔗 ', v.code),
-      h('div.tb-info', st ? (st.settings.targetScore ? `Manche ${st.round} · ${st.settings.targetScore} pts` : '🃏 Carton !') : ''),
-      h('button.icon-btn' + (v.pop === 'chat' ? '.on' : ''), { title: 'Discussion', onclick: () => v.togglePop('chat') }, '💬', v.unread ? h('span.tb-badge', String(v.unread)) : null),
-      h('button.icon-btn' + (v.pop === 'log' ? '.on' : ''), { title: 'Journal de la partie', onclick: () => v.togglePop('log') }, '📜'),
-      h('button.icon-btn' + (v.pop === 'emote' ? '.on' : ''), { title: 'Réagir', onclick: () => v.togglePop('emote') }, '😀'),
-      h('button.icon-btn.music-btn' + (v.pop === 'music' ? '.on' : '') + (v.music && v.music.track ? '.playing' : '') + (v.music && v.music.blocked ? '.blocked' : ''), { title: 'Musique', onclick: () => v.togglePop('music') }, v.music && v.music.track && (v.music.muted || v.music.volume === 0) ? '🔇' : '🎵'),
-      h('button.icon-btn', { title: 'Règles', onclick: () => this.showRules() }, '📖'),
-      h('button.icon-btn', { title: 'Son', onclick: (e) => (e.target.textContent = Sound.toggle() ? '🔊' : '🔇') }, Sound.isEnabled() ? '🔊' : '🔇'),
-      h('button.icon-btn', { title: 'Plein écran (F)', onclick: toggleFullscreen }, '⛶'),
-      me && !me.out && this.room.state === 'playing'
-        ? h('button.icon-btn.danger', { title: 'Abandonner', onclick: () => this.forfeit() }, '🏳️')
-        : h('button.icon-btn', { title: 'Quitter', onclick: () => navigate('/') }, '🚪')
-    );
+    v.buildToolbar({
+      info: st ? (st.settings.targetScore ? `Manche ${st.round} · ${st.settings.targetScore} pts` : 'Carton !') : '',
+      camera: this.b3 ? () => this.b3.resetView() : null,
+      rules: () => this.showRules(),
+      forfeit: me && !me.out && this.room.state === 'playing' ? () => this.forfeit() : null,
+    });
   }
 
   showRules() {
