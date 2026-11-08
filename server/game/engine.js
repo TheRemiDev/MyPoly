@@ -120,6 +120,12 @@ class Game {
     p.cash += delta;
     // peer : l'autre joueur d'un paiement entre joueurs (pour animer l'argent de l'un vers l'autre)
     this.emit({ t: 'money', pid: p.id, delta, reason, peer: peer ? peer.id : null });
+    // Trophée « Zéro Absolu » : le compte tombe pile à 0K après une dépense (sans faillite)
+    if (delta < 0 && p.cash === 0 && !p.bankrupt && !p.stats.zeroAbsolute) {
+      p.stats.zeroAbsolute = true;
+      this.emit({ t: 'zero', pid: p.id }, 1400);
+      this.say(`🥶 ZÉRO ABSOLU ! ${p.name} tombe pile à 0K !`, p.id);
+    }
     const nw = this.netWorth(p);
     if (nw > p.stats.maxNetWorth) p.stats.maxNetWorth = nw;
   }

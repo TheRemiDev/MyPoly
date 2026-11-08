@@ -2597,3 +2597,21 @@ body:not(.in-game) {
 .adm-recent { display: flex; flex-direction: column; gap: 6px; font-size: .88rem; }
 .adm-recent > div { display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, .04); }
 @media (max-width: 800px) { .adm-split { grid-template-columns: 1fr; } }
+
+/* Trophée « Zéro Absolu » */
+.zero-pop { position: absolute; left: 50%; top: 42%; translate: -50% -50%; z-index: 87; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 46px 22px; border-radius: 28px;
+  background: radial-gradient(circle at 50% 0%, rgba(127, 220, 255, .35), rgba(12, 20, 46, .96) 70%); border: 2px solid #bff0ff;
+  box-shadow: 0 0 0 6px rgba(127, 220, 255, .15), 0 0 70px rgba(127, 220, 255, .55), 0 24px 60px rgba(0, 0, 0, .6); overflow: hidden; animation: zeroIn .5s cubic-bezier(.34, 1.56, .64, 1) both; }
+.zero-pop.out { opacity: 0; transform: scale(.95); filter: blur(3px); transition: opacity 260ms ease-out, transform 260ms ease-out, filter 260ms ease-out; }
+@keyframes zeroIn { from { opacity: 0; transform: scale(.6); filter: blur(8px) brightness(2); } }
+.zero-badge { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; font-size: 40px; background: radial-gradient(circle at 35% 30%, #ffffff, #bff0ff 55%, #3fa7ff); box-shadow: 0 0 0 4px #fff, 0 0 30px #7fdcff; animation: zeroShake .6s ease-in-out .3s 2; }
+@keyframes zeroShake { 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+.zero-title { font-size: 76px; font-weight: 900; line-height: .95; letter-spacing: -.03em; color: transparent; background: linear-gradient(180deg, #ffffff, #bff0ff 50%, #3fa7ff); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-stroke: 2px #0b2b4a; filter: drop-shadow(0 4px 0 #0b2b4a) drop-shadow(0 0 20px rgba(127, 220, 255, .8)); }
+.zero-sub { color: #dff6ff; font-weight: 700; }
+.zero-sub b { letter-spacing: .14em; color: #fff; }
+.zero-trophy { margin-top: 6px; padding: 4px 14px; border-radius: 99px; background: linear-gradient(135deg, #ffe08a, #f0a522); color: #3b2a00; font-weight: 900; font-size: .8rem; }
+.zero-snow { position: absolute; inset: 0; pointer-events: none; }
+.zero-snow i { position: absolute; top: -12px; font-style: normal; color: #e6f8ff; font-size: 14px; opacity: .85; animation: zeroFall 2.2s linear var(--d) infinite; }
+@keyframes zeroFall { to { transform: translate(var(--x), 260px) rotate(180deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .zero-pop, .zero-badge, .zero-snow i { animation: none; } }

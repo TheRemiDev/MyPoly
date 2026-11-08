@@ -22,6 +22,7 @@ const BADGES = [
   { id: 'speed', icon: '⚡', name: 'Éclair', desc: 'Gagner une partie en moins de 10 minutes', tier: 'gold' },
   { id: 'full_table', icon: '👥', name: 'Table pleine', desc: 'Gagner une partie à 6 joueurs', tier: 'gold' },
   { id: 'comeback', icon: '🧗', name: 'Remontada', desc: 'Gagner après avoir été en dette', tier: 'silver' },
+  { id: 'zero_absolute', icon: '🥶', name: 'Zéro Absolu', desc: 'Tomber pile à 0K après un achat ou un paiement (MyPoly)', tier: 'legend' },
   { id: 'melenchon', icon: '🧓', name: 'Partie avec Mélenchon !', desc: 'Disputer une partie en mode Mélenchon', tier: 'gold' },
   // « Carton ! » (jeu de cartes)
   { id: 'c_first_win', icon: '🃏', name: 'Premier Carton', desc: 'Remporter une partie de Carton !', tier: 'bronze', game: 'cartes' },
@@ -73,6 +74,7 @@ function evaluate(s, me, game, owned) {
     full_table: won && game.players.length >= 6,
     comeback: won && !!me.stats.wasInDebt,
     melenchon: !!game.melenchon,
+    zero_absolute: !!(me.stats && me.stats.zeroAbsolute),
   };
   return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
 }

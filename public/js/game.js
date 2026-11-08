@@ -945,6 +945,24 @@ class RoomView {
     await sleep(200);
   }
 
+  /** Trophée « Zéro Absolu » : le compte du joueur tombe pile à 0K. */
+  async zeroShow(p) {
+    Sound.play('festival');
+    this.announce({ icon: '🥶', title: `ZÉRO ABSOLU pour ${p.name} !`, text: 'Pile 0K sur le compte : trophée légendaire', color: '#7fdcff', kind: 'gold', ms: 4000, pid: p.id });
+    if (document.hidden) return;
+    const pop = h('div.zero-pop', { style: { '--c': p.color } },
+      h('div.zero-snow', Array.from({ length: 18 }, (_, k) => h('i', { style: { left: (k * 37) % 100 + '%', '--d': (k % 6) * 0.12 + 's', '--x': ((k * 13) % 40) - 20 + 'px' } }, '❄'))),
+      h('div.zero-badge', h('span', '🥶')),
+      h('div.zero-title', '0K'),
+      h('div.zero-sub', h('b', 'ZÉRO ABSOLU'), ` · ${p.name}`),
+      h('div.zero-trophy', '🏆 Trophée débloqué')
+    );
+    this.gameEl.append(pop);
+    await sleep(2300);
+    pop.classList.add('out');
+    setTimeout(() => pop.remove(), 300);
+  }
+
   /** Recadre brièvement la caméra 3D sur une case. */
   focusCell(i) {
     if (this.b3 && !document.hidden) this.b3.focus(i);
@@ -1550,6 +1568,9 @@ class RoomView {
       }
       case 'admin':
         if (p) await this.adminShow(ev, p);
+        return;
+      case 'zero':
+        if (p) await this.zeroShow(p);
         return;
       case 'win':
         Sound.play('win');
