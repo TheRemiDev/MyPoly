@@ -2206,3 +2206,20 @@ body:not(.in-game) {
 .game.debt-mode { --safe-y: 236px; }
 @media (max-aspect-ratio: 5/4) { .game.debt-mode { --safe-y: 230px; } }
 .cell.selectable.picked, .cell.picked { outline: 3px solid #2ecc71 !important; box-shadow: 0 0 0 3px rgba(46, 204, 113, .35), 0 0 22px rgba(46, 204, 113, .7) !important; }
+
+/* ---------------------------------------------------------------------
+   Performance : aucun flou d'arrière-plan au-dessus du plateau 3D.
+   Flouter une image WebGL qui change à chaque image coûte très cher
+   (chute du nombre d'images par seconde : avions et animations ralentis).
+   Fonds un peu plus opaques à la place, rendu visuellement équivalent.
+   --------------------------------------------------------------------- */
+.game .topbar .toolbar.tb2, .game .pcard.corner .pc-face, .game .debt-bar2, .game .notif, .game .popover,
+.game .waiting-turn, .game .ct-badge, .game .hz-dice-panel, .game .ct-banner, .game .ct-hint {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+.game .topbar .toolbar.tb2 { background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .02)), rgba(14, 16, 36, .92); }
+.game .debt-bar2 { background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .01)), rgba(14, 16, 38, .96); }
+/* Barre de temps de la vente : elle reste dans le cadre */
+.debt-bar2 .timer-bar { width: auto; }
+.db-progress span { padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db-actions .btn { white-space: nowrap; }

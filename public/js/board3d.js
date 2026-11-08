@@ -2312,7 +2312,10 @@ export class Board3D {
 
   loop(now) {
     this.raf = requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = this.clock.getDelta();
+    const dt = Math.min(0.05, rawDt);
+    // Décor (avions) : temps réel, même si le navigateur affiche peu d'images par seconde
+    const realDt = Math.min(0.5, rawDt);
     const time = this.clock.elapsedTime;
     // Reflet du logo : un passage toutes les 6 s
     if (this.logoShine) this.logoShine.offset.x = 0.65 - ((time % 6) / 1.6) * 1.3;
@@ -2402,7 +2405,7 @@ export class Board3D {
       c.position.x += c.userData.speed * dt;
       if (c.position.x > 6) c.position.x = -6;
     }
-    this.updatePlanes(dt, time);
+    this.updatePlanes(realDt, time);
     // Tremblement
     let shakeOff = null;
     if (this.shakeT > 0) {
