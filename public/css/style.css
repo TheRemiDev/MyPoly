@@ -2859,3 +2859,11 @@ body:not(.in-game) {
 .mo-tip-who { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .mo-tip-who span { padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 800; background: color-mix(in srgb, var(--c) 40%, transparent); }
 @media (pointer: coarse) { .mo-tip { display: none; } }
+/* Accueil à 4 affiches : les boutons s'empilent quand l'affiche est étroite */
+.hp-poster { container-type: inline-size; }
+.hp-poster-btns .btn { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 340px) {
+  .hp-poster-btns { grid-template-columns: 1fr; }
+  .hp-poster-body { padding: 16px 18px 20px; }
+  .hp-poster h3 { font-size: 1.5rem; }
+}
