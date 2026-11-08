@@ -696,6 +696,7 @@ class RoomView {
     const cardEl = pid && this.playersEl ? this.playersEl.querySelector(`[data-pid="${CSS.escape(pid)}"]`) : null;
     const corner = cardEl ? ['tl', 'tr', 'bl', 'br'].find((k) => cardEl.classList.contains('c-' + k)) : null;
     const slot = !narrow && corner ? corner : 'mid';
+    this.placeNotifStacks();
     const stack = this.notifStacks[slot];
     const n = h('div.notif.' + kind + (slot !== 'mid' && slot[1] === 'r' ? '.right' : ''),
       { style: { '--c': color, '--life': ms + 'ms' } },
@@ -709,6 +710,34 @@ class RoomView {
       n.classList.add('out');
       setTimeout(() => n.remove(), 420);
     }, ms);
+  }
+
+  /**
+   * Place les notifications juste au-dessus (coins du bas) ou en dessous (coins du haut)
+   * de la fiche du joueur, d'après sa hauteur réelle : une fiche plus haute (ligne de
+   * puces en plus, badge de tour) ne se fait plus recouvrir.
+   */
+  placeNotifStacks() {
+    if (!this.notifStacks || !this.gameEl) return;
+    const host = this.gameEl.getBoundingClientRect();
+    for (const k of ['tl', 'tr', 'bl', 'br']) {
+      const stack = this.notifStacks[k];
+      const card = this.gameEl.querySelector('.pcard.corner.c-' + k);
+      if (!stack) continue;
+      if (!card) {
+        stack.style.top = stack.style.bottom = '';
+        continue;
+      }
+      const r = card.getBoundingClientRect();
+      if (k[0] === 't') {
+        stack.style.top = Math.round(r.bottom - host.top + 12) + 'px';
+        stack.style.bottom = 'auto';
+      } else {
+        // Marge pour le badge « À VOUS ! » et les banderoles qui dépassent en haut de la fiche
+        stack.style.bottom = Math.round(host.bottom - r.top + 18) + 'px';
+        stack.style.top = 'auto';
+      }
+    }
   }
 
   /** Pique humoristique du thème de plateau (plateau politique), ou null. */
@@ -1998,6 +2027,7 @@ class RoomView {
       this.playersEl.append(card);
       if (!p.bankrupt) this.animateCash(cashEl, p.id, cash);
     }
+    requestAnimationFrame(() => this.placeNotifStacks());
   }
 
   /** Part du temps de décision restant (0 à 1) pour le joueur actif. */
