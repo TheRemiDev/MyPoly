@@ -2343,7 +2343,7 @@ export class Board3D {
         m.emissive.copy(t.target);
         m.emissiveIntensity = 0.35 + (Math.sin(time * 7) + 1) * 0.18;
       } else if (t.picked) {
-        m.emissive.set(0xff4757);
+        m.emissive.set(0x2ecc71); // propriété sélectionnée pour la vente
         m.emissiveIntensity = 0.25 + (Math.sin(time * 6) + 1) * 0.1;
       } else if (t.selectable) {
         m.emissive.set(0x7fdcff);

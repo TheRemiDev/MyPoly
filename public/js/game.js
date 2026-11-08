@@ -1410,7 +1410,9 @@ class RoomView {
         this.announce({
           icon: '💥',
           title: `${p.name} fait faillite !`,
-          text: cells.length ? `${cells.length} propriété${cells.length > 1 ? 's' : ''} saisie${cells.length > 1 ? 's' : ''} et rendue${cells.length > 1 ? 's' : ''} à la banque` : 'Éliminé(e) de la partie',
+          text: ev.info
+            ? `Devait ${fmt(ev.info.owed)} · avait ${fmt(ev.info.cash)} + ${fmt(ev.info.liq)} de revente (biens revendus à moitié prix)`
+            : cells.length ? `${cells.length} propriété${cells.length > 1 ? 's' : ''} saisie${cells.length > 1 ? 's' : ''} et rendue${cells.length > 1 ? 's' : ''} à la banque` : 'Éliminé(e) de la partie',
           color: p.color,
           kind: 'danger',
           ms: 3800,
@@ -1499,7 +1501,7 @@ class RoomView {
       el.innerHTML = '';
       el.style.removeProperty('--owner');
       el.classList.toggle('owned', !!owner);
-      el.classList.toggle('dim', (!!this.highlightOwner && (!owner || owner.id !== this.highlightOwner)) || (myTurn && st.phase === 'travel' && i % 8 === 0));
+      el.classList.toggle('dim', (!!this.highlightOwner && (!owner || owner.id !== this.highlightOwner)) || (myTurn && st.phase === 'travel' && i % 8 === 0) || (myTurn && st.phase === 'debt' && (!owner || owner.id !== this.me)));
       if (owner) el.style.setProperty('--owner', owner.color);
       const fest = st.festival && st.festival.cell === i;
       el.classList.toggle('festival-on', fest);
@@ -1568,6 +1570,8 @@ class RoomView {
       if (this.highlightOwner && owner !== this.highlightOwner) dimmed.add(i);
       // Voyage en avion : les coins (non desservis) sont grisés
       if (myTurn && st.phase === 'travel' && i % 8 === 0) dimmed.add(i);
+      // Revente : seules mes propriétés restent allumées
+      if (myTurn && st.phase === 'debt' && owner !== this.me) dimmed.add(i);
     });
     this.b3.update({
       props: st.props,
@@ -1925,7 +1929,7 @@ class RoomView {
           h('div.pc-chips',
             p.bankrupt ? h('span.pc-chip.off', p.rank ? `Classement #${p.rank}` : 'Éliminé') : [
               h('span.pc-chip', { title: 'Propriétés' }, `🏠 ${props}`),
-              h('span.pc-chip', { title: 'Fortune totale' }, `💎 ${fmt(p.netWorth)}`),
+              h('span.pc-chip', { title: `Fortune (biens au prix d'achat) : ${fmt(p.netWorth)}\nPaiement maximal possible en vendant tout (biens revendus à moitié prix) : ${fmt(p.resale ?? p.netWorth)}` }, `💎 ${fmt(p.netWorth)}`),
             ],
             ...chips
           )
@@ -2032,7 +2036,15 @@ class RoomView {
     const panel = this.actionPanel;
     panel.innerHTML = '';
     panel.classList.remove('wide');
-    if (!st || st.phase !== 'debt' || st.current !== this.me) this.debt = null;
+    if (!st || st.phase !== 'debt' || st.current !== this.me) {
+      // Pendant une animation (st absent) on garde la sélection en cours
+      if (st) this.debt = null;
+      if (this.debtBar) {
+        this.debtBar.remove();
+        this.debtBar = null;
+        this.setDebtMode(false);
+      }
+    }
     this.timerBar = null;
     if (!st || st.over) return;
     const p = this.player(st.current);
@@ -2116,9 +2128,9 @@ class RoomView {
         panel.append(h('div.panel-title', '🎉 Organisez le Festival !'), h('div.hint', 'Cliquez sur une de vos propriétés pour multiplier son loyer.'), h('button.btn.skip', { onclick: act('skip') }, '✖ Passer'));
         break;
       case 'debt':
-        panel.classList.add('wide');
-        panel.append(this.debtPanel(st, pend, me));
-        break;
+        // Sélection directement sur le plateau : barre de vente en bas de l'écran
+        this.renderDebtBar(st, pend, me);
+        return;
     }
     panel.append(this.timerBar);
     panel.classList.remove('pop');
@@ -2181,11 +2193,102 @@ class RoomView {
   toggleDebtPick(i) {
     if (!this.debt) return;
     Sound.play('click');
-    if (this.debt.sel.has(i)) this.debt.sel.delete(i);
-    else this.debt.sel.add(i);
+    const pr = this.state.props[i];
+    if (this.debt.sel.has(i)) {
+      this.debt.sel.delete(i);
+      this.cellLabel(i, 'Retirée', '#5b6185');
+    } else {
+      this.debt.sel.add(i);
+      this.cellLabel(i, '+' + fmt((pr && pr.sell) || 0), '#2ecc71');
+    }
     this.debt.custom = true;
     this.renderActions(this.state);
     this.renderCells();
+  }
+
+  /**
+   * Revente : le joueur choisit directement ses propriétés sur le plateau (seules
+   * les siennes brillent). La barre en bas montre le total et permet de vendre
+   * ou de déclarer faillite.
+   */
+  renderDebtBar(st, pend, me) {
+    const cells = this.meta.cells;
+    const items = this.debtItems(st);
+    const missing = Math.max(0, pend.amount - me.cash);
+    const key = `${pend.amount}|${pend.reason}|${pend.to}`;
+    if (!this.debt || this.debt.key !== key) {
+      this.debt = { key, sel: new Set(), custom: false };
+      setTimeout(() => this.renderCells(), 0);
+    }
+    for (const i of [...this.debt.sel]) if (!items.some((it) => it.i === i)) this.debt.sel.delete(i);
+    const sel = this.debt.sel;
+    const picked = items.filter((it) => sel.has(it.i));
+    const gain = picked.reduce((s, it) => s + it.sell, 0);
+    const covered = me.cash + gain;
+    const enough = covered >= pend.amount;
+    const pct = Math.min(100, (covered / pend.amount) * 100);
+    const reason = { rent: `Loyer dû à ${pend.toName || '?'}`, tax: 'Impôts', card: 'Carte Chance', takeover: 'Rachat', jail: 'Amende' }[pend.reason] || 'Paiement';
+    const refresh = () => {
+      this.renderActions(this.state);
+      this.renderCells();
+    };
+    const confirm = async () => {
+      if (!enough || !picked.length) return;
+      if (picked.some((it) => it.mono)) {
+        const ok = await modal({ title: 'Casser un monopole ?', body: h('p', 'Votre sélection contient une ville d\'un pays complet : vous perdrez le loyer doublé de ce pays.'), buttons: [{ label: 'Modifier', value: false }, { label: 'Vendre quand même', value: true, class: 'primary' }] });
+        if (!ok) return;
+      }
+      this.action('sellMany', { cells: picked.map((it) => it.i) });
+    };
+    const bankrupt = async () => {
+      const ok = await modal({ title: 'Déclarer faillite ?', body: h('p', 'Vous serez éliminé(e) de la partie. Votre créancier récupère votre argent et la valeur de vos propriétés.'), buttons: [{ label: 'Annuler', value: false }, { label: 'Faillite', value: true, class: 'danger' }] });
+      if (ok) this.action('bankrupt');
+    };
+    if (!this.debtBar) {
+      this.debtBar = h('div.debt-bar2');
+      this.gameEl.append(this.debtBar);
+      this.setDebtMode(true);
+    }
+    const bar = this.debtBar;
+    bar.innerHTML = '';
+    this.timerBar = h('div.timer-bar', h('div'));
+    bar.append(
+      h('div.db-head',
+        h('span.db-icon', '💸'),
+        h('div.db-title', h('b', 'Fonds insuffisants'), h('span', `${reason} : ${fmt(pend.amount)} · il manque ${fmt(missing)}`)),
+        h('div.db-hint', picked.length ? `${picked.length} propriété${picked.length > 1 ? 's' : ''} sélectionnée${picked.length > 1 ? 's' : ''}` : '👆 Cliquez sur vos propriétés qui brillent')
+      ),
+      h('div.db-progress' + (enough ? '.ok' : ''),
+        h('i', { style: { width: pct + '%' } }),
+        h('span', enough ? `✔ Vente : +${fmt(gain)} · il vous restera ${fmt(covered - pend.amount)}` : `Vente : +${fmt(gain)} · encore ${fmt(pend.amount - covered)} à trouver`)
+      ),
+      picked.length ? h('div.db-chips', picked.map((it) => h('button.db-chip', { title: 'Retirer de la vente', onclick: () => this.toggleDebtPick(it.i) }, cells[it.i].name, h('b', '+' + fmt(it.sell)), h('span', '✕')))) : null,
+      h('div.db-actions',
+        h('button.btn.sm.ghost', { onclick: () => {
+          this.debt.sel = new Set(this.suggestSale(items, missing));
+          this.debt.custom = false;
+          refresh();
+        } }, '✨ Sélection conseillée'),
+        sel.size ? h('button.btn.sm.ghost', { onclick: () => {
+          this.debt.sel.clear();
+          refresh();
+        } }, '↺ Tout désélectionner') : null,
+        h('span.db-spacer'),
+        h('button.btn.sm.danger', { onclick: bankrupt }, '💀 Faillite'),
+        h('button.btn.primary.db-go', { disabled: !enough || !picked.length, onclick: confirm }, enough ? `Vendre et payer ${fmt(pend.amount)}` : 'Sélection insuffisante')
+      ),
+      this.timerBar
+    );
+  }
+
+  /** Pendant une revente, le plateau se réduit pour rester entièrement visible au-dessus de la barre. */
+  setDebtMode(on) {
+    if (!this.gameEl || this.gameEl.classList.contains('debt-mode') === on) return;
+    this.gameEl.classList.toggle('debt-mode', on);
+    requestAnimationFrame(() => {
+      if (this.b3) this.b3.resize();
+      this.placePawns(false);
+    });
   }
 
   /** Menu de dette : tout est calculé, la vente se fait en une seule action. */
