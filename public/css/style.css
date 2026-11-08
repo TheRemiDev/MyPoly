@@ -1989,3 +1989,12 @@ body:not(.in-game) {
   .cards-game.c3d .pcard.corner.me { display: none; }
   .cards-game.c3d .c3-catch { top: calc(100% + 4px); bottom: auto; }
 }
+
+/* Paiement entre joueurs : pièces qui volent de fiche en fiche */
+.pay-coin { position: absolute; left: -13px; top: -13px; width: 26px; height: 26px; z-index: 60; pointer-events: none; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 900; color: #7a5200;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #ffd166 45%, #d19a1a); box-shadow: 0 0 0 2px #b07d0a, 0 0 12px rgba(255, 209, 102, .7), 0 4px 8px rgba(0, 0, 0, .4); will-change: transform, opacity; }
+.pcard.corner.paying { animation: payOut .32s cubic-bezier(.23, 1, .32, 1); }
+.pcard.corner.paid { animation: payIn .45s cubic-bezier(.23, 1, .32, 1); }
+@keyframes payOut { 40% { transform: translateX(-4px) scale(.97); } 70% { transform: translateX(3px); } }
+@keyframes payIn { 35% { transform: scale(1.07); box-shadow: 0 0 0 3px #ffd166, 0 0 34px rgba(255, 209, 102, .85), 0 10px 30px rgba(0, 0, 0, .45); } }
+@media (prefers-reduced-motion: reduce) { .pay-coin { display: none; } .pcard.corner.paying, .pcard.corner.paid { animation: none; } }
