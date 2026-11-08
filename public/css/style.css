@@ -2615,3 +2615,26 @@ body:not(.in-game) {
 .zero-snow i { position: absolute; top: -12px; font-style: normal; color: #e6f8ff; font-size: 14px; opacity: .85; animation: zeroFall 2.2s linear var(--d) infinite; }
 @keyframes zeroFall { to { transform: translate(var(--x), 260px) rotate(180deg); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .zero-pop, .zero-badge, .zero-snow i { animation: none; } }
+
+/* ------------------------------------------------------------ musique ouverte à tous */
+.music-open { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .08); cursor: pointer; transition: background .2s, border-color .2s; }
+.music-open.on { background: rgba(46, 204, 113, .1); border-color: rgba(46, 204, 113, .35); }
+.music-open-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.music-open-txt b { font-size: .86rem; }
+.music-open-txt small { font-size: .74rem; }
+.music-badge { font-size: .8rem; font-weight: 700; padding: 7px 10px; border-radius: 10px; background: rgba(46, 204, 113, .12); color: #7ef0ac; border: 1px solid rgba(46, 204, 113, .3); }
+.music-q-head { display: flex; justify-content: space-between; align-items: center; }
+.music-q-head .link-btn { background: none; border: 0; color: #ff8a8e; font-size: .75rem; font-weight: 700; cursor: pointer; padding: 0; }
+.music-q-head .link-btn:hover { text-decoration: underline; }
+.music-list { display: flex; flex-direction: column; gap: 4px; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.music-q { justify-content: flex-start; }
+.music-q.mine { box-shadow: inset 3px 0 0 #7ef0ac; }
+.music-q-n { flex: none; width: 18px; text-align: center; opacity: .55; font-variant-numeric: tabular-nums; font-size: .74rem; }
+.music-q-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.music-q-txt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-q-txt small { font-size: .68rem; opacity: .55; }
+.music-q .icon-btn { flex: none; }
+.pop-body .music-panel { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pop-body .music-panel > * { flex: none; }
+.pop-body .music-list { max-height: 24dvh; }
+.popover:has(> .pop-body > .music-panel:not([hidden])) { max-height: min(78dvh, 640px); }

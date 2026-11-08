@@ -105,7 +105,7 @@ function roomPublic(room) {
     seats: room.seats.map((s) => seatPublic(s, room)),
     spectators: [...room.sockets.keys()].filter((k) => !room.seats.some((s) => s.key === k) && isConnected(room, k)).length,
     result: room.result || null,
-    music: room.music.current ? { ...room.music, serverNow: Date.now() } : { current: null, queue: room.music.queue, serverNow: Date.now() },
+    music: musicPublic(room.music),
     createdAt: room.createdAt,
   };
 }
@@ -145,6 +145,65 @@ async function youtubeTitle(id) {
     return null;
   }
 }
+/** Extrait l'identifiant d'une playlist YouTube (paramètre « list= »). */
+function playlistId(input) {
+  const m = String(input || '').match(/[?&]list=([A-Za-z0-9_-]{10,64})/);
+  return m ? m[1] : null;
+}
+const PLAYLIST_MAX = 50;
+/** Titres d'une playlist YouTube : page de la playlist, puis flux RSS (15 titres) en secours. */
+async function youtubePlaylist(list) {
+  const seen = new Set();
+  const out = [];
+  const push = (id, title) => {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id || '') || seen.has(id) || out.length >= PLAYLIST_MAX) return;
+    seen.add(id);
+    out.push({ id, title: cleanText(title, 120) || 'Vidéo YouTube' });
+  };
+  try {
+    const r = await fetch(`https://www.youtube.com/playlist?list=${list}&hl=fr`, {
+      headers: { 'Accept-Language': 'fr-FR,fr;q=0.9', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (r.ok) {
+      const html = await r.text();
+      const m = html.match(/var ytInitialData = (\{.*?\});<\/script>/s);
+      if (m) {
+        const walk = (o) => {
+          if (!o || typeof o !== 'object' || out.length >= PLAYLIST_MAX) return;
+          const v = o.playlistVideoRenderer;
+          if (v) push(v.videoId, (v.title && (v.title.simpleText || (v.title.runs || []).map((x) => x.text).join(''))) || '');
+          const l = o.lockupViewModel;
+          if (l && l.contentType === 'LOCKUP_CONTENT_TYPE_VIDEO') {
+            const t = l.metadata && l.metadata.lockupMetadataViewModel && l.metadata.lockupMetadataViewModel.title;
+            push(l.contentId, t && t.content);
+          }
+          for (const x of Object.values(o)) walk(x);
+        };
+        walk(JSON.parse(m[1]));
+      }
+    }
+  } catch {}
+  if (out.length) return out;
+  try {
+    const r = await fetch(`https://www.youtube.com/feeds/videos.xml?playlist_id=${list}`, { signal: AbortSignal.timeout(6000) });
+    if (r.ok) {
+      const xml = await r.text();
+      const dec = (t) => t.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      for (const e of xml.split('<entry>').slice(1)) {
+        const id = (e.match(/<yt:videoId>([^<]+)</) || [])[1];
+        const title = (e.match(/<title>([^<]*)</) || [])[1];
+        push(id, dec(title || ''));
+      }
+    }
+  } catch {}
+  return out;
+}
+/** Musique telle qu'envoyée aux clients. */
+function musicPublic(music) {
+  const strip = (t) => t && { id: t.id, title: t.title, by: t.by, byKey: t.byKey, startedAt: t.startedAt };
+  return { current: strip(music.current), queue: music.queue.map(strip), open: !!music.open, serverNow: Date.now() };
+}
 function musicNext(room) {
   const next = room.music.queue.shift();
   room.music.current = next ? { ...next, startedAt: Date.now() } : null;
@@ -174,7 +233,7 @@ function createRoom(ident, settings, kind = 'poly') {
     createdAt: Date.now(),
     lastActivity: Date.now(),
     leaveTimers: new Map(),
-    music: { current: null, queue: [] }, // musique YouTube diffusée par l'hôte
+    music: { current: null, queue: [], open: false }, // musique YouTube (l'hôte peut l'ouvrir à tous)
   };
   rooms.set(code, room);
   return room;
@@ -289,7 +348,7 @@ function restoreRooms() {
     if (rooms.has(data.code)) continue;
     const { gameData, ...fields } = data;
     const room = { ...fields, kind: fields.kind || 'poly', sockets: new Map(), leaveTimers: new Map(), game: null, lastActivity: Date.now() };
-    room.music = room.music || { current: null, queue: [] };
+    room.music = room.music || { current: null, queue: [], open: false };
     try {
       if (gameData && room.state === 'playing') {
         room.game = persist.restoreGame(room.kind, gameData, gameCallbacks(room));
@@ -605,21 +664,61 @@ function attach(server) {
       reply(cb, { ok: true });
     });
 
-    // Musique : l'hôte choisit, tout le monde entend (chacun gère son volume)
+    // Musique : l'hôte choisit, ou ouvre la file à tout le monde (chacun gère son volume)
+    const MUSIC_QUEUE_MAX = 150;
+    const inRoom = (room) => room && (room.seats.some((x) => x.key === ident.key) || room.sockets.has(ident.key));
+    const canAddMusic = (room) => isHost(room) || (room && room.music.open && inRoom(room));
+    socket.on('music:open', (data, cb) => {
+      const room = current();
+      if (!isHost(room)) return reply(cb, { error: 'Seul l\'hôte peut changer ce réglage.' });
+      const open = !!(data && data.open);
+      if (room.music.open === open) return reply(cb, { ok: true });
+      room.music.open = open;
+      broadcastRoom(room);
+      systemChat(room, open ? `🎵 ${ident.name} autorise tout le monde à ajouter de la musique.` : `🎵 ${ident.name} reprend la main sur la musique.`);
+      reply(cb, { ok: true });
+    });
     socket.on('music:add', async (data, cb) => {
       const room = current();
-      if (!isHost(room)) return reply(cb, { error: 'Seul l\'hôte peut choisir la musique.' });
-      const id = youtubeId(data && data.url);
-      if (!id) return reply(cb, { error: 'Lien YouTube invalide.' });
-      if (room.music.queue.length >= 30) return reply(cb, { error: 'La file d\'attente est pleine (30 titres).' });
-      const title = (await youtubeTitle(id)) || 'Vidéo YouTube';
-      const track = { id, title, by: ident.name };
-      const now = !room.music.current;
-      if (now) room.music.current = { ...track, startedAt: Date.now() };
-      else room.music.queue.push(track);
-      broadcastRoom(room);
-      systemChat(room, now ? `🎵 ${ident.name} lance « ${title} ».` : `🎵 ${ident.name} ajoute « ${title} » à la file.`);
-      reply(cb, { ok: true });
+      if (!room) return reply(cb, { error: 'Aucune salle.' });
+      if (!canAddMusic(room)) return reply(cb, { error: 'Seul l\'hôte peut choisir la musique.' });
+      const now0 = Date.now();
+      if (!isHost(room) && socket.data.lastMusic && now0 - socket.data.lastMusic < 3000) return reply(cb, { error: 'Doucement ! Attendez quelques secondes.' });
+      socket.data.lastMusic = now0;
+      const url = data && data.url;
+      const list = playlistId(url);
+      const id = youtubeId(url);
+      if (!id && !list) return reply(cb, { error: 'Lien YouTube invalide.' });
+      const room2 = room;
+      const free = () => MUSIC_QUEUE_MAX - room2.music.queue.length + (room2.music.current ? 0 : 1);
+      if (free() <= 0) return reply(cb, { error: `La file d'attente est pleine (${MUSIC_QUEUE_MAX} titres).` });
+      let tracks = [];
+      let fromList = false;
+      // Les « mix » automatiques (RD…) ne sont pas de vraies playlists : on garde la vidéo seule
+      if (list && !/^RD/.test(list)) {
+        const items = await youtubePlaylist(list);
+        if (items.length) {
+          fromList = true;
+          // Lien « watch?v=X&list=Y » : la playlist démarre à la vidéo choisie
+          const at = id ? items.findIndex((x) => x.id === id) : -1;
+          tracks = at > 0 ? items.slice(at).concat(items.slice(0, at)) : items;
+        }
+      }
+      if (!tracks.length) {
+        if (!id) return reply(cb, { error: 'Playlist introuvable ou privée.' });
+        tracks = [{ id, title: (await youtubeTitle(id)) || 'Vidéo YouTube' }];
+      }
+      if (rooms.get(room2.code) !== room2) return reply(cb, { error: 'Salle fermée.' });
+      tracks = tracks.slice(0, Math.max(0, free())).map((t) => ({ ...t, by: ident.name, byKey: ident.key }));
+      if (!tracks.length) return reply(cb, { error: 'La file d\'attente est pleine.' });
+      const startNow = !room2.music.current;
+      if (startNow) room2.music.current = { ...tracks.shift(), startedAt: Date.now() };
+      room2.music.queue.push(...tracks);
+      broadcastRoom(room2);
+      const n = tracks.length + (startNow ? 1 : 0);
+      if (fromList) systemChat(room2, `🎵 ${ident.name} ajoute une playlist (${n} titre${n > 1 ? 's' : ''}).`);
+      else systemChat(room2, startNow ? `🎵 ${ident.name} lance « ${room2.music.current.title} ».` : `🎵 ${ident.name} ajoute « ${tracks[0].title} » à la file.`);
+      reply(cb, { ok: true, count: n });
     });
     socket.on('music:skip', (cb) => {
       const room = current();
@@ -630,15 +729,27 @@ function attach(server) {
     socket.on('music:stop', (cb) => {
       const room = current();
       if (!isHost(room)) return reply(cb, { error: 'Seul l\'hôte peut arrêter la musique.' });
-      room.music = { current: null, queue: [] };
+      room.music = { current: null, queue: [], open: room.music.open };
+      broadcastRoom(room);
+      reply(cb, { ok: true });
+    });
+    socket.on('music:clear', (cb) => {
+      const room = current();
+      if (!isHost(room)) return reply(cb, { error: 'Action réservée à l\'hôte.' });
+      room.music.queue = [];
       broadcastRoom(room);
       reply(cb, { ok: true });
     });
     socket.on('music:remove', (data, cb) => {
       const room = current();
-      if (!isHost(room)) return reply(cb, { error: 'Action réservée à l\'hôte.' });
+      if (!room) return reply(cb, { error: 'Aucune salle.' });
       const k = Number(data && data.index);
-      if (Number.isInteger(k) && k >= 0 && k < room.music.queue.length) room.music.queue.splice(k, 1);
+      const t = Number.isInteger(k) && k >= 0 && k < room.music.queue.length ? room.music.queue[k] : null;
+      if (!t) return reply(cb, { ok: true });
+      // L'hôte retire ce qu'il veut ; les autres seulement leurs propres titres
+      if (!isHost(room) && t.byKey !== ident.key) return reply(cb, { error: 'Vous ne pouvez retirer que vos propres titres.' });
+      if (data.id && t.id !== data.id) return reply(cb, { ok: true });
+      room.music.queue.splice(k, 1);
       broadcastRoom(room);
       reply(cb, { ok: true });
     });

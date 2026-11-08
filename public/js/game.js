@@ -1051,20 +1051,25 @@ class RoomView {
     const m = this.music;
     const room = this.room;
     if (!m || !room) return;
-    const q = (room.music && room.music.queue) || [];
-    // Conserve la saisie de l'hôte si le panneau est redessiné pendant qu'il tape
+    const rm = room.music || {};
+    const q = rm.queue || [];
+    const open = !!rm.open;
+    const canAdd = this.isHost || open;
+    // Conserve la saisie si le panneau est redessiné pendant qu'on tape
     const prev = box.querySelector('.music-add input');
     const typed = prev ? prev.value : '';
     const hadFocus = prev && document.activeElement === prev;
+    const scroll = box.querySelector('.music-list');
+    const scrollTop = scroll ? scroll.scrollTop : 0;
     box.innerHTML = '';
     const t = m.track;
     box.append(
       t
         ? h('div.music-now',
             h('img.music-thumb', { src: `https://i.ytimg.com/vi/${t.id}/mqdefault.jpg`, alt: '' }),
-            h('div.music-info', h('small', m.blocked ? '⏸ En attente de votre autorisation' : '▶ En cours'), h('b', t.title || 'Vidéo YouTube'), t.by ? h('small.muted', 'par ' + t.by) : null)
+            h('div.music-info', h('small', m.blocked ? '⏸ En attente de votre autorisation' : '▶ En cours'), h('b', { title: t.title || '' }, t.title || 'Vidéo YouTube'), t.by ? h('small.muted', 'ajouté par ' + t.by) : null)
           )
-        : h('div.music-empty.muted', this.isHost ? 'Aucune musique. Collez un lien YouTube ci-dessous pour en diffuser à tous les joueurs.' : 'L\'hôte n\'a pas lancé de musique.'),
+        : h('div.music-empty.muted', canAdd ? 'Aucune musique. Collez un lien YouTube (vidéo ou playlist) pour en diffuser à tous les joueurs.' : 'L\'hôte n\'a pas lancé de musique.'),
       m.blocked && t ? h('button.btn.primary.sm.block', { onclick: () => m.resume() }, '🔊 Activer la musique') : null,
       h('div.music-vol',
         h('button.icon-btn', { title: m.muted ? 'Remettre le son' : 'Couper le son', onclick: () => m.toggleMute() }, m.muted || m.volume === 0 ? '🔇' : '🔊'),
@@ -1072,26 +1077,68 @@ class RoomView {
         h('small.muted', (m.muted ? 0 : m.volume) + ' %')
       )
     );
+    // Réglage de l'hôte : ouvrir la file à tout le monde (modifiable à tout moment)
     if (this.isHost) {
-      const input = h('input.input.sm', { placeholder: 'Lien YouTube…', autocomplete: 'off' });
+      box.append(
+        h('label.music-open' + (open ? '.on' : ''),
+          h('div.music-open-txt', h('b', 'Musique ouverte à tous'), h('small.muted', open ? 'Chaque joueur peut ajouter des titres.' : 'Vous seul choisissez la musique.')),
+          h('span.switch', h('input', { type: 'checkbox', checked: open, onchange: async (e) => {
+            const res = await emit('music:open', { open: e.target.checked });
+            if (res && res.error) { toast(res.error, 'error'); e.target.checked = open; }
+          } }), h('span.slider'))
+        )
+      );
+    } else if (open) {
+      box.append(h('div.music-badge', '🎶 L\'hôte a ouvert la musique : ajoutez vos titres !'));
+    }
+    if (canAdd) {
+      const input = h('input.input.sm', { placeholder: 'Lien YouTube ou playlist…', autocomplete: 'off', 'aria-label': 'Lien YouTube' });
       input.value = typed;
       if (hadFocus) setTimeout(() => input.focus(), 0);
+      const btn = h('button.btn.primary.sm', t ? '+ Ajouter' : '▶ Lancer');
       const add = async () => {
-        if (!input.value.trim()) return;
-        const res = await emit('music:add', { url: input.value });
+        const url = input.value.trim();
+        if (!url || btn.disabled) return;
+        const isList = /[?&]list=/.test(url);
+        btn.disabled = true;
+        input.disabled = true;
+        btn.textContent = isList ? 'Import…' : '…';
+        const res = await emit('music:add', { url });
+        btn.disabled = false;
+        input.disabled = false;
+        btn.textContent = t ? '+ Ajouter' : '▶ Lancer';
         if (res.error) return toast(res.error, 'error');
         input.value = '';
-        // Clic de l'hôte = interaction : la lecture n'est pas bloquée chez lui
+        // Ce box a pu être redessiné entre-temps : vide aussi le champ courant
+        const cur = box.querySelector('.music-add input');
+        if (cur) cur.value = '';
+        if (res.count > 1) toast(`🎵 ${res.count} titres ajoutés à la file.`, 'success');
+        // Clic = interaction : la lecture n'est pas bloquée chez ce joueur
         setTimeout(() => m.resume(), 600);
       };
+      btn.onclick = add;
       input.addEventListener('keydown', (e) => e.key === 'Enter' && add());
-      box.append(
-        h('div.music-add', input, h('button.btn.primary.sm', { onclick: add }, t ? '+ File' : '▶ Lancer')),
-        q.length ? h('div.music-queue', h('small.muted', `À suivre (${q.length})`), q.map((x, k) => h('div.music-q', h('span', `${k + 1}. ${x.title}`), h('button.icon-btn', { title: 'Retirer', onclick: () => emit('music:remove', { index: k }) }, '✕')))) : null,
-        t ? h('div.music-host-actions', h('button.btn.ghost.sm', { onclick: () => emit('music:skip') }, '⏭ Suivant'), h('button.btn.ghost.sm', { onclick: () => emit('music:stop') }, '⏹ Arrêter')) : null
+      box.append(h('div.music-add', input, btn));
+    }
+    if (q.length) {
+      const list = h('div.music-list',
+        q.map((x, k) => {
+          const mine = x.byKey && x.byKey === this.me;
+          return h('div.music-q' + (mine ? '.mine' : ''),
+            h('span.music-q-n', String(k + 1)),
+            h('div.music-q-txt', h('span', { title: x.title }, x.title), x.by ? h('small', x.by) : null),
+            this.isHost || mine ? h('button.icon-btn', { title: 'Retirer', onclick: async () => {
+              const res = await emit('music:remove', { index: k, id: x.id });
+              if (res && res.error) toast(res.error, 'error');
+            } }, '✕') : null
+          );
+        })
       );
-    } else if (q.length) {
-      box.append(h('div.music-queue', h('small.muted', `À suivre (${q.length})`), q.map((x, k) => h('div.music-q', h('span', `${k + 1}. ${x.title}`)))));
+      box.append(h('div.music-queue', h('div.music-q-head', h('small.muted', `À suivre (${q.length})`), this.isHost && q.length > 1 ? h('button.link-btn', { onclick: () => emit('music:clear') }, 'Tout vider') : null), list));
+      list.scrollTop = scrollTop;
+    }
+    if (this.isHost && t) {
+      box.append(h('div.music-host-actions', h('button.btn.ghost.sm', { onclick: () => emit('music:skip') }, '⏭ Suivant'), h('button.btn.ghost.sm', { onclick: () => emit('music:stop') }, '⏹ Arrêter')));
     }
   }
 
