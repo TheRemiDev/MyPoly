@@ -78,6 +78,39 @@ function sortHand(hand) {
   return hand.slice().sort((a, b) => ORDER[a.c] - ORDER[b.c] || VORDER(a.v) - VORDER(b.v));
 }
 
+/** Illustrations vectorielles des évènements de partie (animées en CSS). */
+function eventArt(kind, color, extra) {
+  const C = { r: '#ff5a5f', b: '#3fa7ff', g: '#2ecc71', y: '#ffb020' };
+  const card = (x, y, rot, fill, cls = '') => `<g class="${cls}" transform="translate(${x} ${y}) rotate(${rot})"><rect x="-17" y="-25" width="34" height="50" rx="6" fill="#fff"/><rect x="-14" y="-22" width="28" height="44" rx="4" fill="${fill}"/><rect x="-7" y="-7" width="14" height="14" rx="3" transform="rotate(45)" fill="#fff" opacity=".9"/></g>`;
+  const back = (x, y, rot, cls = '') => `<g class="${cls}" transform="translate(${x} ${y}) rotate(${rot})"><rect x="-17" y="-25" width="34" height="50" rx="6" fill="#f0a522"/><rect x="-14" y="-22" width="28" height="44" rx="4" fill="#1d2466"/><circle r="9" fill="none" stroke="#ffd166" stroke-width="2" stroke-dasharray="3 3"/></g>`;
+  switch (kind) {
+    case 'reverse':
+      return `<svg viewBox="-60 -60 120 120"><defs><linearGradient id="fxr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="${color}"/></linearGradient></defs>
+        <g class="spin"><path d="M-34 -18 A38 38 0 0 1 30 -26" fill="none" stroke="url(#fxr)" stroke-width="11" stroke-linecap="round"/><path d="M22 -42 L42 -24 L16 -14 Z" fill="#fff"/>
+        <path d="M34 18 A38 38 0 0 1 -30 26" fill="none" stroke="url(#fxr)" stroke-width="11" stroke-linecap="round"/><path d="M-22 42 L-42 24 L-16 14 Z" fill="#fff"/></g></svg>`;
+    case 'skip':
+      return `<svg viewBox="-60 -60 120 120"><circle class="ring" r="40" fill="none" stroke="${color}" stroke-width="4"/><g class="stamp"><circle r="38" fill="#ff3b4e" stroke="#fff" stroke-width="7"/><rect x="-24" y="-7" width="48" height="14" rx="4" fill="#fff"/></g></svg>`;
+    case 'color':
+      return `<svg viewBox="-60 -60 120 120"><g class="wheel">${['r', 'b', 'g', 'y'].map((k, i) => `<path d="M0 0 L${(Math.cos((i * Math.PI) / 2 - Math.PI / 2) * 44).toFixed(1)} ${(Math.sin((i * Math.PI) / 2 - Math.PI / 2) * 44).toFixed(1)} A44 44 0 0 1 ${(Math.cos(((i + 1) * Math.PI) / 2 - Math.PI / 2) * 44).toFixed(1)} ${(Math.sin(((i + 1) * Math.PI) / 2 - Math.PI / 2) * 44).toFixed(1)} Z" fill="${C[k]}"/>`).join('')}</g>
+        <circle r="44" fill="none" stroke="#fff" stroke-width="5"/><circle class="fill" r="44" fill="${C[extra] || color}"/><circle class="shine" r="44" fill="url(#fxc)"/><defs><radialGradient id="fxc" cx=".35" cy=".3" r=".7"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient></defs></svg>`;
+    case 'caught':
+      return `<svg viewBox="-60 -60 120 120"><g class="beam"><path d="M0 0 L-60 -22 L-60 22 Z" fill="#ff3b4e" opacity=".55"/><path d="M0 0 L60 -22 L60 22 Z" fill="#3fa7ff" opacity=".55"/></g>
+        <rect x="-26" y="12" width="52" height="12" rx="4" fill="#2a2f5a"/><path d="M-20 12 V-6 A20 20 0 0 1 20 -6 V12 Z" fill="#ff3b4e" stroke="#fff" stroke-width="4"/><circle cx="-6" cy="-6" r="5" fill="#fff" opacity=".7"/></svg>`;
+    case 'swap':
+      return `<svg viewBox="-60 -60 120 120">${back(-22, 0, -12, 'sw-a')}${back(22, 0, 12, 'sw-b')}<path d="M-18 -40 Q0 -54 18 -40" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M12 -46 L20 -38 L10 -34 Z" fill="#fff"/><path d="M18 40 Q0 54 -18 40" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M-12 46 L-20 38 L-10 34 Z" fill="#fff"/></svg>`;
+    case 'rotate':
+      return `<svg viewBox="-60 -60 120 120"><g class="spin-slow">${[0, 1, 2, 3].map((k) => back(Math.cos((k * Math.PI) / 2) * 30, Math.sin((k * Math.PI) / 2) * 30, k * 90)).join('')}</g></svg>`;
+    case 'shuffle':
+      return `<svg viewBox="-60 -60 120 120">${back(0, 6, -14, 'sh-1')}${back(0, 2, 0, 'sh-2')}${back(0, -2, 14, 'sh-3')}</svg>`;
+    case 'out':
+      return `<svg viewBox="-60 -60 120 120"><rect x="-26" y="-40" width="5" height="82" rx="2" fill="#d8dcf5"/><path class="flag" d="M-21 -38 C0 -46 10 -30 34 -38 L34 -6 C10 2 0 -14 -21 -6 Z" fill="#fff" stroke="#c9cdf0" stroke-width="2"/></svg>`;
+    case 'win':
+      return `<svg viewBox="-60 -60 120 120"><g class="rays">${Array.from({ length: 12 }, (_, k) => `<rect x="-3" y="-58" width="6" height="18" rx="3" fill="#ffd166" transform="rotate(${k * 30})"/>`).join('')}</g><path d="M-22 -30 H22 V-8 A22 22 0 0 1 -22 -8 Z" fill="#ffd166" stroke="#fff" stroke-width="4"/><rect x="-6" y="12" width="12" height="12" fill="#ffd166"/><rect x="-18" y="24" width="36" height="9" rx="3" fill="#f0a522" stroke="#fff" stroke-width="3"/></svg>`;
+    default: // start
+      return `<svg viewBox="-60 -60 120 120">${card(-26, 6, -18, C.r, 'f-1')}${card(-9, 0, -6, C.b, 'f-2')}${card(9, 0, 6, C.g, 'f-3')}${card(26, 6, 18, C.y, 'f-4')}</svg>`;
+  }
+}
+
 export class CardTable {
   constructor(view) {
     this.v = view;
@@ -680,7 +713,10 @@ export class CardTable {
     return res;
   }
   draw() {
-    if (!this.myTurn() || this.state.phase !== 'play') return;
+    if (!this.myTurn() || this.state.phase !== 'play') {
+      if (this.state && !this.state.over) this.nope(this.b3 ? (() => { const p = this.b3.deckScreen(); return { left: p.x, top: p.y }; })() : this.deckEl);
+      return;
+    }
     Sound.play('click');
     this.act('draw');
   }
@@ -698,18 +734,12 @@ export class CardTable {
 
   async clickCard(card, el) {
     const st = this.state;
-    if (!this.myTurn()) {
+    if (!this.myTurn() || !st.playable.includes(card.id)) {
+      // Pas mon tour, ou carte non jouable : sens interdit sur la carte + petit son
       el.classList.remove('nope');
       void el.offsetWidth;
       el.classList.add('nope');
-      if (st && st.hand && !st.over) toast(this.busy ? 'Un instant…' : 'Ce n\'est pas votre tour.', 'info', 1500);
-      return;
-    }
-    if (!st.playable.includes(card.id)) {
-      el.classList.remove('nope');
-      void el.offsetWidth;
-      el.classList.add('nope');
-      Sound.play('error');
+      this.nope(el);
       return;
     }
     const data = { card: card.id, carton: this.armed };
@@ -800,11 +830,54 @@ export class CardTable {
     }));
     return sleep(ms).then(() => node.remove());
   }
-  showBanner(icon, title, sub, color = '#3fa7ff', ms = 1500) {
-    const b = h('div.ct-banner', { style: { '--c': color } }, h('span.ct-banner-icon', icon), h('div', h('b', title), sub ? h('small', sub) : null));
-    this.banner.append(b);
-    setTimeout(() => b.classList.add('out'), ms);
-    setTimeout(() => b.remove(), ms + 400);
+  /** Centre de la table à l'écran (au-dessus des piles). */
+  tableCenter() {
+    if (this.b3) {
+      const p = this.b3.pileScreen();
+      const d = this.b3.deckScreen();
+      return { x: (p.x + d.x) / 2, y: Math.min(p.y, d.y) - 30 };
+    }
+    const r = this.center.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 - 30 };
+  }
+  /**
+   * Annonce d'un évènement de partie : une illustration vectorielle animée propre à
+   * l'évènement (flèches qui tournent, panneau qui s'abat, roue des couleurs…) et un
+   * grand titre dans le style du logo, posés au centre de la table. Un seul à la fois.
+   */
+  showBanner(kind, title, sub, color = '#3fa7ff', ms = 1500, extra = null) {
+    if (document.hidden) return;
+    const old = this.flashEl;
+    if (old) {
+      old.classList.add('out');
+      setTimeout(() => old.remove(), 240);
+    }
+    const host = this.v.gameEl.getBoundingClientRect();
+    const c = this.tableCenter();
+    const el = h('div.fx-event.k-' + kind + (kind === 'reverse' && extra < 0 ? '.ccw' : ''), { style: { '--c': color, left: c.x - host.left + 'px', top: c.y - host.top + 'px' } },
+      h('div.fx-glow'),
+      h('div.fx-art', { html: eventArt(kind, color, extra) }),
+      h('div.fx-title', { 'data-text': title }, title),
+      sub ? h('div.fx-sub', sub) : null
+    );
+    this.v.gameEl.append(el);
+    this.flashEl = el;
+    setTimeout(() => {
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 260);
+      if (this.flashEl === el) this.flashEl = null;
+    }, Math.max(ms, 1500));
+  }
+  /** « Sens interdit » sur une carte ou la pioche : action impossible maintenant. */
+  nope(target) {
+    Sound.play('nope');
+    if (!target) return;
+    const r = target.getBoundingClientRect ? target.getBoundingClientRect() : target;
+    const host = this.v.gameEl.getBoundingClientRect();
+    const el = h('div.ct-nope', { style: { left: r.left + (r.width || 0) / 2 - host.left + 'px', top: r.top + (r.height || 0) / 2 - host.top + 'px' } },
+      h('span', { html: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="#ff3b4e" stroke="#fff" stroke-width="4"/><rect x="11" y="20" width="26" height="8" rx="2" fill="#fff"/></svg>' }));
+    this.v.gameEl.append(el);
+    setTimeout(() => el.remove(), 750);
   }
   seatBubble(pid, content, cls = '', ms = 1600) {
     const pt = this.pointOf(pid);
@@ -853,7 +926,7 @@ export class CardTable {
         d.deck = st.deckCount;
         this.renderCenter();
         Sound.play('card');
-        this.showBanner('🃏', st.round > 1 ? `Manche ${st.round}` : 'C\'est parti !', `${p ? p.name : ''} commence`, p ? p.color : undefined);
+        this.showBanner('start', st.round > 1 ? `Manche ${st.round}` : 'C\'est parti !', `${p ? p.name : ''} commence`, p ? p.color : '#ffd166');
         await sleep(500);
         return;
       }
@@ -913,7 +986,7 @@ export class CardTable {
       case 'skip':
         this.seatBubble(ev.pid, h('span.ct-skipico', { html: SVG_SKIP }), '.skip', 1300);
         Sound.play('error');
-        if (p) this.showBanner('🚫', `${p.name} passe son tour`, ev.rev ? 'Demi-tour à deux joueurs' : null, p.color, 1100);
+        if (p) this.showBanner('skip', 'Passe ton tour !', p.name, p.color, 1300);
         await sleep(700);
         return;
       case 'reverse':
@@ -924,7 +997,7 @@ export class CardTable {
         this.dirEl.classList.add('flip');
         if (this.b3) this.b3.spinArrows();
         Sound.play('turn');
-        this.showBanner('🔄', 'Demi-tour !', ev.dir > 0 ? 'Sens des aiguilles d\'une montre' : 'Sens inverse', '#a66bff', 1200);
+        this.showBanner('reverse', 'Demi-tour !', ev.dir > 0 ? 'Sens des aiguilles d\'une montre' : 'Sens inverse', '#a66bff', 1400, ev.dir);
         await sleep(700);
         return;
       case 'stack':
@@ -944,7 +1017,7 @@ export class CardTable {
         this.colorEl.classList.add('flash');
         if (this.b3) this.b3.burst(this.b3.pilePos.clone().setY(0.6), CCOLORS[ev.color], 30);
         Sound.play('festival');
-        this.showBanner('🎨', CNAMES[ev.color] + ' !', p ? `choisi par ${p.name}` : null, CCOLORS[ev.color], 1300);
+        this.showBanner('color', CNAMES[ev.color] + ' !', p ? `Couleur choisie par ${p.name}` : null, CCOLORS[ev.color], 1500, ev.color);
         await sleep(600);
         return;
       case 'carton':
@@ -956,7 +1029,7 @@ export class CardTable {
         const by = this.player(ev.by);
         this.seatBubble(ev.pid, h('span', '🚨 PRIS !'), '.caught', 1700);
         Sound.play('alarm');
-        if (p && by) this.showBanner('🚨', `${by.name} prend ${p.name} !`, `« Carton ! » oublié : +${ev.n} cartes`, '#ff3b4e', 1800);
+        if (p && by) this.showBanner('caught', 'Pris !', `${p.name} a oublié « Carton ! » · +${ev.n} cartes`, '#ff3b4e', 1800);
         await sleep(900);
         return;
       }
@@ -975,7 +1048,7 @@ export class CardTable {
         d.counts[ev.a] = d.counts[ev.b];
         d.counts[ev.b] = ca;
         if ((ev.a === this.me || ev.b === this.me) && st.hand) d.hand = st.hand.slice();
-        if (a && b) this.showBanner('🔀', `${a.name} ⇄ ${b.name}`, 'Les mains sont échangées !', a.color, 1500);
+        if (a && b) this.showBanner('swap', 'Échange !', `${a.name} ⇄ ${b.name}`, a.color, 1600);
         await sleep(700);
         this.renderSeats();
         this.renderHand();
@@ -983,7 +1056,7 @@ export class CardTable {
       }
       case 'rotate': {
         Sound.play('takeover');
-        this.showBanner('🌀', 'Toutes les mains tournent !', null, '#1dd3c0', 1500);
+        this.showBanner('rotate', 'Tout le monde tourne !', 'Chacun passe sa main au suivant', '#1dd3c0', 1600);
         for (const q of st.players) d.counts[q.id] = q.count;
         if (st.hand) d.hand = st.hand.slice();
         this.seatsEl.classList.add('spin');
@@ -1001,7 +1074,7 @@ export class CardTable {
           this.b3.deckLayers = 0;
           this.b3.setDeck(ev.n);
         }
-        this.showBanner('🔀', 'La défausse est remélangée', null, '#3fa7ff', 1000);
+        this.showBanner('shuffle', 'Mélange !', 'La défausse repart dans la pioche', '#3fa7ff', 1300);
         await sleep(650);
         this.deckEl.classList.remove('shuffle');
         return;
@@ -1012,7 +1085,7 @@ export class CardTable {
         Sound.play('win');
         return;
       case 'out':
-        if (p) this.showBanner('🏳️', `${p.name} abandonne`, null, '#888', 1200);
+        if (p) this.showBanner('out', 'Abandon', p.name, '#9aa0c7', 1300);
         await sleep(300);
         return;
     }
@@ -1024,7 +1097,7 @@ export class CardTable {
     Sound.play('win');
     confetti(1800);
     if (!target) {
-      this.showBanner('🏁', `${p ? p.name : '?'} vide sa main !`, null, p ? p.color : undefined, 2200);
+      this.showBanner('win', 'Main vide !', p ? p.name : '', p ? p.color : '#ffd166', 2200);
       await sleep(1600);
       return;
     }
