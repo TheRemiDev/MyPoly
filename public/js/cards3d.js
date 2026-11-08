@@ -262,7 +262,7 @@ export class Card3D {
     this.homeTarget = this.target.clone();
 
     this.backTex = this.tex(drawCardBack());
-    this.cardGeo = new THREE.BoxGeometry(CW, CT, CH);
+    this.buildCardGeometry();
     this.edgeMat = new THREE.MeshStandardMaterial({ color: 0xf3ead5, roughness: 0.6 });
     this.backMat = new THREE.MeshStandardMaterial({ map: this.backTex, roughness: 0.45 });
 
@@ -290,13 +290,42 @@ export class Card3D {
     return this.faceCache[key];
   }
   /** Carte 3D : face visible vers le haut (ou le dos si card = null). */
+  /**
+   * Géométrie d'une carte aux coins arrondis (comme le dessin des faces) :
+   * tranche extrudée + face et dos plats, UV calées sur toute la carte.
+   */
+  buildCardGeometry() {
+    const r = CW * 0.12;
+    const shape = new THREE.Shape();
+    shape.moveTo(-CW / 2 + r, -CH / 2);
+    shape.lineTo(CW / 2 - r, -CH / 2);
+    shape.quadraticCurveTo(CW / 2, -CH / 2, CW / 2, -CH / 2 + r);
+    shape.lineTo(CW / 2, CH / 2 - r);
+    shape.quadraticCurveTo(CW / 2, CH / 2, CW / 2 - r, CH / 2);
+    shape.lineTo(-CW / 2 + r, CH / 2);
+    shape.quadraticCurveTo(-CW / 2, CH / 2, -CW / 2, CH / 2 - r);
+    shape.lineTo(-CW / 2, -CH / 2 + r);
+    shape.quadraticCurveTo(-CW / 2, -CH / 2, -CW / 2 + r, -CH / 2);
+    const face = new THREE.ShapeGeometry(shape, 8);
+    const uv = face.attributes.uv;
+    const pos = face.attributes.position;
+    for (let k = 0; k < uv.count; k++) uv.setXY(k, (pos.getX(k) + CW / 2) / CW, (pos.getY(k) + CH / 2) / CH);
+    // Face visible vers le haut (le haut du dessin vers le fond de la table)
+    this.faceGeo = face.clone().rotateX(-Math.PI / 2).translate(0, CT / 2 + 0.0005, 0);
+    this.backGeo = face.clone().rotateX(Math.PI / 2).translate(0, -CT / 2 - 0.0005, 0);
+    this.sideGeo = new THREE.ExtrudeGeometry(shape, { depth: CT, bevelEnabled: false, curveSegments: 8 }).rotateX(-Math.PI / 2).translate(0, -CT / 2, 0);
+  }
   makeCard(card) {
-    // Faces d'une boîte : +x, -x, +y (dessus), -y (dessous), +z, -z
-    const top = card ? this.faceMat(card) : this.backMat;
-    const m = new THREE.Mesh(this.cardGeo, [this.edgeMat, this.edgeMat, top, this.backMat, this.edgeMat, this.edgeMat]);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    return m;
+    const g = new THREE.Group();
+    const side = new THREE.Mesh(this.sideGeo, this.edgeMat);
+    const top = new THREE.Mesh(this.faceGeo, card ? this.faceMat(card) : this.backMat);
+    const bottom = new THREE.Mesh(this.backGeo, this.backMat);
+    for (const m of [side, top, bottom]) {
+      m.castShadow = true;
+      m.receiveShadow = true;
+      g.add(m);
+    }
+    return g;
   }
 
   // ------------------------------------------------------------------ scène
@@ -410,12 +439,11 @@ export class Card3D {
       const arc = new THREE.Mesh(new THREE.TorusGeometry(2.75, 0.045, 10, 40, Math.PI / 3), amat);
       arc.rotation.x = Math.PI / 2;
       arc.rotation.z = a0;
-      const head = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.32, 16), amat);
+      // Pointe au bout de l'arc, orientée selon la tangente (sens de rotation)
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.36, 16), amat);
       const ah = a0 + Math.PI / 3;
-      head.position.set(Math.cos(ah) * 2.75, 0, -Math.sin(ah) * 2.75);
-      head.rotation.set(0, ah, -Math.PI / 2);
-      head.rotation.order = 'YXZ';
-      head.rotation.set(0, ah + Math.PI, Math.PI / 2);
+      head.position.set(Math.cos(ah) * 2.75, 0, Math.sin(ah) * 2.75);
+      head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(-Math.sin(ah), 0, Math.cos(ah)));
       this.arrows.add(arc, head);
     }
     this.arrows.traverse((o) => o.isMesh && (o.castShadow = true));
@@ -702,7 +730,7 @@ export class Card3D {
       const r = el.getBoundingClientRect();
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, this.camera);
-      const hit = ray.intersectObjects(this.deck.children, false).length > 0;
+      const hit = ray.intersectObjects(this.deck.children, true).length > 0;
       el.style.cursor = hit && this.deckActive ? 'pointer' : '';
     });
     const up = (e) => {
@@ -710,7 +738,7 @@ export class Card3D {
         const r = el.getBoundingClientRect();
         ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
         ray.setFromCamera(ndc, this.camera);
-        if (ray.intersectObjects(this.deck.children, false).length && this.cb.onDeck) this.cb.onDeck();
+        if (ray.intersectObjects(this.deck.children, true).length && this.cb.onDeck) this.cb.onDeck();
       }
       drag = null;
     };
