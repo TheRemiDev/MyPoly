@@ -2,7 +2,7 @@
 //  MyPoly — Petits chevaux : plateau de course (vue client)
 //  Le serveur est seul maître du jeu (dé, déplacements) : ce module affiche et anime.
 // ============================================================================
-import { h, toast, modal, roleTags, nameClass, sleep, confetti, duration } from './util.js';
+import { h, toast, modal, roleTags, roleRibbons, nameClass, sleep, confetti, duration } from './util.js';
 import { store, emit } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen } from './app.js';
@@ -497,6 +497,7 @@ export class HorseTable {
       const card = h('div.pcard.corner.c-' + corner(p.quad) + (turn ? '.turn' : '') + (p.out ? '.out' : '') + (isMe ? '.me' : '') + (p.vip ? '.vip' : ''),
         { 'data-pid': p.id, style: { '--c': p.color } },
         h('div.pc-face'),
+        roleRibbons(p),
         h('div.pc-avatar', h('span.pc-pawn', p.out ? '💀' : p.pawn)),
         h('div.pc-body',
           h('div.pc-name', h('span.pc-name-text.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),

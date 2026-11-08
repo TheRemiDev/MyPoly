@@ -1,5 +1,5 @@
 // Vue d'une salle : salon d'attente + plateau de jeu animé
-import { $, $$, h, fmt, toast, modal, roleTags, nameClass, sleep, confetti, duration, storage, api } from './util.js';
+import { $, $$, h, fmt, toast, modal, roleTags, roleRibbons, nameClass, sleep, confetti, duration, storage, api } from './util.js';
 import { store, on, emit, savedSettings } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
@@ -1914,9 +1914,9 @@ class RoomView {
           this.renderPlayers();
         } },
         h('div.pc-face'),
+        roleRibbons(p),
         h('div.pc-avatar',
           h('span.pc-pawn', p.bankrupt ? '💀' : p.pawn),
-          p.vip && !p.bankrupt ? h('span.pc-crown', '👑') : null,
           !p.bankrupt && rank >= 0 && rank < 3 && st.players.length > 1 ? h('span.pc-medal', { title: `${rank + 1}${rank ? 'e' : 'er'} par fortune` }, medals[rank]) : null
         ),
         h('div.pc-body',
