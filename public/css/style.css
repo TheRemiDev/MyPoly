@@ -2405,3 +2405,15 @@ body:not(.in-game) {
   .pk-swatch { margin-top: 8px; }
   .pk-swatch i { width: 54px; height: 54px; border-radius: 16px; }
 }
+
+/* Bonus / malus d'un joueur : bandeau sous sa fiche, visible par tous */
+.pcard.corner:has(.pc-effects) { flex-wrap: wrap; row-gap: 8px; }
+.pc-effects { order: 10; flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 5px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, .1); }
+.c-tr .pc-effects, .c-br .pc-effects { justify-content: flex-end; }
+.pc-effect { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; border-radius: 99px; font-size: .72rem; font-weight: 800; white-space: nowrap; color: #fff; animation: pcFx 360ms cubic-bezier(.34, 1.56, .64, 1) both; }
+.pc-effect i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: .78rem; background: rgba(255, 255, 255, .9); }
+.pc-effect.good { background: rgba(46, 204, 113, .22); box-shadow: inset 0 0 0 1px rgba(46, 204, 113, .6); color: #b9ffd4; }
+.pc-effect.info { background: rgba(63, 167, 255, .22); box-shadow: inset 0 0 0 1px rgba(63, 167, 255, .6); color: #cde8ff; }
+.pc-effect.bad { background: rgba(255, 71, 87, .22); box-shadow: inset 0 0 0 1px rgba(255, 71, 87, .6); color: #ffc2c8; }
+@keyframes pcFx { from { opacity: 0; transform: scale(.7); } }
+@media (max-aspect-ratio: 5/4) { .pc-effects { padding-top: 5px; gap: 3px; } .pc-effect { font-size: .62rem; padding: 2px 7px 2px 3px; } .pc-effect i { width: 16px; height: 16px; font-size: .66rem; } }
