@@ -1806,6 +1806,78 @@ export class Board3D {
       }).then(() => this.scene.remove(m));
     }
   }
+  /**
+   * Bouclier : un dôme d'énergie entoure le pion, les pièces du loyer partent
+   * vers lui depuis le propriétaire et rebondissent dessus, puis le dôme éclate.
+   */
+  async shieldBlock(pid, ownerPid, n = 6) {
+    const pw = this.pawns[pid];
+    if (!pw) return;
+    const center = pw.obj.position.clone().add(new THREE.Vector3(0, 0.32, 0));
+    const R = 0.62;
+    const g = new THREE.Group();
+    g.position.copy(center);
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 40, 24), new THREE.MeshStandardMaterial({ color: 0x7fdcff, emissive: 0x3fa7ff, emissiveIntensity: 0.8, transparent: true, opacity: 0.22, roughness: 0.1, depthWrite: false }));
+    const net = new THREE.Mesh(new THREE.IcosahedronGeometry(R * 1.01, 1), new THREE.MeshBasicMaterial({ color: 0xbff0ff, wireframe: true, transparent: true, opacity: 0.75, depthWrite: false }));
+    const rim = new THREE.Mesh(new THREE.RingGeometry(R * 0.95, R * 1.12, 48), new THREE.MeshBasicMaterial({ color: 0x7fdcff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = -0.3;
+    g.add(shell, net, rim);
+    g.scale.setScalar(0.01);
+    this.scene.add(g);
+    // Apparition
+    await this.tween(320, (t) => g.scale.setScalar(Math.max(0.01, ease.back(t))));
+    const spin = this.tween(1700, (t) => {
+      net.rotation.y = t * 2.2;
+      net.rotation.x = t * 0.6;
+      shell.material.opacity = 0.22 + Math.sin(t * Math.PI * 6) * 0.06;
+    });
+    // Les pièces du loyer foncent sur le dôme… et rebondissent
+    const from = ownerPid ? this.worldOf({ pawn: ownerPid }) : null;
+    if (from) {
+      const geo = new THREE.CylinderGeometry(0.09, 0.09, 0.025, 20);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffc94a, metalness: 0.9, roughness: 0.25, emissive: 0x5a3a00, emissiveIntensity: 0.35 });
+      const hits = [];
+      for (let k = 0; k < n; k++) {
+        const c = new THREE.Mesh(geo, mat);
+        c.castShadow = true;
+        c.visible = false;
+        this.scene.add(c);
+        const dir = center.clone().sub(from).normalize();
+        const j = new THREE.Vector3((Math.random() - 0.5) * 0.4, (Math.random() - 0.2) * 0.3, (Math.random() - 0.5) * 0.4);
+        const impact = center.clone().addScaledVector(dir, -R).add(j.clone().multiplyScalar(0.6));
+        const away = dir.clone().negate().add(new THREE.Vector3((Math.random() - 0.5) * 1.2, 0, (Math.random() - 0.5) * 1.2)).normalize();
+        hits.push(this.tween(430, (t) => {
+          c.visible = true;
+          c.position.lerpVectors(from, impact, ease.inOut(t));
+          c.position.y += Math.sin(t * Math.PI) * 0.6;
+          c.rotation.x = t * Math.PI * 4;
+        }, k * 80).then(() => {
+          this.cb.onShieldHit && this.cb.onShieldHit();
+          shell.material.emissiveIntensity = 2.2;
+          const p0 = c.position.clone();
+          return this.tween(520, (t) => {
+            c.position.set(p0.x + away.x * t * 1.4, p0.y + 0.9 * t - 2.2 * t * t, p0.z + away.z * t * 1.4);
+            c.rotation.z = t * 8;
+            c.scale.setScalar(1 - t * 0.6);
+          }).then(() => this.scene.remove(c));
+        }));
+      }
+      this.tween(1300, (t) => (shell.material.emissiveIntensity = Math.max(0.8, shell.material.emissiveIntensity - 0.05)));
+      await Promise.all(hits);
+    } else await this.wait(900);
+    await spin;
+    // Le dôme éclate
+    this.sparkle(center.clone().setY(0), 0x7fdcff, 26);
+    await this.tween(300, (t) => {
+      g.scale.setScalar(1 + t * 0.5);
+      shell.material.opacity = 0.22 * (1 - t);
+      net.material.opacity = 0.75 * (1 - t);
+      rim.material.opacity = 0.8 * (1 - t);
+    });
+    this.scene.remove(g);
+  }
+
   sparkle(pos, color = 0xffd166, n = 14) {
     const geo = new THREE.OctahedronGeometry(0.04);
     for (let k = 0; k < n; k++) {

@@ -2223,3 +2223,23 @@ body:not(.in-game) {
 .debt-bar2 .timer-bar { width: auto; }
 .db-progress span { padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .db-actions .btn { white-space: nowrap; }
+
+/* Bouclier : loyer bloqué */
+.shield-pop { position: absolute; left: 50%; top: 38%; translate: -50% -50%; z-index: 86; pointer-events: none; display: flex; align-items: center; gap: 16px; padding: 14px 26px 14px 14px; border-radius: 22px;
+  background: linear-gradient(135deg, rgba(63, 167, 255, .3), rgba(14, 16, 38, .95) 60%); border: 2px solid #7fdcff;
+  box-shadow: 0 0 0 4px rgba(127, 220, 255, .15), 0 0 50px rgba(63, 167, 255, .55), 0 18px 40px rgba(0, 0, 0, .55); animation: shieldIn .35s cubic-bezier(.23, 1, .32, 1) both; }
+.shield-pop.out { opacity: 0; transform: scale(.96); transition: opacity 220ms ease-out, transform 220ms ease-out; }
+@keyframes shieldIn { from { opacity: 0; transform: scale(.9); } }
+.shield-icon { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; background: radial-gradient(circle, rgba(127, 220, 255, .45), rgba(63, 167, 255, .1) 70%); box-shadow: 0 0 0 3px #7fdcff, 0 0 26px #3fa7ff; }
+.shield-icon span { animation: shieldBump .45s cubic-bezier(.23, 1, .32, 1) .35s both; }
+@keyframes shieldBump { 0% { transform: scale(1); } 40% { transform: scale(1.25) rotate(-8deg); } 100% { transform: scale(1); } }
+.shield-title { font-weight: 900; font-size: 1.5rem; letter-spacing: .08em; color: #bff0ff; text-shadow: 0 0 14px rgba(63, 167, 255, .9); }
+.shield-amount { display: flex; align-items: baseline; gap: 10px; font-weight: 900; }
+.shield-amount s { font-size: 1.3rem; color: #ff8a93; text-decoration-thickness: 3px; text-decoration-color: #ff4757; }
+.shield-amount b { font-size: 1.6rem; color: #7ef0ac; }
+.shield-amount b::before { content: '→ '; color: #9aa0c7; font-size: 1.1rem; }
+.shield-sub { color: #c9cdf0; font-size: .85rem; font-weight: 700; }
+.pcard.corner.shielded .pc-avatar { animation: shieldCard 1.6s ease-out; }
+@keyframes shieldCard { 0%, 70% { box-shadow: 0 0 0 3px #7fdcff, 0 0 0 8px rgba(127, 220, 255, .35), 0 0 34px #3fa7ff; } }
+.pawn.shield-bubble .pawn-token, .pawn.shield-bubble > * { box-shadow: 0 0 0 4px #7fdcff, 0 0 0 10px rgba(127, 220, 255, .3), 0 0 30px #3fa7ff !important; }
+@media (prefers-reduced-motion: reduce) { .shield-pop, .shield-icon span { animation: none; } }

@@ -575,7 +575,7 @@ class Game {
     if (p.shield) {
       p.shield = false;
       this.say(`🛡️ Le bouclier de ${p.name} annule le loyer de ${fmt(rent)} !`, p.id);
-      this.emit({ t: 'shield', pid: p.id }, ANIM.small);
+      this.emit({ t: 'shield', pid: p.id, owner: owner ? owner.id : null, cell: i, amount: rent }, 2600);
       return this.afterRent(p, i);
     }
     if (p.coupon) {
