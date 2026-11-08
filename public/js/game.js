@@ -876,6 +876,59 @@ class RoomView {
     if (this.b3 && !document.hidden) this.b3.focus(i);
   }
 
+  /**
+   * Paiement entre joueurs : une pluie de pièces part de la fiche du payeur et
+   * file en arc vers la fiche du bénéficiaire (rapide : ~0,7 s au total).
+   */
+  async payFly(fromPid, toPid, amount, n = null) {
+    const a = this.playersEl && this.playersEl.querySelector(`[data-pid="${CSS.escape(fromPid)}"]`);
+    const b = this.playersEl && this.playersEl.querySelector(`[data-pid="${CSS.escape(toPid)}"]`);
+    if (!a || !b || document.hidden) return sleep(150);
+    const ra = a.getBoundingClientRect();
+    const rb = b.getBoundingClientRect();
+    const host = this.gameEl.getBoundingClientRect();
+    const from = { x: ra.left + ra.width / 2 - host.left, y: ra.top + ra.height / 2 - host.top };
+    const to = { x: rb.left + rb.width / 2 - host.left, y: rb.top + rb.height / 2 - host.top };
+    const count = n || Math.min(10, 4 + Math.round(amount / 150));
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    // L'arc se bombe sur le côté (perpendiculaire au trajet), jamais à travers le centre de l'écran
+    const nx = -(to.y - from.y) / (dist || 1);
+    const ny = (to.x - from.x) / (dist || 1);
+    const cx = (from.x + to.x) / 2;
+    const cy = (from.y + to.y) / 2;
+    const toCenter = (host.width / 2 - cx) * nx + (host.height / 2 - cy) * ny;
+    const bend = Math.min(160, dist * 0.22) * (toCenter > 0 ? -1 : 1);
+    a.classList.remove('paying');
+    void a.offsetWidth;
+    a.classList.add('paying');
+    const anims = [];
+    for (let k = 0; k < count; k++) {
+      const coin = h('div.pay-coin', '$');
+      this.gameEl.append(coin);
+      const j = () => (Math.random() - 0.5) * 26;
+      const sx = from.x + j();
+      const sy = from.y + j();
+      const ex = to.x + j() * 0.6;
+      const ey = to.y + j() * 0.6;
+      const mx = cx + nx * bend + j();
+      const my = cy + ny * bend + j();
+      const anim = coin.animate([
+        { transform: `translate(${sx}px, ${sy}px) scale(.6) rotate(0deg)`, opacity: 0 },
+        { transform: `translate(${(sx + mx) / 2}px, ${(sy + my) / 2}px) scale(1.05) rotate(160deg)`, opacity: 1, offset: 0.3 },
+        { transform: `translate(${mx}px, ${my}px) scale(1.15) rotate(320deg)`, opacity: 1, offset: 0.55 },
+        { transform: `translate(${ex}px, ${ey}px) scale(.7) rotate(540deg)`, opacity: 0.9 },
+      ], { duration: 460, delay: k * 38, easing: 'cubic-bezier(.45, 0, .25, 1)', fill: 'both' });
+      anims.push(anim.finished.then(() => coin.remove()).catch(() => coin.remove()));
+    }
+    setTimeout(() => {
+      b.classList.remove('paid');
+      void b.offsetWidth;
+      b.classList.add('paid');
+      Sound.play('cash');
+    }, 420);
+    await Promise.all(anims);
+  }
+
   /** Pièces qui volent entre deux points : { pawn }, { cell } ou { bank }. */
   coins(from, to, n = 6) {
     if (this.b3) return this.b3.coins(from, to, n);
@@ -1121,7 +1174,9 @@ class RoomView {
         this.disp.cash[ev.pid] = (this.disp.cash[ev.pid] ?? 0) + ev.delta;
         this.floatMoney(ev.pid, ev.delta);
         if (ev.pid === this.me) Sound.play(ev.delta > 0 ? 'cash' : 'pay');
-        if (ev.reason === 'salary' || ev.reason === 'card' || ev.reason === 'sell') {
+        if (ev.peer && ev.delta < 0 && ev.reason !== 'rent' && ev.reason !== 'takeover') {
+          this.payFly(ev.pid, ev.peer, -ev.delta);
+        } else if (!ev.peer && (ev.reason === 'salary' || ev.reason === 'card' || ev.reason === 'sell')) {
           if (ev.delta > 0) this.coins({ bank: true }, { pawn: ev.pid }, 5);
           else this.coins({ pawn: ev.pid }, { bank: true }, 4);
         }
@@ -1169,7 +1224,7 @@ class RoomView {
         Sound.play('takeover');
         this.announce({ icon: '🤝', title: `${p.name} rachète ${c.name}`, text: `à ${from ? from.name : '?'}`, color: p.color, kind: 'takeover' });
         this.focusCell(ev.cell);
-        await this.coins({ pawn: ev.pid }, { pawn: ev.from }, 8);
+        await this.payFly(ev.pid, ev.from, 0, 8);
         this.patchProps(ev);
         this.pulseCell(ev.cell, p, 'takeover');
         this.cellLabel(ev.cell, 'RACHETÉ !', '#a66bff');
@@ -1181,7 +1236,7 @@ class RoomView {
         this.pulseCell(ev.cell, to, 'rent');
         Sound.play('pay');
         this.announce({ icon: '💸', title: `${p.name} paie ${fmt(ev.amount)}`, text: `de loyer à ${to ? to.name : '?'} (${this.meta.cells[ev.cell].name})`, color: p.color, kind: 'pay', ms: 2200 });
-        await this.coins({ pawn: ev.pid }, { pawn: ev.to }, Math.min(10, 3 + Math.round(ev.amount / 150)));
+        await this.payFly(ev.pid, ev.to, ev.amount);
         return;
       }
       case 'sell': {
@@ -1666,7 +1721,7 @@ class RoomView {
     this.cardSlot.append(el);
     requestAnimationFrame(() => el.classList.add('flip'));
     // Temps de lecture proportionnel au texte (même formule que le serveur)
-    await sleep(Math.min(9000, 3500 + (card.title.length + card.text.length) * 40));
+    await sleep(Math.min(6500, 2600 + (card.title.length + card.text.length) * 28));
     el.classList.add('out');
     setTimeout(() => el.remove(), 400);
   }

@@ -98,9 +98,10 @@ class Game {
     if (this.log.length > 80) this.log.shift();
     this.emit({ t: 'log', msg, pid });
   }
-  money(p, delta, reason) {
+  money(p, delta, reason, peer = null) {
     p.cash += delta;
-    this.emit({ t: 'money', pid: p.id, delta, reason });
+    // peer : l'autre joueur d'un paiement entre joueurs (pour animer l'argent de l'un vers l'autre)
+    this.emit({ t: 'money', pid: p.id, delta, reason, peer: peer ? peer.id : null });
     const nw = this.netWorth(p);
     if (nw > p.stats.maxNetWorth) p.stats.maxNetWorth = nw;
   }
@@ -393,10 +394,11 @@ class Game {
     else this.bankrupt(p, to);
   }
   transfer(from, to, amount, reason) {
-    this.money(from, -amount, reason);
+    const peer = to && !to.bankrupt ? to : null;
+    this.money(from, -amount, reason, peer);
     // Mode Mélenchon : cumul de tout ce que la case Impôts a prélevé
     if (reason === 'tax' && this.settings.melenchon) this.melenchonLoot = (this.melenchonLoot || 0) + amount;
-    if (to && !to.bankrupt) this.money(to, amount, reason);
+    if (peer) this.money(to, amount, reason, from);
     if (reason === 'rent') {
       from.stats.rentPaid += amount;
       if (to) to.stats.rentEarned += amount;
@@ -540,7 +542,7 @@ class Game {
     const card = this.themedCard(CARDS.find((c) => c.id === id));
     p.stats.cards++;
     // Durée d'affichage proportionnelle au texte (le client utilise la même formule)
-    this.emit({ t: 'card', pid: p.id, card }, Math.min(9000, 3500 + (card.title.length + card.text.length) * 40) + 400);
+    this.emit({ t: 'card', pid: p.id, card }, Math.min(6500, 2600 + (card.title.length + card.text.length) * 28) + 400);
     this.say(`${p.name} tire « ${card.title} » : ${card.text}`, p.id);
     const others = this.alive().filter((o) => o !== p);
     switch (id) {
