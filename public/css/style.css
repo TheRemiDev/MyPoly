@@ -2338,3 +2338,70 @@ body:not(.in-game) {
 .fx-event::before { content: ''; position: absolute; left: 50%; top: 55%; width: 560px; height: 340px; translate: -50% -50%; border-radius: 50%; z-index: -1;
   background: radial-gradient(ellipse, rgba(8, 9, 26, .78) 0%, rgba(8, 9, 26, .5) 45%, transparent 72%); animation: fxGlow 400ms ease-out both; }
 @media (max-width: 700px) { .fx-event::before { width: 380px; height: 260px; } }
+
+/* =====================================================================
+   CARTON ! — choix (couleur, échange de main) plein écran
+   ===================================================================== */
+.pk { position: absolute; inset: 0; z-index: 75; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 20px;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(10, 10, 30, .82), rgba(5, 5, 18, .92)); animation: pkIn 220ms ease-out both; }
+.pk.out { opacity: 0; transition: opacity 200ms ease-out; }
+@keyframes pkIn { from { opacity: 0; } }
+.pk-head { display: flex; flex-direction: column; align-items: center; }
+.pk-art { width: 96px; height: 96px; }
+.pk .fx-title { font-size: 44px; }
+.pk-sub { margin-top: 10px; color: #c9cdf0; font-weight: 700; font-size: .95rem; animation: fxSub 400ms cubic-bezier(.23, 1, .32, 1) 260ms both; }
+.pk-list { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 920px; }
+/* Grande carte de choix */
+.pk-item { --c: #888; position: relative; width: 170px; min-height: 210px; padding: 18px 14px 16px; border: 0; border-radius: 22px; cursor: pointer; font: inherit; color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--c) 34%, #1a1d44) 0%, #12142f 70%);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 60%, rgba(255, 255, 255, .15)), inset 0 1px 0 rgba(255, 255, 255, .15), 0 18px 36px rgba(0, 0, 0, .5);
+  animation: pkItem 420ms cubic-bezier(.34, 1.56, .64, 1) var(--d) both; transition: transform 180ms cubic-bezier(.23, 1, .32, 1), box-shadow 180ms ease; }
+@keyframes pkItem { from { opacity: 0; transform: translateY(26px) scale(.9); } }
+.pk-item:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) {
+  .pk-item:hover { transform: translateY(-8px); box-shadow: inset 0 0 0 3px var(--c), 0 0 40px color-mix(in srgb, var(--c) 55%, transparent), 0 24px 44px rgba(0, 0, 0, .55); }
+}
+.pk-name { font-size: 1.1rem; font-weight: 900; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-meta { color: #c9cdf0; font-weight: 700; font-size: .8rem; }
+.pk-key { position: absolute; top: 10px; left: 10px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px; display: grid; place-items: center; font: 800 .72rem var(--font); color: #c9cdf0; background: rgba(255, 255, 255, .08); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .35); }
+.pk-tag, .pk-deal { margin-top: 2px; padding: 3px 10px; border-radius: 99px; font-size: .72rem; font-weight: 900; letter-spacing: .02em; }
+.pk-tag { background: #fff; color: #1b1030; }
+.pk-deal { background: rgba(255, 255, 255, .1); color: #e9e6ff; }
+.pk-deal.good { background: rgba(46, 204, 113, .22); color: #7ef0ac; box-shadow: inset 0 0 0 1px rgba(46, 204, 113, .5); }
+.pk-deal.bad { background: rgba(255, 71, 87, .18); color: #ff9aa4; box-shadow: inset 0 0 0 1px rgba(255, 71, 87, .45); }
+/* Couleur : grande pastille brillante */
+.pk-swatch { flex: 1; display: grid; place-items: center; }
+.pk-swatch i { width: 92px; height: 92px; border-radius: 26px; transform: rotate(45deg); background: radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--c) 45%, #fff), var(--c) 55%, color-mix(in srgb, var(--c) 65%, #000));
+  box-shadow: 0 0 0 4px #fff, 0 10px 22px rgba(0, 0, 0, .45), 0 0 30px color-mix(in srgb, var(--c) 60%, transparent); transition: transform 220ms cubic-bezier(.34, 1.56, .64, 1); }
+@media (hover: hover) and (pointer: fine) { .pk-item:hover .pk-swatch i { transform: rotate(45deg) scale(1.08); } }
+/* Échange : éventail des cartes de l'adversaire + avatar */
+.pk-fan { position: relative; flex: 1; width: 100%; min-height: 74px; }
+.pk-fan i { position: absolute; left: calc(50% - 18px); bottom: 4px; width: 36px; height: 52px; border-radius: 6px; transform-origin: 50% 130%;
+  background: radial-gradient(circle at 50% 45%, #2a3aa0, #141a52 70%); box-shadow: 0 0 0 2px #f0a522, 0 4px 8px rgba(0, 0, 0, .4); }
+.pk-avatar { width: 54px; height: 54px; margin-top: -20px; border-radius: 50%; display: grid; place-items: center; font-size: 1.7rem; background: radial-gradient(circle at 35% 28%, #fff, #e3e6f5);
+  box-shadow: 0 0 0 3px var(--c), 0 0 18px color-mix(in srgb, var(--c) 60%, transparent), 0 6px 12px rgba(0, 0, 0, .4); position: relative; }
+.pk-cancel { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border: 0; border-radius: 99px; cursor: pointer; font: 700 .9rem var(--font); color: #c9cdf0; background: rgba(255, 255, 255, .07); transition: background-color 160ms ease, transform 160ms cubic-bezier(.23, 1, .32, 1); }
+.pk-cancel:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .pk-cancel:hover { background: rgba(255, 255, 255, .14); color: #fff; } }
+.pk-cancel kbd { font: 700 .7rem var(--font); padding: 1px 6px; border-radius: 5px; background: rgba(255, 255, 255, .1); }
+@media (max-width: 700px) {
+  .pk .fx-title { font-size: 32px; }
+  .pk-item { width: calc(50vw - 30px); min-height: 170px; }
+  .pk-swatch i { width: 64px; height: 64px; }
+  .pk-key { display: none; }
+}
+.pk-color .pk-art { display: none; }
+.pk-swatch { margin-top: 14px; }
+.pk-swatch i { width: 80px; height: 80px; }
+@media (max-width: 700px) {
+  .pk { gap: 14px; justify-content: flex-start; padding-top: 70px; overflow-y: auto; }
+  .pk-art { width: 64px; height: 64px; }
+  .pk-list { gap: 10px; }
+  .pk-item { min-height: 0; padding: 12px 10px; }
+  .pk-fan { min-height: 56px; }
+  .pk-fan i { width: 28px; height: 40px; left: calc(50% - 14px); }
+  .pk-avatar { width: 44px; height: 44px; font-size: 1.3rem; margin-top: -16px; }
+  .pk-swatch { margin-top: 8px; }
+  .pk-swatch i { width: 54px; height: 54px; border-radius: 16px; }
+}
