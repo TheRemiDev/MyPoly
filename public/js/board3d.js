@@ -1451,6 +1451,34 @@ export class Board3D {
   }
 
   /** Étiquette 3D qui jaillit au-dessus d'une case (VENDU, HÔTEL !, RACHETÉ…). */
+  /**
+   * Étiquettes permanentes au-dessus des cases (prix de revente pendant une vente).
+   * tags = { [case]: { text, on } } ; null pour tout retirer.
+   */
+  setTags(tags) {
+    this.tags ||= {};
+    const want = tags || {};
+    for (const [i, tg] of Object.entries(this.tags)) {
+      if (!want[i] || want[i].text !== tg.text || want[i].on !== tg.on) {
+        this.scene.remove(tg.sp);
+        tg.sp.material.map.dispose();
+        tg.sp.material.dispose();
+        delete this.tags[i];
+      }
+    }
+    for (const [i, w] of Object.entries(want)) {
+      if (this.tags[i]) continue;
+      const b = cellBox(Number(i));
+      const sp = this.textSprite(w.text, { bg: w.on ? '#2ecc71' : '#1b1f45', fg: '#fff', size: 46, scale: 0.44 });
+      sp.material.depthTest = false;
+      sp.renderOrder = 19;
+      sp.position.set(b.cx, TOP + 0.42, b.cz);
+      sp.userData.base = sp.scale.clone();
+      this.scene.add(sp);
+      this.tags[i] = { sp, text: w.text, on: w.on };
+    }
+  }
+
   label(i, text, bg = '#ff4757', fg = '#fff') {
     const b = cellBox(i);
     const sp = this.textSprite(text, { bg, fg, size: 58, scale: 0.55 });

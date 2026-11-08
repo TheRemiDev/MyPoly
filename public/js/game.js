@@ -1555,6 +1555,7 @@ class RoomView {
       }
       el.classList.toggle('selectable', selectable);
       el.classList.toggle('picked', !!(this.debt && st.phase === 'debt' && this.debt.sel.has(i)));
+      const saleTag = myTurn && st.phase === 'debt' && this.debt && owner && owner.id === this.me ? h('span.sale-tag' + (this.debt.sel.has(i) ? '.on' : ''), (this.debt.sel.has(i) ? '✓ +' : '+') + fmt(pr.sell || 0)) : null;
       const priceTxt = owner && pr.rent ? fmt(pr.rent) : c.price ? fmt(c.price) : '';
       if (c.type === 'city') {
         const ct = countries[c.country];
@@ -1595,6 +1596,7 @@ class RoomView {
         );
       }
       if (fest) el.append(h('div.festival-badge', `🎉 ×${st.festival.mult}`));
+      if (saleTag) el.append(saleTag);
       if (owner) el.append(h('div.owner-flag', { style: { '--c': owner.color }, title: owner.name }, owner.pawn));
     }
   }
@@ -1626,6 +1628,18 @@ class RoomView {
       settings: this.room.settings,
       mono: (pid, country) => this.ownsCountry(pid, country),
     }, !this.syncInstant);
+    this.b3.setTags(this.saleTags());
+  }
+
+  /** Prix de revente de mes propriétés, affichés en permanence pendant une vente. */
+  saleTags() {
+    const st = this.state;
+    if (!st || st.phase !== 'debt' || st.current !== this.me || !this.debt) return null;
+    const tags = {};
+    st.props.forEach((pr, i) => {
+      if (pr && pr.owner === this.me) tags[i] = { text: (this.debt.sel.has(i) ? '✓ +' : '+') + fmt(pr.sell || 0), on: this.debt.sel.has(i) };
+    });
+    return tags;
   }
 
   ownsCountry(pid, country) {
@@ -2236,14 +2250,9 @@ class RoomView {
   toggleDebtPick(i) {
     if (!this.debt) return;
     Sound.play('click');
-    const pr = this.state.props[i];
-    if (this.debt.sel.has(i)) {
-      this.debt.sel.delete(i);
-      this.cellLabel(i, 'Retirée', '#5b6185');
-    } else {
-      this.debt.sel.add(i);
-      this.cellLabel(i, '+' + fmt((pr && pr.sell) || 0), '#2ecc71');
-    }
+    // Les prix sont déjà affichés en permanence sur les cases : l'étiquette passe au vert
+    if (this.debt.sel.has(i)) this.debt.sel.delete(i);
+    else this.debt.sel.add(i);
     this.debt.custom = true;
     this.renderActions(this.state);
     this.renderCells();

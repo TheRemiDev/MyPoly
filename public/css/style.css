@@ -2243,3 +2243,7 @@ body:not(.in-game) {
 @keyframes shieldCard { 0%, 70% { box-shadow: 0 0 0 3px #7fdcff, 0 0 0 8px rgba(127, 220, 255, .35), 0 0 34px #3fa7ff; } }
 .pawn.shield-bubble .pawn-token, .pawn.shield-bubble > * { box-shadow: 0 0 0 4px #7fdcff, 0 0 0 10px rgba(127, 220, 255, .3), 0 0 30px #3fa7ff !important; }
 @media (prefers-reduced-motion: reduce) { .shield-pop, .shield-icon span { animation: none; } }
+/* Prix de revente visibles sur chaque propriété pendant une vente (plateau 2D) */
+.cell .sale-tag { position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 6; padding: 0.25cqw 0.7cqw; border-radius: 99px; background: #1b1f45; color: #fff; font-weight: 900; font-size: max(8px, 1.05cqw); white-space: nowrap; box-shadow: 0 0 0 0.15cqw rgba(255, 255, 255, .85), 0 0.4cqw 1cqw rgba(0, 0, 0, .45); pointer-events: none; }
+.cell .sale-tag.on { background: #2ecc71; }
+.cell.picked::after { content: none !important; }
