@@ -525,9 +525,13 @@ export class Card3D {
         const m = this.makeCard(null);
         const t = shown > 1 ? k / (shown - 1) - 0.5 : 0;
         const ang = t * Math.min(1.3, 0.16 * shown);
-        m.position.set(Math.sin(ang) * 0.9, CT / 2 + k * 0.004, Math.cos(ang) * 0.9 - 0.9);
+        // Chaque carte au-dessus de la précédente (épaisseur 0,62 × CT) : sans cet écart,
+        // les cartes s'interpénètrent et des traits blancs apparaissent sur les dos
+        m.position.set(Math.sin(ang) * 0.9, CT / 2 + k * CT * 0.9, Math.cos(ang) * 0.9 - 0.9);
         m.rotation.y = -ang;
         m.scale.setScalar(0.62);
+        // Pas d'ombre portée entre cartes collées (rayures d'« acné » d'ombre)
+        m.traverse((o) => (o.castShadow = false));
         g.add(m);
       }
       this.scene.add(g);

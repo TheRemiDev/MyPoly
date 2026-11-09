@@ -236,7 +236,7 @@ class CardGame {
       case 'play':
         return this.doPlay(p, data);
       case 'draw':
-        return this.doDraw(p);
+        return this.doDraw(p, data);
       case 'pass':
         if (this.phase !== 'drawn') return { error: 'Vous devez jouer ou piocher.' };
         this.say(`${p.name} garde sa carte.`, p.id);
@@ -369,8 +369,13 @@ class CardGame {
     this.pendingType = null;
   }
 
-  doDraw(p) {
+  doDraw(p, data = {}) {
     if (this.phase === 'drawn') return { error: 'Vous avez déjà pioché : jouez la carte ou passez.' };
+    // On ne pioche que si l'on ne peut rien poser (sauf pioche automatique d'un temps écoulé).
+    // Face à un +2/+4, piocher la pénalité reste permis même si l'on pourrait contrer.
+    if (!this.pendingDraw && !data.forced && p.hand.some((c) => this.playable(c, p))) {
+      return { error: 'Vous avez une carte jouable : posez-la au lieu de piocher !' };
+    }
     if (this.pendingDraw) {
       this.forceDraw(p, this.pendingBy);
       this.endTurn();
@@ -587,10 +592,10 @@ class CardGame {
       return;
     }
     const p = this.cur;
-    let action = useBot ? this.botDecide(p) : this.phase === 'drawn' ? { type: 'pass' } : { type: 'draw' };
+    let action = useBot ? this.botDecide(p) : this.phase === 'drawn' ? { type: 'pass' } : { type: 'draw', forced: true };
     let res = this.handle(p, action.type, action);
     if (res && res.error) {
-      action = this.phase === 'drawn' ? { type: 'pass' } : { type: 'draw' };
+      action = this.phase === 'drawn' ? { type: 'pass' } : { type: 'draw', forced: true };
       res = this.handle(p, action.type, action);
       if (res && res.error) this.endTurn();
     }

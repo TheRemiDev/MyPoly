@@ -666,7 +666,7 @@ export class CardTable {
         const blocked = last && st.settings.noSpecialFinish && !/^\d$/.test(last.v);
         el.append(h('div.ct-hint' + (blocked ? '.warn' : ''), blocked ? '🚫 Interdit de finir sur une carte spéciale : piochez !' : 'Aucune carte jouable…'), h('button.btn.primary.ct-btn.pulse', { onclick: () => this.draw() }, '🂠 Piocher (D)'));
       } else {
-        el.append(h('div.ct-hint', 'À vous ! Posez une carte'), h('button.btn.ghost.ct-btn', { onclick: () => this.draw() }, '🂠 Piocher'));
+        el.append(h('div.ct-hint', 'À vous ! Posez une carte (pioche interdite : vous pouvez jouer)'));
       }
     }
     // Bouton « CARTON ! » : avant de poser l'avant-dernière carte, ou si on l'a oublié
@@ -682,8 +682,13 @@ export class CardTable {
     // Plateau 3D : barre de la fiche du joueur actif (dans son coin)
     const cbar = this.cornersEl && this.cornersEl.querySelector('.pcard.corner.turn .pcard-timer');
     if (!bar && !cbar) return;
-    const total = (this.room.settings.turnTime || 20) * 1000;
     const left = st.deadline ? st.deadline - (Date.now() + this.v.clockOffset) : 0;
+    // Durée réelle de ce tour (temps normal, joueur absent : 5 s…), mesurée à l'arrivée de l'échéance
+    if (st.deadline !== this.dlSeen) {
+      this.dlSeen = st.deadline;
+      this.dlTotal = Math.max(1000, Math.min(left, (this.room.settings.turnTime || 20) * 1000));
+    }
+    const total = this.dlTotal || (this.room.settings.turnTime || 20) * 1000;
     const frac = Math.max(0, Math.min(1, left / total));
     if (cbar) {
       cbar.hidden = !st.deadline;
@@ -726,7 +731,11 @@ export class CardTable {
     return res;
   }
   draw() {
-    if (!this.myTurn() || this.state.phase !== 'play') {
+    const st = this.state;
+    // Une carte jouable en main : pas le droit de piocher (sauf pénalité +2/+4 en attente)
+    const canPlay = st && st.phase === 'play' && !st.pendingDraw && st.playable && st.playable.length;
+    if (!this.myTurn() || st.phase !== 'play' || canPlay) {
+      if (canPlay && this.myTurn()) toast('Vous avez une carte jouable : posez-la !', 'error');
       if (this.state && !this.state.over) this.nope(this.b3 ? (() => { const p = this.b3.deckScreen(); return { left: p.x, top: p.y }; })() : this.deckEl);
       return;
     }

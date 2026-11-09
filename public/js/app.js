@@ -1009,6 +1009,7 @@ function rulesPage() {
         h('div.rule-head', h('span.rule-icon', '🃏'), h('h2', 'Carton ! — le jeu de cartes')),
         h('div.rule-body',
           h('p', 'Choisis « Carton ! » sur l\'accueil pour une partie rapide de 2 à 6 joueurs. Pose une carte de la même ', h('b', 'couleur'), ' ou du même ', h('b', 'symbole'), ' que celle du dessus. Le premier qui vide sa main gagne !'),
+          h('p', '🂠 Tu ne pioches ', h('b', 'que si tu ne peux rien poser'), ' : si une de tes cartes est jouable, tu dois jouer. Seule exception : face à un +2 ou un +4, tu peux choisir d\'encaisser la pioche au lieu de contrer.'),
           h('div.ct-rules-cards',
             ...[[{ c: 'r', v: 'skip' }, 'Stop', 'Le joueur suivant passe son tour'], [{ c: 'b', v: 'rev' }, 'Demi-tour', 'Le sens du jeu s\'inverse'], [{ c: 'g', v: '+2' }, '+2', 'Le suivant pioche 2 cartes et passe'], [{ c: 'w', v: 'wild' }, 'Joker', 'Tu choisis la couleur'], [{ c: 'w', v: '+4' }, 'Super Joker +4', 'Tu choisis la couleur, le suivant pioche 4']]
               .map(([c, t, d]) => h('div.ct-rule', cardEl({ id: 0, ...c }, '.tiny'), h('div', h('b', t), h('small', d))))
