@@ -137,7 +137,11 @@ class MonthGame {
    * Dépôts : jusqu'au jour limite du mois, et le jour de paye. Retraits : à tout moment, avec frais hors jour de paye.
    */
   bankOp(p, op, raw) {
-    const amount = Math.floor(Number(raw) / 100) * 100;
+    raw = Number(raw);
+    // Montants par tranches de 100 €, ou la totalité exacte (« Tout »)
+    let amount = Math.floor(raw / 100) * 100;
+    if (op === 'withdraw' && raw >= p.savings) amount = p.savings;
+    if (op === 'save' && raw >= p.cash) amount = p.cash;
     if (!(amount > 0)) return { error: 'Montant invalide.' };
     const s = this.settings;
     if (op === 'save') {
@@ -534,6 +538,16 @@ class MonthGame {
       if (op === 'save' || op === 'withdraw') {
         const r = this.bankOp(p, op, Number(raw));
         if (r.error) return r;
+        return { ok: true };
+      }
+      if (op === 'repay') {
+        // Remboursement libre, par tranches de 1 000 €
+        const amount = Math.floor(Number(raw) / LOAN_UNIT) * LOAN_UNIT;
+        if (!(amount > 0) || amount > p.loans || amount > p.cash) return { error: 'Remboursement impossible.' };
+        p.cash -= amount;
+        p.loans -= amount;
+        this.say(`🏦 ${p.name} rembourse ${fmt(amount)} à la banque.`, p.id);
+        this.emit({ t: 'repay', pid: p.id, amount, loans: p.loans, cash: p.cash }, 1300);
         return { ok: true };
       }
       const max = Math.min(p.loans, Math.floor(p.cash / LOAN_UNIT) * LOAN_UNIT);

@@ -431,54 +431,183 @@ export class MonthTable {
       h('div.mo-pile-txt', h('small', 'Mes affaires'), h('b', me.deals.length ? `${me.deals.length} · ${euro(me.deals.reduce((s, d) => s + d.value, 0))}` : 'Aucune'))
     );
   }
-  /** Livret d'épargne : dépôt (jusqu'au jour limite) et retrait (avec frais hors jour de paye). */
+  /**
+   * Guichet bancaire : onglets (déposer, retirer, rembourser), montant libre
+   * (saisie, − / +, curseur, raccourcis), aperçu du résultat et bouton d'action.
+   * opts = { modes: ['save','withdraw','repay'], payday, canAct, notice, onDone }
+   */
+  bankWidget(opts) {
+    const st = this.state;
+    const me = this.player(this.me);
+    const s = st.settings;
+    const payday = !!opts.payday;
+    const feeRate = payday || me.day === PAYDAY ? 0 : s.withdrawFee || 0;
+    const depositOpen = payday || me.day === PAYDAY || me.day <= s.saveUntil;
+    const MODES = {
+      save: { label: 'Déposer', icon: 'pig', color: '#ff6fb5', step: 100, max: me.cash,
+        closed: !depositOpen ? `Les dépôts sont fermés après le ${s.saveUntil} du mois. Ils rouvrent le jour de paye.` : me.cash < 100 ? 'Pas assez d\'argent en poche pour déposer.' : null },
+      withdraw: { label: 'Retirer', icon: 'wallet', color: '#22c3a6', step: 100, max: me.savings || 0,
+        closed: !(me.savings > 0) ? 'Votre livret est vide pour l\'instant.' : null },
+      repay: { label: 'Rembourser', icon: 'loan', color: '#3f8cff', step: 1000, max: Math.min(me.loans, Math.floor(me.cash / 1000) * 1000),
+        closed: !me.loans ? 'Aucun emprunt à rembourser. Bravo !' : me.cash < 1000 ? 'Il faut au moins 1 000 € en poche pour rembourser.' : null },
+    };
+    const modes = opts.modes.filter((m) => MODES[m]);
+    let mode = modes.find((m) => !MODES[m].closed) || modes[0];
+    let amount = 0;
+    const root = h('div.bw');
+    const tabs = h('div.bw-tabs');
+    const body = h('div.bw-body');
+    root.append(tabs, body);
+    const fmtIn = (n) => (n ? Math.round(n).toLocaleString('fr-FR').replace(/ | /g, ' ') : '');
+    const clamp = (v, m) => {
+      const M = MODES[m];
+      if (!(v > 0)) return 0;
+      if (v >= M.max) return M.max;
+      return Math.max(M.step, Math.round(v / M.step) * M.step);
+    };
+    const render = () => {
+      const M = MODES[mode];
+      root.style.setProperty('--a', M.color);
+      tabs.replaceChildren(...modes.map((m) => h('button.bw-tab' + (m === mode ? '.on' : '') + (MODES[m].closed ? '.dim' : ''), { type: 'button', onclick: () => {
+        mode = m;
+        amount = 0;
+        render();
+      } }, art(MODES[m].icon), h('span', MODES[m].label))));
+      body.replaceChildren();
+      if (M.closed) {
+        body.append(h('div.bw-closed', art(M.icon), h('p', M.closed)));
+        return;
+      }
+      const max = M.max;
+      if (!amount) amount = clamp(Math.min(max, mode === 'repay' ? max : Math.max(M.step, Math.round(max / 2 / M.step) * M.step)), mode);
+      const input = h('input.bw-input', { type: 'text', inputmode: 'numeric', value: fmtIn(amount), 'aria-label': 'Montant' });
+      const range = h('input.bw-range', { type: 'range', min: 0, max, step: M.step, value: amount, 'aria-label': 'Montant' });
+      const summary = h('div.bw-sum');
+      const ctaLabel = h('span');
+      const cta = h('button.bw-cta', { type: 'button' }, art(M.icon), ctaLabel);
+      const chips = h('div.bw-chips');
+      const update = (from) => {
+        if (from !== 'input') input.value = fmtIn(amount);
+        if (from !== 'range') range.value = amount;
+        range.style.setProperty('--p', (max ? (amount / max) * 100 : 0) + '%');
+        const fee = mode === 'withdraw' ? Math.round((amount * feeRate) / 100) : 0;
+        const cash = me.cash + (mode === 'withdraw' ? amount - fee : -amount);
+        const sav = (me.savings || 0) + (mode === 'save' ? amount : mode === 'withdraw' ? -amount : 0);
+        const loans = me.loans - (mode === 'repay' ? amount : 0);
+        const row = (label, before, after, cls = '') => h('div.bw-row' + cls, h('span', label), h('span.bw-from', euro(before)), h('span.bw-arrow', '→'), h('b', euro(after)));
+        summary.replaceChildren(
+          row('En poche', me.cash, cash),
+          mode !== 'repay' ? row('Livret', me.savings || 0, sav, '.sav') : row('Emprunts', me.loans, loans, '.loan'),
+          mode === 'withdraw' ? h('div.bw-fee' + (fee ? '' : '.free'), fee ? `Frais de retrait (${feeRate} %) : −${euro(fee)}` : 'Retrait gratuit aujourd\'hui') : null,
+          mode === 'save' && s.savingsRate ? h('div.bw-fee.free', `+${euro(Math.round((sav * s.savingsRate) / 100))} d'intérêts à la prochaine paye`) : null
+        );
+        const verb = { save: 'Déposer', withdraw: 'Retirer', repay: 'Rembourser' }[mode];
+        ctaLabel.textContent = amount ? `${verb} ${euro(amount)}` : 'Choisissez un montant';
+        cta.disabled = !amount || !opts.canAct;
+        [...chips.children].forEach((c) => c.classList.toggle('on', Number(c.dataset.v) === amount));
+      };
+      const step = (d) => {
+        amount = clamp(Math.min(max, Math.max(0, (amount === max && d < 0 ? Math.floor(max / M.step) * M.step + M.step : amount) + d * M.step)), mode);
+        update();
+      };
+      input.addEventListener('input', () => {
+        const v = Number(input.value.replace(/[^0-9]/g, ''));
+        amount = Math.min(max, v);
+        input.value = fmtIn(v);
+        update('input');
+      });
+      input.addEventListener('blur', () => {
+        amount = clamp(amount, mode);
+        update();
+      });
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') cta.click();
+        if (e.key === 'ArrowUp') (e.preventDefault(), step(1));
+        if (e.key === 'ArrowDown') (e.preventDefault(), step(-1));
+      });
+      range.addEventListener('input', () => {
+        amount = clamp(Number(range.value), mode);
+        update('range');
+      });
+      const quick = mode === 'repay' ? [[1000, '1 000 €'], [Math.floor(max / 2000) * 1000, '½'], [max, 'Tout']] : [[Math.round(max / 4 / 100) * 100, '25 %'], [Math.round(max / 2 / 100) * 100, '50 %'], [Math.round((max * 3) / 4 / 100) * 100, '75 %'], [max, 'Tout']];
+      const seen = new Set();
+      for (const [v, label] of quick) {
+        if (!(v > 0) || v > max || seen.has(v)) continue;
+        seen.add(v);
+        chips.append(h('button.bw-chip', { type: 'button', 'data-v': v, onclick: () => {
+          amount = clamp(v, mode);
+          update();
+        } }, label));
+      }
+      cta.onclick = async () => {
+        amount = clamp(amount, mode);
+        if (!amount || !opts.canAct) return;
+        cta.disabled = true;
+        const ok = await opts.onAct(mode, amount);
+        if (!ok) cta.disabled = false;
+      };
+      body.append(
+        h('div.bw-amount',
+          h('button.bw-step', { type: 'button', 'aria-label': 'Moins', onclick: () => step(-1) }, '−'),
+          h('label.bw-field', input, h('span.bw-cur', '€')),
+          h('button.bw-step', { type: 'button', 'aria-label': 'Plus', onclick: () => step(1) }, '+')
+        ),
+        h('div.bw-max', `Maximum : ${euro(max)}${mode === 'repay' ? ' · par tranches de 1 000 €' : ''}`),
+        range,
+        chips,
+        summary,
+        opts.notice ? h('div.bw-notice', opts.notice) : null,
+        cta
+      );
+      update();
+    };
+    render();
+    return root;
+  }
+
+  /** Livret d'épargne (hors jour de paye) : dépôt jusqu'au jour limite, retrait avec frais. */
   openSavings() {
     const st = this.state;
     const me = this.player(this.me);
     if (!st || !me) return;
     const s = st.settings;
     const canAct = this.myTurn() && st.phase === 'roll';
-    const day = me.day;
-    const depositOpen = day === PAYDAY || day <= s.saveUntil;
-    const feeRate = day === PAYDAY ? 0 : s.withdrawFee || 0;
-    const fee = (a) => Math.round((a * feeRate) / 100);
     let close = null;
-    const run = async (type, amount) => {
-      const res = await this.act(type, { amount });
-      if (res && !res.error && close) close();
-    };
-    const chip = (label, sub, type, amount, ok) => h('button.mo-sav-chip' + (ok ? '' : '.off'), { disabled: !ok || !canAct, onclick: () => run(type, amount) }, h('b', label), sub ? h('small', sub) : null);
-    const cashAll = Math.floor(me.cash / 100) * 100;
+    const widget = this.bankWidget({
+      modes: ['save', 'withdraw'],
+      canAct,
+      notice: canAct ? null : this.myTurn() ? 'Terminez votre action en cours pour utiliser votre livret.' : 'Le livret s\'utilise pendant votre tour, avant de lancer le dé.',
+      onAct: async (mode, amount) => {
+        const res = await this.act(mode, { amount });
+        if (res && !res.error) {
+          if (close) close();
+          return true;
+        }
+        return false;
+      },
+    });
     const body = h('div.mo-sav',
       h('div.mo-sav-head',
         h('div.mo-sav-pig', art('pig')),
         h('div', h('small', 'Livret d\'épargne'), h('b', euro(me.savings || 0)), h('em', s.savingsRate ? `+${s.savingsRate} % à chaque jour de paye` : 'sans intérêts')),
         h('div.mo-sav-cash', h('small', 'En poche'), h('b', euro(me.cash)))
       ),
-      !canAct ? h('div.mo-sav-note', this.myTurn() ? 'Terminez votre action en cours pour utiliser votre livret.' : 'Vous pourrez utiliser votre livret pendant votre tour, avant de lancer le dé.') : null,
-      h('div.mo-sav-sec',
-        h('div.mo-sav-title', '⬇️ Déposer', h('small', depositOpen ? (day === PAYDAY ? 'jour de paye' : `possible jusqu'au ${s.saveUntil} du mois`) : `fermé après le ${s.saveUntil} (réouverture le jour de paye)`)),
-        h('div.mo-sav-row',
-          chip('500 €', null, 'save', 500, depositOpen && me.cash >= 500),
-          chip('1 000 €', null, 'save', 1000, depositOpen && me.cash >= 1000),
-          chip(`Tout`, euro(cashAll), 'save', cashAll, depositOpen && cashAll >= 100)
-        )
+      h('div.mo-sav-rules',
+        h('span', art('calendar', 'inl'), `Dépôts jusqu'au ${s.saveUntil} du mois`),
+        h('span', art('wallet', 'inl'), s.withdrawFee ? `Retrait : ${s.withdrawFee} % de frais` : 'Retrait sans frais'),
+        h('span', art('banknote', 'inl'), 'Gratuit le jour de paye')
       ),
-      h('div.mo-sav-sec',
-        h('div.mo-sav-title', '⬆️ Retirer', h('small', feeRate ? `frais de ${feeRate} % (gratuit le jour de paye)` : 'sans frais')),
-        h('div.mo-sav-row',
-          chip('500 €', feeRate ? `−${euro(fee(500))} de frais` : 'gratuit', 'withdraw', 500, me.savings >= 500),
-          chip('1 000 €', feeRate ? `−${euro(fee(1000))} de frais` : 'gratuit', 'withdraw', 1000, me.savings >= 1000),
-          chip('Tout', me.savings ? (feeRate ? `${euro(me.savings)} · −${euro(fee(me.savings))}` : euro(me.savings)) : '—', 'withdraw', me.savings, me.savings >= 100)
-        )
-      ),
-      h('div.mo-sav-note.soft', '💡 Si vous manquez d\'argent pour payer, l\'épargne est utilisée automatiquement avant tout emprunt (frais compris).')
+      widget
     );
-    const pr = modal({ title: h('span.mo-mtitle', art('pig', 'inl'), 'Mon livret d\'épargne'), body, buttons: [{ label: 'Fermer', value: null }] });
+    const pr = modal({ title: h('span.mo-mtitle', art('pig', 'inl'), 'Mon livret d\'épargne'), body, buttons: [], className: 'mo-sav-modal' });
     close = () => {
       const ov = document.querySelector('#modals .modal-overlay:last-child');
       if (ov && ov._close) ov._close(null);
     };
+    // Bouton de fermeture discret en haut à droite
+    const ov = document.querySelector('#modals .modal-overlay:last-child');
+    if (ov) ov.querySelector('.modal').append(h('button.icon-btn.mo-modal-x', { title: 'Fermer', onclick: () => close() }, '✕'));
     return pr;
   }
 
@@ -582,34 +711,25 @@ export class MonthTable {
       );
     } else if (pd.type === 'payday') {
       const rate = st.settings.savingsRate || 0;
-      const max = Math.min(p.loans, Math.floor(p.cash / 1000) * 1000);
-      const all500 = Math.floor(p.cash / 500) * 500;
-      const account = (cls, icon, label, value, sub) => h('div.mo-acc.' + cls, h('span.mo-acc-ico', icon), h('small', label), h('b', euro(value)), h('em', sub));
-      const btn = (label, choice, cls = '.ghost') => h('button.btn.sm' + cls, { onclick: () => choose(choice) }, label);
+      const account = (cls, icon, label, value, sub) => h('div.mo-acc.' + cls, h('span.mo-acc-ico', art(icon)), h('small', label), h('b', euro(value)), h('em', sub));
       el.append(
         h('div.mo-decide-title', art('bank', 'ttl'), 'Jour de paye : votre banque'),
         who,
         h('div.mo-accounts',
-          account('cash', art('wallet'), 'Porte-monnaie', p.cash, 'disponible'),
-          account('save', art('pig'), 'Livret d\'épargne', p.savings || 0, rate ? `+${rate} % chaque paye` : 'sans intérêts'),
-          account('loan', art('loan'), 'Emprunts', p.loans, p.loans ? `${st.settings.loanRate} % d'intérêts / mois` : 'aucun crédit')
+          account('cash', 'wallet', 'Porte-monnaie', p.cash, 'disponible'),
+          account('save', 'pig', 'Livret d\'épargne', p.savings || 0, rate ? `+${rate} % chaque paye` : 'sans intérêts'),
+          account('loan', 'loan', 'Emprunts', p.loans, p.loans ? `${st.settings.loanRate} % d'intérêts / mois` : 'aucun crédit')
         ),
-        mine ? h('div.mo-bank-ops',
-          h('div.mo-bank-row', h('span.mo-bank-lbl', '🐷 Épargner'),
-            p.cash >= 500 ? btn('+500 €', 'save:500') : null,
-            p.cash >= 1000 ? btn('+1 000 €', 'save:1000') : null,
-            all500 >= 1500 ? btn(`Tout (${euro(all500)})`, 'save:' + all500) : null,
-            p.savings > 0 ? btn(`Retirer ${euro(p.savings)} (gratuit)`, 'withdraw:' + p.savings) : null,
-            p.cash < 500 && !p.savings ? h('small.muted', 'Pas assez d\'argent ce mois-ci') : null
-          ),
-          p.loans > 0 ? h('div.mo-bank-row', h('span.mo-bank-lbl', '🏦 Rembourser'),
-            max >= 1000 ? btn('1 000 €', 'one') : null,
-            max > 1000 ? btn(`Tout possible (${euro(max)})`, 'all') : null,
-            max < 1000 ? h('small.muted', 'Il faut au moins 1 000 € en poche') : null
-          ) : null
-        ) : null,
-        mine ? h('div.mo-decide-note.soft', '💡 L\'épargne rapporte des intérêts et sert automatiquement si vous manquez d\'argent, avant tout emprunt.') : null,
-        mine ? h('div.mo-decide-btns', h('button.btn.primary.lg', { onclick: () => choose('done') }, '✓ Terminer le mois')) : null
+        mine ? this.bankWidget({
+          modes: p.loans ? ['save', 'withdraw', 'repay'] : ['save', 'withdraw'],
+          payday: true,
+          canAct: true,
+          onAct: async (mode, amount) => {
+            await choose(`${mode}:${amount}`);
+            return true;
+          },
+        }) : null,
+        mine ? h('button.mo-finish', { type: 'button', onclick: () => choose('done') }, art('calendar'), h('span', h('b', 'Terminer le mois'), h('small', 'Passer au mois suivant'))) : null
       );
     }
   }
