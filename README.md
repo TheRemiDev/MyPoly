@@ -132,3 +132,21 @@ scripts/            simulation de parties, création d'admin
 - **Festival** : multiplie le loyer d'une de vos propriétés (×2, jusqu'à ×5 s'il revient au même endroit).
 - **Aéroport** : au tour suivant, volez vers la case de votre choix.
 - **Victoire** : faillite de tous les adversaires, triple monopole, monopole de ligne ou monopole balnéaire. Avec une limite de temps ou de tours, le joueur le plus riche l'emporte.
+
+## Application Android
+
+Le dossier `android/` contient l'application **MyPoly pour Android** : le site en plein écran
+(tous les jeux), avec la 3D, la musique, le bouton retour, le partage natif des invitations,
+les vibrations, l'écran toujours allumé pendant la partie et l'ouverture des liens `/r/CODE`
+directement dans l'application.
+
+- **Téléchargement** : `https://<votre site>/downloads/MyPoly.apk` (un bandeau l'annonce aux
+  visiteurs sur Android).
+- **Adresse du site** : `mypolyUrl` dans `android/gradle.properties` (ou variable GitHub
+  `MYPOLY_URL`). Vide : l'application la demande au premier lancement.
+- **Compilation locale** : `cd android && ./gradlew assembleRelease` (SDK Android requis).
+- **Compilation automatique** : l'action GitHub « Application Android » produit l'APK à chaque
+  modification de `android/` (onglet Actions → artefact `MyPoly-android`). Pour que les mises à
+  jour s'installent par-dessus l'ancienne version, ajoutez la clé de signature dans les secrets
+  du dépôt : `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+  `ANDROID_KEY_PASSWORD`.
