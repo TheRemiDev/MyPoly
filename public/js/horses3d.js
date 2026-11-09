@@ -663,6 +663,7 @@ export class Horse3D {
     this.camera.updateProjectionMatrix();
   }
   resetView() {
+    this.setFollowOn(false);
     const from = { ...this.view };
     const fromT = this.target.clone();
     const to = { yaw: 0, pitch: this.basePitch || 1.0, zoom: 1 };
@@ -700,6 +701,7 @@ export class Horse3D {
       el.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, yaw: this.view.yaw, pitch: this.view.pitch, moved: 0, touch: e.pointerType !== 'mouse' };
+      this.dragging = true;
       if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: this.view.zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
@@ -740,6 +742,7 @@ export class Horse3D {
     });
     const up = (e) => {
       pointers.delete(e.pointerId);
+      if (!pointers.size) this.dragging = false;
       if (pointers.size < 2) pinch = null;
       if (drag && drag.moved <= 6 && e.type === 'pointerup') {
         const now = performance.now();
@@ -776,6 +779,7 @@ export class Horse3D {
   }
   /** Déplace le point visé selon un glissement à l'écran (en pixels), sans sortir du plateau. */
   panBy(dx, dy) {
+    this.followPause = performance.now() + 3500;
     const H = this.container.clientHeight || 1;
     const dist = this.camera.position.distanceTo(this.target);
     const k = (2 * dist * Math.tan((this.camera.fov * Math.PI) / 360)) / H;
@@ -803,13 +807,52 @@ export class Horse3D {
       this.fitCamera();
     });
   }
-  /** Bouton loupe : zoom sur une pièce (clé de pion / cheval), ou retour à la vue d'ensemble. */
+  /**
+   * Bouton loupe : zoom qui suit en continu la pièce du joueur dont c'est le tour
+   * (setFollow), ou retour à la vue d'ensemble.
+   */
   toggleZoomOn(key) {
-    if (this.view.zoom > 1.2) return this.resetView();
-    const hz = key && this.horses[key];
-    const p = hz ? hz.obj.position : new THREE.Vector3(0, 0, 0);
+    if (this.followOn) {
+      this.setFollowOn(false);
+      return this.resetView();
+    }
+    if (key) this.followKey = key;
+    this.setFollowOn(true);
+    const o = this.followObj();
+    const p = o ? o.position : new THREE.Vector3(0, 0, 0);
     return this.zoomAt(p.x, p.z, 2.2);
   }
+  setFollowOn(v) {
+    if (this.followOn === v) return;
+    this.followOn = v;
+    if (this.cb.onFollow) this.cb.onFollow(v);
+  }
+  /** Pièce à suivre quand la loupe est active (joueur dont c'est le tour). */
+  setFollow(key) {
+    this.followKey = key;
+  }
+  followObj() {
+    const key = this.followKey;
+    const o = key ? this.horses[key] && this.horses[key].obj : null;
+    return o && o.visible !== false ? o : null;
+  }
+  /** Suivi doux de la pièce (appelé à chaque image). */
+  updateFollow(now) {
+    if (!this.followOn || this.dragging || now < (this.followPause || 0)) return;
+    const o = this.followObj();
+    if (!o) return;
+    if (this.view.zoom < 1.6) this.view.zoom += (2.2 - this.view.zoom) * 0.06;
+    const lim = Math.max(0, 5.2 * (1 - 1 / Math.max(1, this.view.zoom)));
+    const tx = Math.max(-lim, Math.min(lim, o.position.x));
+    const tz = Math.max(-lim, Math.min(lim, o.position.z));
+    const dx = tx - this.target.x;
+    const dz = tz - this.target.z;
+    if (Math.abs(dx) + Math.abs(dz) < 0.002) return;
+    this.target.x += dx * 0.08;
+    this.target.z += dz * 0.08;
+    this.fitCamera();
+  }
+
   setHover(k) {
     if (this.hover === k) return;
     this.hover = k;
@@ -856,6 +899,7 @@ export class Horse3D {
       m.arrow.rotation.y = time * 1.5;
       m.beam.material.opacity = 0.14 + Math.sin(time * 5) * 0.05;
     }
+    this.updateFollow(now);
     let off = null;
     if (this.shakeT > 0) {
       this.shakeT = Math.max(0, this.shakeT - dt);

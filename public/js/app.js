@@ -203,16 +203,47 @@ async function homePage() {
     return true;
   }
   let kind = ['cartes', 'chevaux', 'mois'].includes(storage('game')) ? storage('game') : 'poly';
-  async function create(bots, k = kind) {
+  async function create(bots, k = kind, isPublic = null) {
     kind = k;
     storage('game', k);
     if (!saveGuest()) return;
     await new Promise((r) => (store.socket.connected ? r() : store.socket.once('connect', r)));
     // Les règles enregistrées par le joueur sont appliquées à chaque nouvelle salle (MyPoly)
-    const res = await emit('room:create', { kind, settings: savedSettings(kind) || {}, bots });
+    const settings = { ...(savedSettings(kind) || {}) };
+    if (isPublic !== null) settings.isPublic = isPublic;
+    const res = await emit('room:create', { kind, settings, bots });
     if (res.needAccount) return navigate('/register');
     if (res.error) return toast(res.error, 'error');
     navigate('/r/' + res.code);
+  }
+  /** Choix du type de salle : privée (avec le code) ou publique (visible par tous). */
+  function chooseRoom(g) {
+    const opt = (pub, icon, title, text) => h('button.room-choice' + (pub ? '.pub' : ''), { type: 'button', style: { '--c': g.color }, onclick: () => {
+      document.querySelector('#modals .modal-overlay:last-child')?._close(null);
+      create(0, g.k, pub);
+    } }, h('span.room-choice-ico', icon), h('span.room-choice-txt', h('b', title), h('small', text)), h('span.room-choice-go', '→'));
+    modal({
+      title: `Nouvelle salle · ${g.name}`,
+      body: h('div.room-choices',
+        opt(true, '🌍', 'Salle publique', 'Affichée dans « Salles publiques » : n\'importe qui peut rejoindre. Parfait pour trouver des adversaires.'),
+        opt(false, '🔒', 'Salle privée', 'Seuls tes amis avec le code ou le lien d\'invitation peuvent entrer.'),
+        h('small.muted.room-choice-hint', 'Tu pourras changer d\'avis dans le salon, et ajouter des bots pour compléter la table.')
+      ),
+      buttons: [],
+      className: 'room-choice-modal',
+    });
+  }
+  /** Salle publique depuis la liste vide : choisir le jeu. */
+  function chooseGame() {
+    modal({
+      title: '🌍 Créer une salle publique',
+      body: h('div.room-choices', GAMES_INFO.map((g) => h('button.room-choice', { type: 'button', style: { '--c': g.color }, onclick: () => {
+        document.querySelector('#modals .modal-overlay:last-child')?._close(null);
+        create(0, g.k, true);
+      } }, h('span.room-choice-art', { html: g.art }), h('span.room-choice-txt', h('b', g.name), h('small', g.tag)), h('span.room-choice-go', '→')))),
+      buttons: [],
+      className: 'room-choice-modal',
+    });
   }
   async function join(code) {
     code = (code || codeInput.value).trim().toUpperCase();
@@ -233,7 +264,8 @@ async function homePage() {
     playingEl.textContent = res.rooms.filter((r) => r.state !== 'lobby').length;
     roomsBox.innerHTML = '';
     if (!res.rooms.length) {
-      roomsBox.append(h('div.rooms-empty', h('div', '🌙'), h('b', 'Aucune salle publique pour le moment'), h('span.muted', 'Crée la tienne et rends-la publique dans les règles !')));
+      roomsBox.append(h('div.rooms-empty', h('div', '🌙'), h('b', 'Aucune salle publique pour le moment'), h('span.muted', 'Lance la tienne : n\'importe qui pourra la rejoindre.'),
+        h('button.btn.primary.sm', { onclick: () => chooseGame(), disabled: needAccount }, '🌍 Créer une salle publique')));
     }
     for (const r of res.rooms) {
       const full = r.players >= r.max;
@@ -315,7 +347,7 @@ async function homePage() {
       h('ul.hp-poster-points', g.points.map((x) => h('li', x))),
       h('div.hp-poster-btns',
         h('button.btn.primary', { onclick: () => create(3, g.k), disabled: needAccount }, '⚡ Partie rapide'),
-        h('button.btn.ghost', { onclick: () => create(0, g.k), disabled: needAccount }, '✨ Salle privée')
+        h('button.btn.ghost', { onclick: () => chooseRoom(g), disabled: needAccount }, '✨ Créer une salle')
       )
     ),
     h('span.hp-poster-count', { 'data-kind': g.k })

@@ -808,6 +808,13 @@ function attach(server) {
       const res = data.action === 'revive' ? room.game.adminRevive(String(data.pid || ''), amount, who) : data.action === 'give' ? room.game.adminGive(String(data.pid || ''), amount, who) : { error: 'Action inconnue.' };
       if (res.ok) {
         const p = room.game.player(String(data.pid));
+        p.stats.adminGifts = (p.stats.adminGifts || 0) + amount;
+        try {
+          require('./db').prepare('INSERT INTO audit_log (actor_id, action, target_id, details, created_at) VALUES (?, ?, ?, ?, ?)')
+            .run(ident.userId || null, 'game_' + data.action, p.userId || null, JSON.stringify({ room: room.code, player: p.name, amount }), Date.now());
+        } catch (e) {
+          console.error('[audit]', e.message);
+        }
         systemChat(room, data.action === 'revive' ? `✨ ${who} (admin) fait renaître ${p.name} avec ${amount}K.` : `🎁 ${who} (admin) offre ${amount}K à ${p.name}.`);
       }
       reply(cb, res);

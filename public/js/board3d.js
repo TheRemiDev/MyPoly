@@ -1599,7 +1599,8 @@ export class Board3D {
 
   /** Recadre la caméra sur un point du plateau, puis revient à la vue du joueur. */
   async focusPoint(x, z, zoom = 1.55, hold = 700) {
-    if (this.dragging) return;
+    // Loupe active : la caméra suit déjà la pièce du joueur
+    if (this.dragging || this.followOn) return;
     const tok = ++this.focusTok;
     if (!this.focusHome) this.focusHome = { target: this.target.clone(), zoom: this.view.zoom };
     const fromT = this.target.clone();
@@ -2403,6 +2404,7 @@ export class Board3D {
     this.camera.updateProjectionMatrix();
   }
   resetView() {
+    this.setFollowOn(false);
     this.focusTok++;
     this.focusHome = null;
     const fromT = this.target.clone();
@@ -2534,6 +2536,8 @@ export class Board3D {
   }
   /** Déplace le point visé selon un glissement à l'écran (en pixels), sans sortir du plateau. */
   panBy(dx, dy) {
+    // Le joueur déplace la vue lui-même : le suivi automatique attend un peu
+    this.followPause = performance.now() + 3500;
     const H = this.container.clientHeight || 1;
     const dist = this.camera.position.distanceTo(this.target);
     const k = (2 * dist * Math.tan((this.camera.fov * Math.PI) / 360)) / H;
@@ -2566,13 +2570,52 @@ export class Board3D {
       this.fitCamera();
     });
   }
-  /** Bouton loupe : zoom sur un pion, ou retour à la vue d'ensemble. */
-  toggleZoomOn(pid) {
-    if (this.view.zoom > 1.2) return this.resetView();
-    const pw = this.pawns && this.pawns[pid];
-    const p = pw && pw.obj.visible ? pw.obj.position : new THREE.Vector3(0, 0, 0);
+  /**
+   * Bouton loupe : zoom qui suit en continu la pièce du joueur dont c'est le tour
+   * (setFollow), ou retour à la vue d'ensemble.
+   */
+  toggleZoomOn(key) {
+    if (this.followOn) {
+      this.setFollowOn(false);
+      return this.resetView();
+    }
+    if (key) this.followKey = key;
+    this.setFollowOn(true);
+    const o = this.followObj();
+    const p = o ? o.position : new THREE.Vector3(0, 0, 0);
     return this.zoomAt(p.x, p.z, 2.2);
   }
+  setFollowOn(v) {
+    if (this.followOn === v) return;
+    this.followOn = v;
+    if (this.cb.onFollow) this.cb.onFollow(v);
+  }
+  /** Pièce à suivre quand la loupe est active (joueur dont c'est le tour). */
+  setFollow(key) {
+    this.followKey = key;
+  }
+  followObj() {
+    const key = this.followKey;
+    const o = key ? this.pawns[key] && this.pawns[key].obj : null;
+    return o && o.visible !== false ? o : null;
+  }
+  /** Suivi doux de la pièce (appelé à chaque image). */
+  updateFollow(now) {
+    if (!this.followOn || this.dragging || now < (this.followPause || 0)) return;
+    const o = this.followObj();
+    if (!o) return;
+    if (this.view.zoom < 1.6) this.view.zoom += (2.2 - this.view.zoom) * 0.06;
+    const lim = Math.max(0, 5.2 * (1 - 1 / Math.max(1, this.view.zoom)));
+    const tx = Math.max(-lim, Math.min(lim, o.position.x));
+    const tz = Math.max(-lim, Math.min(lim, o.position.z));
+    const dx = tx - this.target.x;
+    const dz = tz - this.target.z;
+    if (Math.abs(dx) + Math.abs(dz) < 0.002) return;
+    this.target.x += dx * 0.08;
+    this.target.z += dz * 0.08;
+    this.fitCamera();
+  }
+
   setHover(i) {
     if (this.hover === i) return;
     this.hover = i;
@@ -2684,6 +2727,7 @@ export class Board3D {
       if (c.position.x > 6) c.position.x = -6;
     }
     this.updatePlanes(realDt, time);
+    this.updateFollow(now);
     // Tremblement
     let shakeOff = null;
     if (this.shakeT > 0) {

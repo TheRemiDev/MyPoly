@@ -149,6 +149,7 @@ export class HorseTable {
     if (webglAvailable()) {
       try {
         this.b3 = new Horse3D(this.host, {
+          onFollow: (on) => v.setZoomFab(on),
           onClick: (key) => {
             const [pid, i] = key.split('|');
             this.move(Number(i), pid);
@@ -160,21 +161,8 @@ export class HorseTable {
           },
         });
         v.gameEl.classList.add('webgl');
-        // Loupe : zoom sur mon cheval le plus avancé
-        v.addZoomFab(() => {
-          const me = this.player(this.me);
-          let key = null;
-          if (me) {
-            let best = -2;
-            me.horses.forEach((r, i) => {
-              if (r > best && r < CENTER) {
-                best = r;
-                key = me.id + '|' + i;
-              }
-            });
-          }
-          this.b3.toggleZoomOn(key);
-        });
+        // Loupe : zoom qui suit le cheval du joueur dont c'est le tour
+        v.addZoomFab(() => this.b3.toggleZoomOn(this.leadKey(this.state ? this.state.current : this.me)));
       } catch (e) {
         console.error('WebGL indisponible', e);
         this.b3 = null;
@@ -195,6 +183,21 @@ export class HorseTable {
       if (!e.repeat && n >= 1 && n <= 4 && this.myMove()) this.move(n - 1);
     };
     document.addEventListener('keydown', this.onKey);
+  }
+
+  /** Cheval le plus avancé d'un joueur (pour la loupe), sinon son premier cheval. */
+  leadKey(pid) {
+    const p = this.player(pid);
+    if (!p) return null;
+    let key = pid + '|0';
+    let best = -2;
+    p.horses.forEach((r, i) => {
+      if (r > best && r < CENTER) {
+        best = r;
+        key = pid + '|' + i;
+      }
+    });
+    return key;
   }
 
   destroy() {
@@ -642,6 +645,7 @@ export class HorseTable {
     const d = this.disp;
     switch (ev.t) {
       case 'turn':
+        if (this.b3) this.b3.setFollow(this.leadKey(ev.pid));
         this.state = { ...this.state, current: ev.pid, phase: 'roll', dice: null };
         d.dice = null;
         this.renderPlayers();
@@ -678,6 +682,7 @@ export class HorseTable {
         await sleep(250);
         return;
       case 'exit': {
+        if (this.b3) this.b3.setFollow(ev.pid + '|' + ev.horse);
         d.horses[ev.pid][ev.horse] = 0;
         this.renderHorses(true, ev.pid + '|' + ev.horse);
         Sound.play('buy');
@@ -690,6 +695,7 @@ export class HorseTable {
         return;
       }
       case 'move': {
+        if (this.b3) this.b3.setFollow(ev.pid + '|' + ev.horse);
         for (const r of ev.path) {
           d.horses[ev.pid][ev.horse] = r;
           this.renderHorses(true);

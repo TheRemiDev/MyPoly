@@ -698,7 +698,8 @@ class MonthGame {
     const p = this.cur;
     let res;
     if (this.phase === 'roll') res = this.doRoll(p);
-    else res = this.decide(p, this.botChoice(p, !p.isBot));
+    // Temps écoulé ou joueur absent : mêmes décisions qu'un bot (pas de refus systématique)
+    else res = this.decide(p, this.botChoice(p, false));
     if (res && res.error) this.endTurn(p);
     this.flush();
   }

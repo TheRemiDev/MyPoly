@@ -339,7 +339,7 @@ class Game {
       melenchonLoot: this.melenchonLoot || 0,
       duration: Math.round(((this.endedAt || Date.now()) - this.startedAt) / 1000),
       rounds: this.round,
-      players: this.players.map((p) => ({
+      players: this.players.map((p, k) => ({
         id: p.id,
         userId: p.userId,
         name: p.name,
@@ -348,6 +348,7 @@ class Game {
         bankrupt: p.bankrupt,
         netWorth: this.netWorth(p),
         properties: this.owned(p).length,
+        order: k + 1, // place dans l'ordre de jeu (1 = joue en premier)
         stats: p.stats,
       })),
     };
@@ -1095,15 +1096,22 @@ class Game {
     if (!p.connected || p.afk) {
       // Joueur absent : il est joué automatiquement après un court délai
       this.deadline = Date.now() + base + 6000;
-      this.timer = setTimeout(() => this.autoAct(true), base + 6000);
+      this.timer = setTimeout(() => {
+        p.stats.autoTurns = (p.stats.autoTurns || 0) + 1;
+        this.autoAct(true);
+      }, base + 6000);
       return;
     }
     if (tt) {
       this.deadline = Date.now() + base + tt;
       this.timer = setTimeout(() => {
         p.timeouts = (p.timeouts || 0) + 1;
+        p.stats.timeouts = (p.stats.timeouts || 0) + 1;
         if (p.timeouts >= 3) p.afk = true;
-        this.autoAct(false);
+        // Temps écoulé : le jeu joue à sa place avec une vraie stratégie (comme un bot),
+        // et non plus en refusant tout achat — sinon les joueurs lents étaient très désavantagés.
+        if (this.phase !== 'roll') this.say(`⏱️ Temps écoulé : ${p.name} est joué automatiquement.`, p.id);
+        this.autoAct(true);
       }, base + tt);
     } else {
       this.deadline = null;

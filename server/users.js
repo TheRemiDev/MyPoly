@@ -126,7 +126,7 @@ const recordGame = db.transaction((room, result, settings) => {
     winner_name: winner ? winner.name : null,
     winner_user_id: winner ? winner.userId : null,
     settings: JSON.stringify(settings),
-    players: JSON.stringify(result.players.map((p) => ({ name: p.name, rank: p.rank, bot: p.isBot, userId: p.userId, netWorth: p.netWorth }))),
+    players: JSON.stringify(result.players.map((p) => ({ name: p.name, rank: p.rank, bot: p.isBot, userId: p.userId, netWorth: p.netWorth, order: p.order, timeouts: (p.stats && p.stats.timeouts) || 0, autoTurns: (p.stats && p.stats.autoTurns) || 0, adminGifts: (p.stats && p.stats.adminGifts) || 0 }))),
   }).lastInsertRowid;
 
   const rewards = {};
