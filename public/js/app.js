@@ -1072,6 +1072,7 @@ async function adminPage() {
     ['rooms', '🎲', 'Salles en direct'],
     ['site', '⚙️', 'Paramètres du site'],
     ['announce', '📢', 'Annonce'],
+    ['bans', '🔨', 'Bannis'],
     ['audit', '📝', 'Journal'],
   ];
   let tab = location.hash.slice(1) || 'overview';
@@ -1261,9 +1262,38 @@ async function adminPage() {
         } }, '📢 Diffuser'))
       );
     },
+    async bans() {
+      const { bans } = await api('/admin/bans');
+      // Un bannissement = une personne (compte et navigateurs bannis ensemble)
+      const seen = new Set();
+      const list = bans.filter((b) => {
+        const k = b.created_at + '|' + b.name;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      return panel('🔨 Joueurs bannis', 'Bannissements prononcés depuis une partie (comptes et invités). Les comptes bannis apparaissent aussi dans « Joueurs ».',
+        list.length
+          ? h('div.audit-list', list.map((b) => h('div.audit-item',
+              h('span.audit-when', timeAgo(b.created_at)),
+              h('span.audit-what', b.key.startsWith('u:') ? '👤 Compte' : '🙋 Invité'),
+              h('span.audit-who', h('b', b.name || '?'), ` · ${b.until ? 'jusqu\'au ' + new Date(b.until).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'définitif'}`, b.reason ? ` · ${b.reason}` : '', b.by_name ? ` · par ${b.by_name}` : ''),
+              isAdmin ? h('button.btn.sm.ghost', { onclick: async () => {
+                try {
+                  await api('/admin/bans/' + encodeURIComponent(b.key), { method: 'DELETE' });
+                  toast(`✅ ${b.name} débanni(e)`, 'success');
+                  render();
+                } catch (e) {
+                  toast(e.message, 'error');
+                }
+              } }, '✅ Débannir') : null
+            )))
+          : h('div.empty', 'Personne n\'est banni pour le moment.')
+      );
+    },
     async audit() {
       const { entries } = await api('/admin/audit');
-      const labels = { role: '🎭 Rôle', vip: '👑 VIP', ban: '⛔ Bannissement', unban: '✅ Débannissement', reset_stats: '🧹 Reset stats', grant_badge: '🎖️ Badge', close_room: '🚪 Salle fermée', announce: '📢 Annonce', display_name: '✏️ Pseudo', reset_display_name: '✏️ Pseudo réinitialisé', site_settings: '⚙️ Paramètres du site' };
+      const labels = { role: '🎭 Rôle', vip: '👑 VIP', ban: '⛔ Bannissement', unban: '✅ Débannissement', reset_stats: '🧹 Reset stats', grant_badge: '🎖️ Badge', close_room: '🚪 Salle fermée', announce: '📢 Annonce', game_kick: '⛔ Expulsion en partie', game_ban: '🔨 Bannissement en partie', game_give: '🎁 Don en partie', game_revive: '✨ Résurrection', display_name: '✏️ Pseudo', reset_display_name: '✏️ Pseudo réinitialisé', site_settings: '⚙️ Paramètres du site' };
       return panel('📝 Journal d\'audit', 'Les 100 dernières actions du staff et changements sensibles.',
         entries.length
           ? h('div.audit-list', entries.map((e) => h('div.audit-item',
@@ -1319,6 +1349,21 @@ async function boot() {
     app.innerHTML = '<div class="page center"><h1>😵</h1><p>Impossible de joindre le serveur. Réessayez dans un instant.</p></div>';
     return;
   }
+  // Modération : quelqu'un a été expulsé (toute la salle) ou banni (tout le site)
+  on('mod:notice', (d) => {
+    Sound.play(d.ban ? 'crumble' : 'error');
+    toast(d.text, 'warn', 9000);
+  });
+  // Je suis banni : message clair, et on cesse de se reconnecter
+  on('banned', (d) => {
+    try {
+      store.socket && store.socket.io.opts && (store.socket.io.opts.reconnection = false);
+      store.socket && store.socket.disconnect();
+    } catch {}
+    navigate('/');
+    modal({ title: '🔨 Vous avez été banni(e)', dismissable: false, buttons: [],
+      body: h('div', h('p', `Vous ne pouvez plus jouer sur MyPoly ${d.text || ''}${d.by ? ` (décision de ${d.by})` : ''}.`), d.reason ? h('p', h('b', 'Motif : '), d.reason) : null) });
+  });
   on('announce', (d) => {
     Sound.play('turn');
     modal({ title: '📢 Annonce', body: h('p', d.text) });

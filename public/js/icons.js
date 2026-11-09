@@ -13,6 +13,7 @@ const P = {
   soundOff: '<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="m16 9 5 6M21 9l-5 6"/>',
   fullscreen: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  ban: '<circle cx="12" cy="12" r="8.5"/><path d="m6 6 12 12"/>',
   exit: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/>',
   link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
   shield: '<path d="M12 3 4.5 6v6c0 4.4 3.2 7.6 7.5 9 4.3-1.4 7.5-4.6 7.5-9V6Z"/><path d="m9 12 2 2 4-4"/>',

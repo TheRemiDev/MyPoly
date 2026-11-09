@@ -42,6 +42,25 @@ function cleanText(s, max) {
     .slice(0, max);
 }
 
+// ------------------------------------------------------------ modération (bannissements)
+const DB = require('./db');
+/** Clé « invité » d'un navigateur (envoyée même quand on est connecté à un compte). */
+function guestKeyOf(socket) {
+  const gid = (socket.handshake.auth || {}).guestId;
+  return /^[a-zA-Z0-9]{16,64}$/.test(gid || '') ? 'g:' + crypto.createHash('sha256').update(gid).digest('hex').slice(0, 16) : null;
+}
+/** Bannissement en cours pour l'une de ces clés (compte ou navigateur) ? */
+function activeBan(keys) {
+  const now = Date.now();
+  for (const k of keys) {
+    if (!k) continue;
+    const row = DB.prepare('SELECT * FROM mod_bans WHERE key = ?').get(k);
+    if (row && (!row.until || row.until > now)) return row;
+  }
+  return null;
+}
+const banText = (b) => (b.until ? `jusqu'au ${new Date(b.until).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' })}` : 'définitivement');
+
 /** Identité d'une connexion : compte enregistré ou invité. */
 function identify(socket) {
   const token = parseCookie(socket.handshake.headers.cookie, COOKIE);
@@ -433,6 +452,14 @@ function attach(server) {
   io.on('connection', (socket) => {
     const ident = identify(socket);
     socket.data.ident = ident;
+    socket.data.guestKey = guestKeyOf(socket);
+    // Joueur banni (compte ou navigateur) : on le prévient et on coupe
+    const ban = activeBan([ident.key, socket.data.guestKey]);
+    if (ban) {
+      socket.emit('banned', { reason: ban.reason || '', until: ban.until || null, text: banText(ban) });
+      setTimeout(() => socket.disconnect(true), 300);
+      return;
+    }
     socket.data.room = null;
     socket.emit('hello', { key: ident.key, name: ident.name, guest: ident.guest });
 
@@ -565,6 +592,7 @@ function attach(server) {
       const code = String((data && data.code) || '').toUpperCase().trim();
       const room = rooms.get(code);
       if (!room) return reply(cb, { error: 'Salle introuvable. Vérifiez le code.' });
+      if (room.kicked && room.kicked.has(ident.key) && ident.role !== 'admin') return reply(cb, { error: 'Vous avez été expulsé(e) de cette salle par un administrateur.' });
       const seated = room.seats.some((s) => s.key === ident.key);
       if (!seated && room.state === 'lobby') {
         if (room.seats.length >= room.settings.maxPlayers) {
@@ -851,6 +879,86 @@ function attach(server) {
         systemChat(room, data.action === 'revive' ? `✨ ${who} (admin) fait renaître ${p.name} avec ${amount}K.` : `🎁 ${who} (admin) offre ${amount}K à ${p.name}.`);
       }
       reply(cb, res);
+    });
+
+    // ------------------------------------------------ modération (administrateurs, tous les jeux)
+    /** Personnes présentes dans la salle (joueurs et spectateurs connectés). */
+    socket.on('admin:people', (cb) => {
+      const room = current();
+      if (ident.role !== 'admin') return reply(cb, { error: 'Action réservée aux administrateurs.' });
+      if (!room) return reply(cb, { error: 'Aucune salle.' });
+      const people = new Map();
+      for (const s of room.seats) if (!s.isBot) people.set(s.key, { key: s.key, name: s.name, role: s.role, seated: true, connected: isConnected(room, s.key) });
+      for (const [key, set] of room.sockets) {
+        if (people.has(key)) continue;
+        const sock = io.sockets.sockets.get([...set][0]);
+        const id = sock && sock.data.ident;
+        if (id) people.set(key, { key, name: id.name, role: id.role, seated: false, connected: true });
+      }
+      reply(cb, { people: [...people.values()].filter((p) => p.key !== ident.key) });
+    });
+
+    /** Expulser (de cette salle) ou bannir (du site, pour une durée ou définitivement). */
+    socket.on('admin:moderate', (data, cb) => {
+      const room = current();
+      if (ident.role !== 'admin') return reply(cb, { error: 'Action réservée aux administrateurs.' });
+      if (!room) return reply(cb, { error: 'Aucune salle.' });
+      const action = data && data.action;
+      const key = String((data && data.key) || '');
+      if (!['kick', 'ban'].includes(action)) return reply(cb, { error: 'Action inconnue.' });
+      if (key === ident.key) return reply(cb, { error: 'Vous ne pouvez pas vous viser vous-même.' });
+      const seatRow = room.seats.find((x) => x.key === key && !x.isBot);
+      const set = room.sockets.get(key);
+      const anySock = set && io.sockets.sockets.get([...set][0]);
+      const target = seatRow ? { name: seatRow.name, role: seatRow.role } : anySock ? anySock.data.ident : null;
+      if (!target) return reply(cb, { error: 'Cette personne n\'est plus dans la salle.' });
+      if (target.role === 'admin') return reply(cb, { error: 'Impossible de viser un autre administrateur.' });
+      const reason = cleanText(data.reason, 120);
+      const minutes = Math.max(0, Math.min(60 * 24 * 365, Math.round(Number(data.minutes) || 0)));
+      const ban = action === 'ban';
+      const until = ban && minutes ? Date.now() + minutes * 60000 : null;
+      const userId = key.startsWith('u:') ? Number(key.slice(2)) : null;
+
+      // 1. Sortie de la partie / de la salle
+      if (room.game && room.state === 'playing' && room.game.player(key)) room.game.forfeit(key);
+      else if (seatRow && room.state !== 'playing') removeSeat(room, key);
+      (room.kicked ||= new Set()).add(key);
+
+      // 2. Bannissement : compte + navigateur(s) utilisés, coupure de toutes ses connexions
+      const sockets = [...io.sockets.sockets.values()].filter((x) => x.data.ident && x.data.ident.key === key);
+      if (ban) {
+        const keys = new Set([key, ...sockets.map((x) => x.data.guestKey).filter(Boolean)]);
+        const ins = DB.prepare('INSERT OR REPLACE INTO mod_bans (key, name, until, reason, by_id, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+        for (const k of keys) ins.run(k, target.name, until, reason || null, ident.userId || null, Date.now());
+        if (userId && !until) DB.prepare('UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?').run(reason || 'Banni par un administrateur', userId);
+      }
+      const text = ban ? banText({ until }) : '';
+      for (const sk of sockets) {
+        if (ban) {
+          sk.emit('banned', { reason, until, text, by: ident.name });
+          setTimeout(() => sk.disconnect(true), 400);
+        } else if (sk.data.room === room.code) {
+          sk.leave('room:' + room.code);
+          sk.data.room = null;
+          sk.emit('room:kicked', { by: ident.name, reason });
+        }
+      }
+      room.sockets.delete(key);
+      try {
+        DB.prepare('INSERT INTO audit_log (actor_id, action, target_id, details, created_at) VALUES (?, ?, ?, ?, ?)')
+          .run(ident.userId || null, ban ? 'game_ban' : 'game_kick', userId, JSON.stringify({ room: room.code, player: target.name, key, reason, minutes }), Date.now());
+      } catch (e) {
+        console.error('[audit]', e.message);
+      }
+
+      // 3. Prévenir : toute la salle pour une expulsion, tout le site pour un bannissement
+      const why = reason ? ` (motif : ${reason})` : '';
+      const msg = ban ? `🔨 ${target.name} a été banni(e) ${text} par ${ident.name}${why}.` : `⛔ ${target.name} a été expulsé(e) de la partie par ${ident.name}${why}.`;
+      systemChat(room, msg);
+      if (ban) io.emit('mod:notice', { text: msg, ban: true });
+      else io.to('room:' + room.code).emit('mod:notice', { text: msg, ban: false });
+      if (!cleanupIfEmpty(room)) broadcastRoom(room);
+      reply(cb, { ok: true });
     });
 
     socket.on('game:forfeit', (cb) => {

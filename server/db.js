@@ -130,6 +130,15 @@ CREATE TABLE IF NOT EXISTS month_stats (
   play_seconds INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS mod_bans (
+  key TEXT PRIMARY KEY,
+  name TEXT,
+  until INTEGER,
+  reason TEXT,
+  by_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor_id INTEGER,
