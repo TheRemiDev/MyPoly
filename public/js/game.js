@@ -346,6 +346,16 @@ class RoomView {
     } else els.title.append(h('h1', r.name));
     els.title.prepend(h('div.game-kind-tag.k-' + this.kind, GAMES[this.kind].tag));
     els.title.append(h('div.muted', `${r.seats.length}/${r.settings.maxPlayers} joueurs${r.spectators ? ` · ${r.spectators} spectateur(s)` : ''}`));
+    // Salle publique / privée : bien visible, et modifiable d'un geste par l'hôte
+    const pub = !!r.settings.isPublic;
+    els.title.append(h('div.lobby-privacy' + (pub ? '.pub' : ''),
+      this.isHost
+        ? h('button.privacy-switch', { type: 'button', role: 'switch', 'aria-checked': String(pub), onclick: () => this.saveSettings({ isPublic: !pub }) },
+            h('span.privacy-opt' + (!pub ? '.on' : ''), '🔒 Privée'),
+            h('span.privacy-opt' + (pub ? '.on' : ''), '🌍 Publique'))
+        : h('span.privacy-badge', pub ? '🌍 Salle publique' : '🔒 Salle privée'),
+      h('small.muted', pub ? 'Visible dans « Salles publiques » : tout le monde peut rejoindre.' : 'Seuls ceux qui ont le code ou le lien peuvent rejoindre.')
+    ));
 
     // Sièges
     els.seats.innerHTML = '';
@@ -678,9 +688,11 @@ class RoomView {
         onBoard: () => Sound.play('click'),
         onTakeoff: () => Sound.play('fly'),
         onDrop: () => Sound.play('card'),
+        onFollow: (on) => this.setZoomFab(on),
       });
       this.gameEl.classList.add('webgl');
-      this.addZoomFab(() => this.b3 && this.b3.toggleZoomOn(this.me));
+      this.addZoomFab(() => this.b3 && this.b3.toggleZoomOn(this.state ? this.state.current : this.me));
+      if (this.state) this.b3.setFollow(this.state.current);
     } catch (e) {
       console.error('WebGL indisponible', e);
       this.b3 = null;
@@ -692,6 +704,13 @@ class RoomView {
     if (!this.gameEl || this.gameEl.querySelector('.zoom-fab')) return;
     const svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.5v6M7.5 10.5h6"/></svg>';
     this.gameEl.append(h('button.zoom-fab', { type: 'button', title: 'Zoomer sur mon pion (ou pincez / double-touchez le plateau)', 'aria-label': 'Zoom', html: svg, onclick }));
+  }
+  setZoomFab(on) {
+    const f = this.gameEl && this.gameEl.querySelector('.zoom-fab');
+    if (f) {
+      f.classList.toggle('on', on);
+      f.title = on ? 'Loupe active : la caméra suit le joueur dont c\'est le tour (toucher pour revenir)' : 'Zoomer et suivre le joueur dont c\'est le tour';
+    }
   }
   disable3d() {
     this.gameEl && this.gameEl.querySelector('.zoom-fab')?.remove();
@@ -1413,6 +1432,7 @@ class RoomView {
         this.addLog(ev);
         return;
       case 'turn':
+        if (this.b3) this.b3.setFollow(ev.pid); // loupe active : la caméra suit le joueur dont c'est le tour
         this.renderPlayers(ev.pid);
         if (ev.pid === this.me) {
           Sound.play('turn');

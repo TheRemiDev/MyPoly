@@ -156,8 +156,9 @@ export class MonthTable {
     v.root.append(v.gameEl, v.endOverlay);
     if (webglAvailable()) {
       try {
-        this.b3 = new Month3D(this.host, { onHover: (day) => this.hoverCell(day) });
-        v.addZoomFab(() => this.b3.toggleZoomOn(this.me));
+        this.b3 = new Month3D(this.host, { onHover: (day) => this.hoverCell(day), onFollow: (on) => v.setZoomFab(on) });
+        // Loupe : zoom qui suit le pion du joueur dont c'est le tour
+        v.addZoomFab(() => this.b3.toggleZoomOn(this.state ? this.state.current : this.me));
         this.host.addEventListener('pointermove', (e) => {
           this.tipEl.style.left = e.clientX + 'px';
           this.tipEl.style.top = e.clientY + 'px';
@@ -349,6 +350,7 @@ export class MonthTable {
         if (it) it.flight = true;
       }
       this.b3.placePawns(list, animate);
+      this.b3.setFollow(st.current);
       this.updateCalendar();
       const cur = this.player(st.current);
       this.b3.setCurrent(cur && !st.over ? this.disp.days[cur.id] ?? cur.day : null, cur && cur.color);

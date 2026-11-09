@@ -131,7 +131,7 @@ export function modal({ title, body, buttons = [{ label: 'OK', value: true, clas
         'div.modal.' + (className || 'default'),
         title && h('div.modal-title', title),
         h('div.modal-body', body),
-        buttons.length &&
+        buttons.length > 0 &&
           h(
             'div.modal-actions',
             buttons.map((b) =>

@@ -3208,3 +3208,36 @@ body:not(.in-game) {
 /* Les phrases rapides défilent dans leur propre bande : elles ne doivent jamais élargir la page */
 .chat-quick { width: 100%; min-width: 0; contain: inline-size; }
 .chat, .lobby-grid > * { min-width: 0; }
+@media (pointer: coarse) {
+  .game.webgl .zoom-fab.on { color: #fff; background: linear-gradient(135deg, #ff5a5f, #ff8a3d); box-shadow: 0 0 0 3px rgba(255, 255, 255, .85), 0 8px 22px rgba(255, 90, 95, .5); animation: fabPulse 2s ease-in-out infinite; }
+  @keyframes fabPulse { 50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, .5), 0 8px 22px rgba(255, 90, 95, .5); } }
+}
+
+/* =====================================================================
+   Salles publiques : choix à la création, interrupteur dans le salon
+   ===================================================================== */
+.modal.room-choice-modal { width: min(480px, 94vw); }
+.room-choices { display: flex; flex-direction: column; gap: 10px; }
+.room-choice { --c: #ff8a3d; display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border: 0; border-radius: 18px; text-align: left; color: #fff; font: inherit; cursor: pointer;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--c) 20%, transparent), rgba(255, 255, 255, .03)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 40%, rgba(255, 255, 255, .1)); transition: transform .15s cubic-bezier(.2, .9, .3, 1.2), box-shadow .2s; }
+.room-choice.pub { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 70%, transparent), 0 8px 22px rgba(0, 0, 0, .25); }
+@media (hover: hover) and (pointer: fine) { .room-choice:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 2px var(--c), 0 10px 24px rgba(0, 0, 0, .3); } }
+.room-choice:active { transform: scale(.98); }
+.room-choice-ico { font-size: 2rem; flex: none; }
+.room-choice-art { width: 76px; height: 57px; flex: none; }
+.room-choice-art svg { width: 100%; height: 100%; display: block; }
+.room-choice-txt { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.room-choice-txt b { font-size: 1.05rem; }
+.room-choice-txt small { color: #c8cbec; font-size: .82rem; line-height: 1.35; }
+.room-choice-go { flex: none; font-size: 1.3rem; font-weight: 900; color: var(--c); }
+.room-choice-hint { display: block; text-align: center; margin-top: 4px; }
+.rooms-empty .btn { margin-top: 10px; }
+
+.lobby-privacy { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.lobby-privacy small { font-size: .8rem; }
+.privacy-switch { display: inline-flex; padding: 4px; gap: 2px; border: 0; border-radius: 99px; background: rgba(0, 0, 0, .3); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); cursor: pointer; font: inherit; }
+.privacy-opt { padding: 7px 14px; border-radius: 99px; color: #aab0d6; font-weight: 800; font-size: .88rem; transition: background .2s, color .2s; }
+.privacy-opt.on { color: #fff; background: rgba(255, 255, 255, .14); }
+.lobby-privacy.pub .privacy-opt.on { background: linear-gradient(90deg, #2ecc71, #1fa863); box-shadow: 0 4px 14px rgba(46, 204, 113, .4); }
+.privacy-badge { padding: 6px 12px; border-radius: 99px; font-weight: 800; font-size: .85rem; background: rgba(255, 255, 255, .08); }
+.lobby-privacy.pub .privacy-badge { background: rgba(46, 204, 113, .22); color: #9ff0bf; }
