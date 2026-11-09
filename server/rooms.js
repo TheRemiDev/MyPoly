@@ -654,15 +654,48 @@ function attach(server) {
       reply(cb, { ok: true });
     });
 
-    socket.on('room:rematch', (cb) => {
-      const room = current();
-      if (!isHost(room) || room.state !== 'ended') return reply(cb, { error: 'Action réservée à l\'hôte.' });
+    const backToLobby = (room) => {
       if (room.game) room.game.destroy();
       room.game = null;
       room.state = 'lobby';
       room.result = null;
       room.seats = room.seats.filter((s) => s.isBot || isConnected(room, s.key));
+    };
+    socket.on('room:rematch', (cb) => {
+      const room = current();
+      if (!isHost(room) || room.state !== 'ended') return reply(cb, { error: 'Action réservée à l\'hôte.' });
+      backToLobby(room);
       systemChat(room, '🔁 Nouvelle partie ! Retour au salon.');
+      broadcastRoom(room);
+      reply(cb, { ok: true });
+    });
+
+    // Changer de jeu sans quitter la table : tout le monde reste assis (salon ou fin de partie)
+    socket.on('room:kind', (data, cb) => {
+      const room = current();
+      if (!isHost(room) || room.state === 'playing') return reply(cb, { error: 'Seul l\'hôte peut changer de jeu, en dehors d\'une partie.' });
+      const kind = kindOf(data && data.kind);
+      if (kind === room.kind && room.state === 'lobby') return reply(cb, { ok: true });
+      // Règles du nouveau jeu (celles enregistrées par l'hôte si fournies), en gardant les options de la salle
+      const keep = { isPublic: !!room.settings.isPublic, allowSpectators: room.settings.allowSpectators !== false };
+      let settings = sanitizeFor(kind, { ...((data && data.settings) || {}), ...keep });
+      if (kind === 'poly') settings = { ...settings, melenchon: ident.role === 'admin' && !!(data && data.settings && data.settings.melenchon), politicalBoard: ident.role === 'admin' && !!(data && data.settings && data.settings.politicalBoard) };
+      const limit = sanitizeFor(kind, { maxPlayers: 99 }).maxPlayers;
+      const seated = room.state === 'ended' ? room.seats.filter((s) => s.isBot || isConnected(room, s.key)) : room.seats;
+      const humans = seated.filter((s) => !s.isBot).length;
+      if (humans > limit) return reply(cb, { error: `Trop de joueurs pour ce jeu : ${limit} maximum (vous êtes ${humans}).` });
+      if (room.state === 'ended') backToLobby(room);
+      room.kind = kind;
+      room.settings = settings;
+      // Places : on garde tout le monde, on retire des bots si la table du nouveau jeu est plus petite
+      while (room.seats.length > limit) {
+        const bot = [...room.seats].reverse().find((x) => x.isBot);
+        if (!bot) break;
+        removeSeat(room, bot.key);
+      }
+      room.settings.maxPlayers = Math.min(limit, Math.max(room.settings.maxPlayers, room.seats.length));
+      const NAMES = { poly: '🎲 MyPoly', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois' };
+      systemChat(room, `🎮 ${ident.name} change de jeu : ${NAMES[kind]}. Tout le monde garde sa place !`);
       broadcastRoom(room);
       reply(cb, { ok: true });
     });

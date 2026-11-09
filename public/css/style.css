@@ -3241,3 +3241,11 @@ body:not(.in-game) {
 .lobby-privacy.pub .privacy-opt.on { background: linear-gradient(90deg, #2ecc71, #1fa863); box-shadow: 0 4px 14px rgba(46, 204, 113, .4); }
 .privacy-badge { padding: 6px 12px; border-radius: 99px; font-weight: 800; font-size: .85rem; background: rgba(255, 255, 255, .08); }
 .lobby-privacy.pub .privacy-badge { background: rgba(46, 204, 113, .22); color: #9ff0bf; }
+
+/* Salon : changer de jeu sans quitter la table */
+.game-switcher { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; }
+.gsw-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.gsw { padding: 7px 12px; border-radius: 99px; border: 0; background: rgba(255, 255, 255, .06); color: #c8cbec; font: inherit; font-weight: 800; font-size: .84rem; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1); transition: background .15s, transform .12s, color .15s; }
+.gsw.on { color: #fff; background: linear-gradient(90deg, rgba(255, 90, 95, .85), rgba(255, 138, 61, .85)); box-shadow: 0 4px 14px rgba(255, 90, 95, .35); cursor: default; }
+@media (hover: hover) and (pointer: fine) { .gsw:not(.on):hover { background: rgba(255, 255, 255, .14); color: #fff; } }
+.gsw:not(.on):active { transform: scale(.95); }

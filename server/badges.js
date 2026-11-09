@@ -20,7 +20,7 @@ const BADGES = [
   { id: 'knockout', icon: '🥊', name: 'Briseur de fortunes', desc: 'Provoquer 10 faillites', tier: 'gold' },
   { id: 'lucky', icon: '🍀', name: 'Main chanceuse', desc: 'Faire 6 doubles dans une même partie', tier: 'bronze' },
   { id: 'speed', icon: '⚡', name: 'Éclair', desc: 'Gagner une partie en moins de 10 minutes', tier: 'gold' },
-  { id: 'full_table', icon: '👥', name: 'Table pleine', desc: 'Gagner une partie à 6 joueurs', tier: 'gold' },
+  { id: 'full_table', icon: '👥', name: 'Table pleine', desc: 'Gagner une partie de MyPoly à 4 joueurs (table pleine)', tier: 'gold' },
   { id: 'comeback', icon: '🧗', name: 'Remontada', desc: 'Gagner après avoir été en dette', tier: 'silver' },
   { id: 'zero_absolute', icon: '🥶', name: 'Zéro Absolu', desc: 'Tomber pile à 0K après un achat ou un paiement (MyPoly)', tier: 'legend' },
   { id: 'melenchon', icon: '🧓', name: 'Partie avec Mélenchon !', desc: 'Disputer une partie en mode Mélenchon', tier: 'gold' },
@@ -80,7 +80,7 @@ function evaluate(s, me, game, owned) {
     knockout: s.knockouts >= 10,
     lucky: (me.stats.doubles || 0) >= 6,
     speed: won && game.duration < 600 && game.players.length >= 2,
-    full_table: won && game.players.length >= 6,
+    full_table: won && game.players.length >= 4, // table pleine : 4 joueurs maximum à MyPoly
     comeback: won && !!me.stats.wasInDebt,
     melenchon: !!game.melenchon,
     zero_absolute: !!(me.stats && me.stats.zeroAbsolute),

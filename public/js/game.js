@@ -346,6 +346,13 @@ class RoomView {
     } else els.title.append(h('h1', r.name));
     els.title.prepend(h('div.game-kind-tag.k-' + this.kind, GAMES[this.kind].tag));
     els.title.append(h('div.muted', `${r.seats.length}/${r.settings.maxPlayers} joueurs${r.spectators ? ` · ${r.spectators} spectateur(s)` : ''}`));
+    // Changer de jeu sans quitter la table (hôte)
+    if (this.isHost) {
+      els.title.append(h('div.game-switcher',
+        h('small.muted', 'Jeu de la table :'),
+        h('div.gsw-list', Object.entries(GAMES).map(([k, g]) => h('button.gsw' + (k === this.kind ? '.on' : ''), { type: 'button', title: k === this.kind ? 'Jeu actuel' : `Passer à ${g.name} (tout le monde garde sa place)`, onclick: () => k !== this.kind && this.switchGame(k) }, g.tag)))
+      ));
+    }
     // Salle publique / privée : bien visible, et modifiable d'un geste par l'hôte
     const pub = !!r.settings.isPublic;
     els.title.append(h('div.lobby-privacy' + (pub ? '.pub' : ''),
@@ -405,6 +412,33 @@ class RoomView {
     } else {
       els.actions.append(h('div.waiting', h('span.dot-pulse'), mySeat ? ' En attente du lancement par l\'hôte…' : ' Salle pleine : vous êtes spectateur.'));
     }
+  }
+
+  /** Change le jeu de la table (salon ou fin de partie) : tout le monde garde sa place. */
+  async switchGame(kind) {
+    const res = await emit('room:kind', { kind, settings: savedSettings(kind) || {} });
+    if (res && res.error) toast(res.error, 'error');
+    else Sound.play('click');
+  }
+  /** Fin de partie : choisir le prochain jeu de la table. */
+  openGameChooser() {
+    let close = null;
+    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅' };
+    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion' };
+    modal({
+      title: '🎮 Prochaine partie',
+      body: h('div.room-choices',
+        h('p.muted', 'Tout le monde reste à la table : choisissez simplement le jeu de la prochaine partie.'),
+        ...Object.entries(GAMES).map(([k, g]) => h('button.room-choice' + (k === this.kind ? '.pub' : ''), { type: 'button', onclick: async () => {
+          if (close) close();
+          if (k === this.kind) return this.cmd('room:rematch');
+          await this.switchGame(k);
+        } }, h('span.room-choice-ico', ICONS[k]), h('span.room-choice-txt', h('b', g.name + (k === this.kind ? ' (rejouer)' : '')), h('small', SUB[k])), h('span.room-choice-go', '→')))
+      ),
+      buttons: [],
+      className: 'room-choice-modal',
+    });
+    close = () => document.querySelector('#modals .modal-overlay:last-child')?._close(null);
   }
 
   /** Règles à comparer : sans les options propres à la salle elle-même. */
@@ -2729,6 +2763,7 @@ class RoomView {
         ) : !store.user ? h('div.hint', h('a', { href: '/register', 'data-link': true }, 'Créez un compte'), ' pour enregistrer vos victoires, gagner de l\'XP et des badges !') : null,
         h('div.btn-row.center',
           this.isHost ? h('button.btn.primary.lg', { onclick: () => this.cmd('room:rematch') }, '🔁 Rejouer') : h('div.muted', 'L\'hôte peut relancer une partie.'),
+          this.isHost ? h('button.btn.ghost', { onclick: () => this.openGameChooser() }, '🎮 Changer de jeu') : null,
           h('button.btn.ghost', { onclick: () => (ov.hidden = true) }, '👁 Voir le plateau'),
           h('button.btn.ghost', { onclick: () => navigate('/') }, '🏠 Accueil')
         )

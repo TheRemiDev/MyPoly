@@ -1187,6 +1187,7 @@ export class MonthTable {
         ) : !store.user ? h('div.hint', h('a', { href: '/register', 'data-link': true }, 'Créez un compte'), ' pour enregistrer vos victoires, gagner de l\'XP et des badges !') : null,
         h('div.btn-row.center',
           v.isHost ? h('button.btn.primary.lg', { onclick: () => v.cmd('room:rematch') }, '🔁 Rejouer') : h('div.muted', 'L\'hôte peut relancer une partie.'),
+          v.isHost ? h('button.btn.ghost', { onclick: () => v.openGameChooser() }, '🎮 Changer de jeu') : null,
           h('button.btn.ghost', { onclick: () => (ov.hidden = true) }, '👁 Voir le plateau'),
           h('button.btn.ghost', { onclick: () => navigate('/') }, '🏠 Accueil')
         )
