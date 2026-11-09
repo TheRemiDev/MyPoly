@@ -3205,3 +3205,6 @@ body:not(.in-game) {
   .game.webgl .zoom-fab svg { width: 24px; height: 24px; }
   .game.webgl .zoom-fab:active { transform: scale(.9); }
 }
+/* Les phrases rapides défilent dans leur propre bande : elles ne doivent jamais élargir la page */
+.chat-quick { width: 100%; min-width: 0; contain: inline-size; }
+.chat, .lobby-grid > * { min-width: 0; }
