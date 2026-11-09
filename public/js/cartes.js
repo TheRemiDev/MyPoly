@@ -218,6 +218,7 @@ export class CardTable {
         this.aimPointer();
       }
       this.renderCenter();
+      this.placeSeatCards();
     };
     window.addEventListener('resize', this.onResize);
   }
@@ -485,9 +486,37 @@ export class CardTable {
       this.cornersEl.append(card);
     }
     this.v.gameEl.style.setProperty('--rows', String(Math.ceil(others.length / 2)));
+    this.placeSeatCards();
+    requestAnimationFrame(() => this.placeSeatCards());
     this.b3.setHands(counts);
     const cur = this.player(st.current);
     this.b3.setTurn(st.over || st.phase === 'roundEnd' ? null : st.current, cur && cur.color);
+  }
+
+  /**
+   * Fiches des adversaires collées à leur éventail de cartes, au bord de la table
+   * (et non dans les coins de l'écran). Sur téléphone, la grille sous la barre d'outils reste.
+   */
+  placeSeatCards() {
+    if (!this.b3 || !this.cornersEl) return;
+    const box = this.cornersEl.getBoundingClientRect();
+    for (const card of this.cornersEl.querySelectorAll('.pcard.corner:not(.me)')) {
+      const a = this.b3.seatAnchor(card.dataset.pid);
+      if (!a) continue;
+      let x = a.x - box.left;
+      let y = a.y - box.top;
+      // Peu de place au-dessus de la table (écran bas) : fiche compacte pour ne pas couvrir l'éventail
+      card.classList.remove('seat-compact');
+      if (!['ml', 'mr'].includes(a.slot) && y - card.offsetHeight < 76) card.classList.add('seat-compact');
+      const w = card.offsetWidth;
+      const hh = card.offsetHeight;
+      if (a.slot === 'ml') (x -= w), (y -= hh / 2);
+      else if (a.slot === 'mr') y -= hh / 2;
+      else (x -= w / 2), (y -= hh);
+      x = Math.max(8, Math.min(box.width - w - 8, x));
+      y = Math.max(76, Math.min(box.height - hh - 8, y));
+      Object.assign(card.style, { left: Math.round(x) + 'px', top: Math.round(y) + 'px', right: 'auto', bottom: 'auto', translate: 'none' });
+    }
   }
 
   badgeEl(p, isMe) {
