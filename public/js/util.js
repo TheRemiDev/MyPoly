@@ -16,7 +16,12 @@ for (const proto of [Element.prototype, DocumentFragment.prototype]) {
 }
 /** Le site tourne-t-il dans l'application Android MyPoly ? */
 export const IN_APP = /MyPolyApp\//.test(navigator.userAgent);
-if (IN_APP) document.documentElement.classList.add('in-app');
+if (IN_APP) {
+  document.documentElement.classList.add('in-app');
+  // Application : pas de zoom au doigt ni au double appui
+  const vp = document.querySelector('meta[name=viewport]');
+  if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+}
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];

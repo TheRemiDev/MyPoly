@@ -59,8 +59,35 @@ async function route() {
   app.append(h('div.page.center', h('h1', '404'), h('p', 'Cette page n\'existe pas.'), h('a.btn.primary', { href: '/', 'data-link': true }, 'Retour à l\'accueil')));
 }
 
+// ------------------------------------------------- barre d'onglets (téléphone)
+const TAB_ICONS = {
+  play: '<path d="M8 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>',
+  trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M10 16h4M12 14v2M8 20h8"/>',
+  book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  shield: '<path d="M12 3 4.5 6v6c0 4.4 3.2 7.6 7.5 9 4.3-1.4 7.5-4.6 7.5-9V6Z"/>',
+};
+const tabIcon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICONS[k]}</svg>`;
+const tabbar = h('nav#tabbar', { 'aria-label': 'Navigation' });
+document.body.append(tabbar);
+function updateTabbar() {
+  const u = store.user;
+  const path = location.pathname;
+  // Pas d'onglets dans une salle (salon ou partie) : on ne quitte pas par erreur
+  document.body.classList.toggle('no-tabbar', path.startsWith('/r/'));
+  const tabs = [
+    ['/', 'play', 'Jouer', path === '/'],
+    ['/leaderboard', 'trophy', 'Classement', path === '/leaderboard'],
+    ['/rules', 'book', 'Règles', path === '/rules'],
+    u && u.staff ? ['/admin', 'shield', 'Admin', path === '/admin'] : null,
+    u ? ['/joueur/' + u.id, 'user', 'Profil', path.startsWith('/joueur/') || path === '/settings'] : ['/login', 'user', 'Connexion', path === '/login' || path === '/register'],
+  ].filter(Boolean);
+  tabbar.replaceChildren(...tabs.map(([href, ic, label, on]) => h('a.nav-tab' + (on ? '.on' : ''), { href, 'data-link': true }, h('span.tab-ico', { html: tabIcon(ic) }), h('span.tab-label', label))));
+}
+
 // --------------------------------------------------------------- navigation
 function updateNav() {
+  updateTabbar();
   const nav = $('#nav-user');
   nav.innerHTML = '';
   const u = store.user;
@@ -350,6 +377,26 @@ async function homePage() {
   loadStats();
   const statsTimer = setInterval(loadStats, 30000);
   const scrollPlay = () => document.getElementById('jouer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Application Android : accueil épuré, on joue tout de suite
+  if (IN_APP) {
+    app.append(
+      h('div.page.hp.hp-appmode',
+        h('section.app-hello', who, joinBox),
+        h('div.app-sec', h('h2', 'Choisis ton jeu'), h('small', 'Partie rapide avec des bots, ou salle privée pour tes amis')),
+        h('div.hp-posters', GAMES_INFO.map(poster)),
+        h('div.app-sec', h('h2', 'Salles publiques'), h('button.icon-btn', { onclick: refresh, title: 'Actualiser' }, '↻')),
+        h('div.hp-panel', roomsBox),
+        h('div.app-sec', h('h2', 'Les champions')),
+        champs
+      )
+    );
+    return () => {
+      clearInterval(timer);
+      clearInterval(statsTimer);
+      off();
+    };
+  }
 
   app.append(
     h('div.page.hp',
@@ -863,7 +910,8 @@ function settingsPage() {
         h('h3', 'Pion'), pawnGrid, h('h3', 'Couleur'), colorGrid, h('h3', 'Bio'), bio),
       h('div.card', h('h3', 'Changer de mot de passe'), cur, next),
       !vip ? h('div.card.vip-promo', h('h3', '👑 Devenez VIP'), h('p', 'Pions et couleurs exclusifs, pseudo doré, badge VIP visible en partie. Contactez le staff pour en savoir plus.')) : null,
-      h('button.btn.primary.lg', { onclick: save }, 'Enregistrer')
+      h('button.btn.primary.lg', { onclick: save }, 'Enregistrer'),
+      h('div.card.settings-logout', h('h3', 'Compte'), h('p.muted', 'Vous êtes connecté en tant que @' + u.username + '.'), h('button.btn.ghost', { onclick: logout }, '🚪 Se déconnecter'))
     )
   );
 }
