@@ -206,7 +206,7 @@ export class Board3D {
     this.view = { yaw: 0, pitch: 1.02, zoom: 1 };
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }));
-    this.mobile = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
+    this.mobile = document.documentElement.classList.contains('touch') || Math.min(screen.width, screen.height) < 700;
     // Densité de pixels réelle de l'écran (plafonnée à 2) : rendu net sur Retina et mobiles
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     r.shadowMap.enabled = true;
@@ -2523,7 +2523,7 @@ export class Board3D {
     el.addEventListener('pointercancel', up);
     el.addEventListener('pointerleave', () => this.setHover(-1));
     el.addEventListener('dblclick', (e) => {
-      if (!matchMedia('(pointer: coarse)').matches) this.resetView();
+      if (!document.documentElement.classList.contains('touch')) this.resetView();
     });
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -2532,7 +2532,7 @@ export class Board3D {
     }, { passive: false });
   }
   maxZoom() {
-    return matchMedia('(pointer: coarse)').matches ? 3 : 2.2;
+    return document.documentElement.classList.contains('touch') ? 3 : 2.2;
   }
   /** Déplace le point visé selon un glissement à l'écran (en pixels), sans sortir du plateau. */
   panBy(dx, dy) {

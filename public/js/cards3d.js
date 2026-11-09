@@ -246,7 +246,7 @@ export class Card3D {
     this.dir = 1;
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }));
-    this.mobile = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
+    this.mobile = document.documentElement.classList.contains('touch') || Math.min(screen.width, screen.height) < 700;
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;

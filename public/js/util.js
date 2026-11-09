@@ -23,6 +23,25 @@ if (IN_APP) {
   if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
 }
 
+/**
+ * Écran tactile ? On ne se fie pas qu'à « pointer: coarse » : certains téléphones (stylet,
+ * mode « version pour ordinateur », souris branchée) déclarent un pointeur fin.
+ * html.touch : écran tactile · html.phone : tactile ET petit écran (téléphone, petite tablette).
+ */
+export const TOUCH = (navigator.maxTouchPoints || 0) > 0 && (matchMedia('(any-pointer: coarse)').matches || 'ontouchstart' in window || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
+export const PHONE = TOUCH && Math.min(screen.width, screen.height) < 820;
+if (TOUCH) document.documentElement.classList.add('touch');
+if (PHONE) document.documentElement.classList.add('phone');
+// Téléphone en mode « version pour ordinateur » : la page est rendue sur ~980 px puis rétrécie
+if (PHONE && !IN_APP && document.documentElement.clientWidth > screen.width * 1.4) {
+  try {
+    if (!sessionStorage.getItem('mp_deskWarn')) {
+      sessionStorage.setItem('mp_deskWarn', '1');
+      setTimeout(() => toast('📱 Votre navigateur affiche la « version pour ordinateur » : tout est minuscule. Décochez-la dans le menu ⋮ pour profiter de l\'affichage téléphone.', 'info', 9000), 1500);
+    }
+  } catch {}
+}
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 

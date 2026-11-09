@@ -58,7 +58,7 @@ export class Horse3D {
     this.texCache = {};
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }));
-    this.mobile = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
+    this.mobile = document.documentElement.classList.contains('touch') || Math.min(screen.width, screen.height) < 700;
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -766,7 +766,7 @@ export class Horse3D {
     el.addEventListener('pointercancel', up);
     el.addEventListener('pointerleave', () => this.setHover(null));
     el.addEventListener('dblclick', () => {
-      if (!matchMedia('(pointer: coarse)').matches) this.resetView();
+      if (!document.documentElement.classList.contains('touch')) this.resetView();
     });
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -775,7 +775,7 @@ export class Horse3D {
     }, { passive: false });
   }
   maxZoom() {
-    return matchMedia('(pointer: coarse)').matches ? 3 : 2.2;
+    return document.documentElement.classList.contains('touch') ? 3 : 2.2;
   }
   /** Déplace le point visé selon un glissement à l'écran (en pixels), sans sortir du plateau. */
   panBy(dx, dy) {
