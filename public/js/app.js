@@ -1,5 +1,5 @@
 // Point d'entrée : routeur, navigation et pages hors partie
-import { $, h, api, toast, modal, roleTags, nameClass, fmt, timeAgo, duration, storage, esc } from './util.js';
+import { $, h, api, toast, modal, roleTags, nameClass, fmt, timeAgo, duration, storage, esc, IN_APP } from './util.js';
 import { store, connectSocket, on, emit, guestName, savedSettings } from './store.js';
 import * as Sound from './sound.js';
 import { renderRoom } from './game.js';
@@ -376,6 +376,13 @@ async function homePage() {
         )
       ),
       // ----------------------------------------------------------- jouer
+      // Téléphone Android (navigateur) : proposer l'application
+      /Android/i.test(navigator.userAgent) && !IN_APP
+        ? h('a.hp-app', { href: '/downloads/MyPoly.apk', download: 'MyPoly.apk' },
+            h('span.hp-app-icon', { html: '<svg viewBox="0 0 64 64"><defs><linearGradient id="hpa" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5a5f"/><stop offset="1" stop-color="#a66bff"/></linearGradient></defs><rect x="4" y="4" width="56" height="56" rx="14" fill="url(#hpa)"/><g fill="#fff"><circle cx="20" cy="20" r="5"/><circle cx="44" cy="20" r="5"/><circle cx="32" cy="32" r="5"/><circle cx="20" cy="44" r="5"/><circle cx="44" cy="44" r="5"/></g></svg>' }),
+            h('span.hp-app-txt', h('b', 'Installer l\'application Android'), h('small', 'Plein écran, vibrations, invitations en un clic')),
+            h('span.hp-app-go', 'Télécharger'))
+        : null,
       h('section.hp-play#jouer',
         h('div.hp-section-head', h('span.hp-kicker', 'Choisis ton jeu'), h('h2', 'Quatre jeux, une seule salle d\'amis')),
         h('div.hp-bar', who, joinBox),
@@ -480,7 +487,7 @@ function feature(icon, title, text, color = '#3fa7ff') {
 function siteFooter() {
   return h('footer.site-footer',
     h('div.logo', 'My', h('span', 'Poly')),
-    h('nav', h('a', { href: '/rules', 'data-link': true }, 'Règles'), h('a', { href: '/leaderboard', 'data-link': true }, 'Classement'), store.user ? h('a', { href: '/settings', 'data-link': true }, 'Mon compte') : h('a', { href: '/register', 'data-link': true }, 'Créer un compte')),
+    h('nav', h('a', { href: '/rules', 'data-link': true }, 'Règles'), !IN_APP ? h('a', { href: '/downloads/MyPoly.apk', download: 'MyPoly.apk' }, 'Application Android') : null, h('a', { href: '/leaderboard', 'data-link': true }, 'Classement'), store.user ? h('a', { href: '/settings', 'data-link': true }, 'Mon compte') : h('a', { href: '/register', 'data-link': true }, 'Créer un compte')),
     h('small.muted', '© ' + new Date().getFullYear() + ' MyPoly · Jeu gratuit entre amis')
   );
 }
@@ -885,7 +892,7 @@ function rulesPage() {
         <div><span>💸</span><b>Impôts</b><small>${s.taxPercent} % de ta fortune totale</small></div>
       </div>` },
     { id: 'dettes', icon: '💸', color: '#ff4757', title: 'Dettes & faillite', body: `
-      <p>Pas assez d'argent ? Seules tes propriétés restent allumées sur le plateau, avec leur <b>prix de revente</b> : clique celles à vendre (ou laisse le jeu te proposer la <b>sélection conseillée</b>), puis paie en un clic. Les biens se revendent à <b>moitié prix</b>.</p>
+      <p>Pas assez d'argent ? Seules tes propriétés restent allumées sur le plateau, avec leur <b>prix de revente</b> : clique celles à vendre (ou laisse le jeu te proposer la <b>sélection conseillée</b>), puis paie en un clic. Les biens se revendent à <b>${s.resalePercent ?? 75} % de leur prix</b> (réglable). Sur la fiche de chaque joueur, la pastille 🛟 indique ce qu'il peut vraiment payer en revendant tout.</p>
       <p>Si même en vendant tout tu ne peux pas payer : <b>faillite</b>, et tu es éliminé.</p>` },
     { id: 'chrono', icon: '⏱️', color: '#2ecc71', title: 'Chrono & absences', body: `
       <p>Chaque décision a un temps limite (réglable). S'il s'écoule, une action par défaut est jouée. Un joueur déconnecté est joué automatiquement jusqu'à son retour : la partie ne s'arrête jamais.</p>` },

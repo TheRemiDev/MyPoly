@@ -628,7 +628,10 @@ export class CardTable {
     // Chevauchement selon la place disponible
     // Même taille que la variable CSS --hw ; sur grand écran, ma plaque occupe le coin gauche
     const W = window.innerWidth;
-    const cw = W <= 700 ? Math.min(96, Math.max(70, window.innerHeight * 0.11)) : Math.min(132, Math.max(84, window.innerHeight * 0.125));
+    const H = window.innerHeight;
+    // Téléphone en paysage (écran bas) : cartes plus petites pour laisser voir la table
+    const shortLandscape = H <= 560 && W / H >= 1.25;
+    const cw = shortLandscape ? Math.min(64, Math.max(46, H * 0.14)) : W <= 700 ? Math.min(96, Math.max(70, H * 0.11)) : Math.min(132, Math.max(84, H * 0.125));
     const width = Math.min(W > 1100 ? W - 2 * 290 : W <= 700 ? W - 64 : W - 40, 1100);
     const overlap = n > 1 ? Math.min(cw * 0.15, (width - cw) / (n - 1) - cw) : 0;
     this.handEl.style.setProperty('--cw', cw + 'px');
