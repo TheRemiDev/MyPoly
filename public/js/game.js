@@ -519,7 +519,14 @@ class RoomView {
       input.value = '';
     };
     input.addEventListener('keydown', (e) => e.key === 'Enter' && send());
-    const box = h('div.chat', list, h('div.chat-input', input, h('button.btn.primary.sm', { onclick: send }, '➤')));
+    // Phrases rapides : un toucher suffit sur téléphone
+    const QUICK = ['Bien joué ! 👏', 'GG 🏆', 'Allez ! 🔥', 'Aïe… 😬', 'Noooon 😱', 'Pas de chance 😅', 'Merci ! 🙏', 'Vite ! ⏱️', 'Je vais gagner 😎', 'Bonne chance 🍀', 'Mdr 😂', 'Respect 🫡'];
+    const quick = h('div.chat-quick', QUICK.map((q) => h('button.chat-chip', { type: 'button', onclick: () => {
+      store.socket.emit('chat:send', { text: q });
+      // Sur téléphone, on referme la fenêtre pour voir sa bulle apparaître
+      if (this.mode === 'game' && matchMedia('(max-width: 760px), (max-height: 560px)').matches) this.togglePop(null);
+    } }, q)));
+    const box = h('div.chat', list, quick, h('div.chat-input', input, h('button.btn.primary.sm', { onclick: send }, '➤')));
     box._list = list;
     return box;
   }
@@ -547,15 +554,28 @@ class RoomView {
       if (this.mode === 'game' && this.pop !== 'chat') {
         this.unread++;
         this.renderToolbar();
-        const card = this.playersEl && this.playersEl.querySelector(`[data-pid="${CSS.escape(m.key)}"]`);
-        if (card) {
-          card.querySelector('.chat-bubble')?.remove();
-          const b = h('div.chat-bubble', m.text.length > 90 ? m.text.slice(0, 88) + '…' : m.text);
-          card.append(b);
-          setTimeout(() => b.remove(), 5000);
-        }
       }
     }
+    // En partie : le message apparaît en grosse bulle près de la fiche de celui qui l'envoie (chez tout le monde)
+    if (!m.system && this.mode === 'game') this.sayBubble(m);
+  }
+  sayBubble(m) {
+    // Fiche du joueur, quel que soit le jeu (coins de l'écran, table de Carton !…)
+    const sel = `[data-pid="${CSS.escape(m.key)}"]`;
+    const root = this.gameEl || this.playersEl;
+    const card = root && (root.querySelector('.pcard' + sel) || root.querySelector(sel));
+    if (!card) return;
+    card.querySelector('.chat-bubble')?.remove();
+    const text = m.text.length > 120 ? m.text.slice(0, 118) + '…' : m.text;
+    const emojiOnly = /^(\p{Extended_Pictographic}|\p{Emoji_Component}|\u200d|\ufe0f|\s){1,8}$/u.test(text) && !/[0-9#*]/.test(text);
+    const color = (card.style.getPropertyValue('--c') || '#ff5a5f').trim();
+    const b = h('div.chat-bubble.say' + (emojiOnly ? '.emoji' : '') + (m.key === this.me ? '.mine' : ''), { style: { '--bc': color } }, text);
+    card.append(b);
+    const ms = Math.min(9000, Math.max(4500, 2500 + text.length * 70));
+    setTimeout(() => {
+      b.classList.add('out');
+      setTimeout(() => b.remove(), 350);
+    }, ms);
   }
 
   // ================================================================= jeu
@@ -660,13 +680,21 @@ class RoomView {
         onDrop: () => Sound.play('card'),
       });
       this.gameEl.classList.add('webgl');
+      this.addZoomFab(() => this.b3 && this.b3.toggleZoomOn(this.me));
     } catch (e) {
       console.error('WebGL indisponible', e);
       this.b3 = null;
       this.gameEl.classList.remove('webgl');
     }
   }
+  /** Bouton loupe (écran tactile) : zoom sur mon pion, puis retour à la vue d'ensemble. */
+  addZoomFab(onclick) {
+    if (!this.gameEl || this.gameEl.querySelector('.zoom-fab')) return;
+    const svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.5v6M7.5 10.5h6"/></svg>';
+    this.gameEl.append(h('button.zoom-fab', { type: 'button', title: 'Zoomer sur mon pion (ou pincez / double-touchez le plateau)', 'aria-label': 'Zoom', html: svg, onclick }));
+  }
   disable3d() {
+    this.gameEl && this.gameEl.querySelector('.zoom-fab')?.remove();
     if (this.b3) this.b3.destroy();
     this.b3 = null;
     this.gameEl.classList.remove('webgl');

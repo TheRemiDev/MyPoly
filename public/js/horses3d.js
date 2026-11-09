@@ -664,10 +664,12 @@ export class Horse3D {
   }
   resetView() {
     const from = { ...this.view };
+    const fromT = this.target.clone();
     const to = { yaw: 0, pitch: this.basePitch || 1.0, zoom: 1 };
     this.tween(500, (t) => {
       const e = ease.inOut(t);
       this.view = { yaw: from.yaw + (to.yaw - from.yaw) * e, pitch: from.pitch + (to.pitch - from.pitch) * e, zoom: from.zoom + (to.zoom - from.zoom) * e };
+      this.target.lerpVectors(fromT, this.homeTarget, e);
       this.fitCamera();
     });
   }
@@ -686,21 +688,35 @@ export class Horse3D {
     const pointers = new Map();
     let drag = null;
     let pinch = null;
+    let lastTap = null;
+    const groundAt = (cx, cy) => {
+      const r = el.getBoundingClientRect();
+      ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, this.camera);
+      const hit = new THREE.Vector3();
+      return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -TOP), hit) ? hit : null;
+    };
     el.addEventListener('pointerdown', (e) => {
       el.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, yaw: this.view.yaw, pitch: this.view.pitch, moved: 0 };
+      if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, yaw: this.view.yaw, pitch: this.view.pitch, moved: 0, touch: e.pointerType !== 'mouse' };
       if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
-        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: this.view.zoom };
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: this.view.zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
         drag = null;
       }
     });
     el.addEventListener('pointermove', (e) => {
       if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pinch && pointers.size === 2) {
+        // Pincer : zoom, et déplacement du plateau avec les deux doigts
         const [a, b] = [...pointers.values()];
-        this.view.zoom = Math.min(2.2, Math.max(0.8, pinch.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.d)));
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2;
+        this.view.zoom = Math.min(this.maxZoom(), Math.max(0.8, pinch.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.d)));
+        this.panBy(mx - pinch.mx, my - pinch.my);
+        pinch.mx = mx;
+        pinch.my = my;
         this.fitCamera();
         return;
       }
@@ -709,8 +725,13 @@ export class Horse3D {
         const dy = e.clientY - drag.y;
         drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
         if (drag.moved > 6) {
-          this.view.yaw = Math.max(-1.1, Math.min(1.1, drag.yaw - dx * 0.006));
-          this.view.pitch = Math.max(0.55, Math.min(1.45, drag.pitch + dy * 0.005));
+          if (drag.touch && this.view.zoom > 1.05) this.panBy(e.clientX - drag.lx, e.clientY - drag.ly);
+          else {
+            this.view.yaw = Math.max(-1.1, Math.min(1.1, drag.yaw - dx * 0.006));
+            this.view.pitch = Math.max(0.55, Math.min(1.45, drag.pitch + dy * 0.005));
+          }
+          drag.lx = e.clientX;
+          drag.ly = e.clientY;
           this.fitCamera();
         }
         return;
@@ -721,6 +742,18 @@ export class Horse3D {
       pointers.delete(e.pointerId);
       if (pointers.size < 2) pinch = null;
       if (drag && drag.moved <= 6 && e.type === 'pointerup') {
+        const now = performance.now();
+        if (drag.touch && lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
+          lastTap = null;
+          if (this.view.zoom > 1.2) this.resetView();
+          else {
+            const g = groundAt(e.clientX, e.clientY);
+            if (g) this.zoomAt(g.x, g.z, 2.2);
+          }
+          drag = null;
+          return;
+        }
+        lastTap = drag.touch ? { t: now, x: e.clientX, y: e.clientY } : null;
         const k = pick(e);
         if (k && this.cb.onClick) this.cb.onClick(k);
       }
@@ -729,12 +762,53 @@ export class Horse3D {
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
     el.addEventListener('pointerleave', () => this.setHover(null));
-    el.addEventListener('dblclick', () => this.resetView());
+    el.addEventListener('dblclick', () => {
+      if (!matchMedia('(pointer: coarse)').matches) this.resetView();
+    });
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.view.zoom = Math.min(2.2, Math.max(0.8, this.view.zoom * (e.deltaY < 0 ? 1.08 : 0.93)));
       this.fitCamera();
     }, { passive: false });
+  }
+  maxZoom() {
+    return matchMedia('(pointer: coarse)').matches ? 3 : 2.2;
+  }
+  /** Déplace le point visé selon un glissement à l'écran (en pixels), sans sortir du plateau. */
+  panBy(dx, dy) {
+    const H = this.container.clientHeight || 1;
+    const dist = this.camera.position.distanceTo(this.target);
+    const k = (2 * dist * Math.tan((this.camera.fov * Math.PI) / 360)) / H;
+    const yaw = this.view.yaw;
+    const sp = Math.max(0.5, Math.sin(this.view.pitch));
+    const wx = -dx * k;
+    const wz = (-dy * k) / sp;
+    this.target.x += wx * Math.cos(yaw) + wz * Math.sin(yaw);
+    this.target.z += -wx * Math.sin(yaw) + wz * Math.cos(yaw);
+    const lim = Math.max(0, 5.2 * (1 - 1 / Math.max(1, this.view.zoom)));
+    this.target.x = Math.max(-lim, Math.min(lim, this.target.x));
+    this.target.z = Math.max(-lim, Math.min(lim, this.target.z));
+  }
+  /** Zoom animé sur un point du plateau (double appui, bouton loupe). */
+  zoomAt(x, z, zoom = 2.2) {
+    const fromT = this.target.clone();
+    const fromZ = this.view.zoom;
+    const toZ = Math.min(this.maxZoom(), zoom);
+    const lim = 5.2 * (1 - 1 / toZ);
+    const toT = new THREE.Vector3(Math.max(-lim, Math.min(lim, x)), this.target.y, Math.max(-lim, Math.min(lim, z)));
+    return this.tween(450, (t) => {
+      const e = ease.inOut(t);
+      this.target.lerpVectors(fromT, toT, e);
+      this.view.zoom = fromZ + (toZ - fromZ) * e;
+      this.fitCamera();
+    });
+  }
+  /** Bouton loupe : zoom sur une pièce (clé de pion / cheval), ou retour à la vue d'ensemble. */
+  toggleZoomOn(key) {
+    if (this.view.zoom > 1.2) return this.resetView();
+    const hz = key && this.horses[key];
+    const p = hz ? hz.obj.position : new THREE.Vector3(0, 0, 0);
+    return this.zoomAt(p.x, p.z, 2.2);
   }
   setHover(k) {
     if (this.hover === k) return;
