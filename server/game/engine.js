@@ -1103,7 +1103,10 @@ class Game {
       this.timer = setTimeout(() => {
         p.timeouts = (p.timeouts || 0) + 1;
         if (p.timeouts >= 3) p.afk = true;
-        this.autoAct(false);
+        // Temps écoulé : le jeu joue à sa place avec une vraie stratégie (comme un bot),
+        // et non plus en refusant tout achat — sinon les joueurs lents étaient très désavantagés.
+        if (this.phase !== 'roll') this.say(`⏱️ Temps écoulé : ${p.name} est joué automatiquement.`, p.id);
+        this.autoAct(true);
       }, base + tt);
     } else {
       this.deadline = null;
