@@ -1,5 +1,8 @@
 // Effets sonores synthétisés (Web Audio) : aucun fichier externe nécessaire.
-import { storage } from './util.js';
+import { storage, IN_APP } from './util.js';
+
+/** Retour haptique dans l'application Android (petites vibrations sur les moments clés). */
+const HAPTIC = { turn: [35, 60, 35], error: 30, nope: 30, dice: 18, takeover: 60, bankrupt: [80, 60, 120], win: [60, 80, 60, 80, 160], alarm: [40, 60, 40], festival: 40 };
 
 let ctx = null;
 let master = null;
@@ -131,6 +134,11 @@ const SFX = {
 };
 
 export function play(name) {
+  if (IN_APP && HAPTIC[name] && navigator.vibrate && storage('haptics') !== 'off') {
+    try {
+      navigator.vibrate(HAPTIC[name]);
+    } catch {}
+  }
   if (!enabled || !SFX[name]) return;
   try {
     SFX[name]();

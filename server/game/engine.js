@@ -143,7 +143,8 @@ class Game {
     return cost;
   }
   sellValue(i) {
-    return Math.floor(this.invested(i) / 2);
+    const pct = this.settings.resalePercent ?? 50;
+    return Math.floor((this.invested(i) * pct) / 100);
   }
   owned(p) {
     return OWNABLE.filter((i) => this.props[i].owner === p.id);
@@ -401,10 +402,11 @@ class Game {
     }
     if (p.cash + this.liquidation(p) < amount) {
       // Explication détaillée : la fortune affichée compte les biens à leur prix d'achat,
-      // mais une propriété ne se revend qu'à moitié prix.
+      // mais une propriété ne se revend qu'à une partie de son prix (réglage « Revente des propriétés »).
       const liq = this.liquidation(p);
-      this.say(`${p.name} doit payer ${fmt(amount)} : ${fmt(p.cash)} en liquide + ${fmt(liq)} en revendant tout (les biens se revendent à moitié prix) = ${fmt(p.cash + liq)}. Pas assez…`, p.id);
-      this.bankrupt(p, to, { owed: amount, cash: p.cash, liq });
+      const pct = this.settings.resalePercent ?? 50;
+      this.say(`${p.name} doit payer ${fmt(amount)} : ${fmt(p.cash)} en liquide + ${fmt(liq)} en revendant tout (les biens se revendent à ${pct} % de leur prix) = ${fmt(p.cash + liq)}. Pas assez…`, p.id);
+      this.bankrupt(p, to, { owed: amount, cash: p.cash, liq, pct });
       if (p === this.cur) this.endAction();
       return;
     }

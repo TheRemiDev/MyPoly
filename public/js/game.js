@@ -1,5 +1,5 @@
 // Vue d'une salle : salon d'attente + plateau de jeu animé
-import { $, $$, h, fmt, toast, modal, roleTags, roleRibbons, nameClass, sleep, confetti, duration, storage, api } from './util.js';
+import { $, $$, h, fmt, toast, modal, roleTags, roleRibbons, nameClass, sleep, confetti, duration, storage, api, IN_APP } from './util.js';
 import { store, on, emit, savedSettings } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
@@ -51,6 +51,7 @@ const SETTINGS_UI = [
     { key: 'jailFine', label: 'Amende de l\'Île', type: 'select', options: [0, 50, 100, 150, 200].map((n) => [n, n ? fmt(n) : 'Gratuit']) },
     { key: 'travelFee', label: 'Billet d\'avion', type: 'select', options: [0, 25, 50, 100, 200].map((n) => [n, n ? fmt(n) : 'Gratuit']) },
     { key: 'taxPercent', label: 'Impôts', type: 'select', options: [0, 5, 10, 15, 20].map((n) => [n, n + ' % de la fortune']) },
+    { key: 'resalePercent', label: 'Revente des propriétés', type: 'select', hint: 'En cas de dette, une propriété se revend à ce pourcentage de ce qu\'elle a coûté (terrain + constructions)', options: [[50, '50 % du prix'], [75, '75 % du prix'], [100, '100 % du prix']] },
   ] },
   { group: 'Salle', items: [
     { key: 'isPublic', label: 'Salle publique', type: 'toggle', hint: 'Visible dans la liste des salles de l\'accueil' },
@@ -1260,7 +1261,7 @@ class RoomView {
         Sound.toggle();
         this.renderToolbar();
       }),
-      btn('fullscreen', 'Plein écran (F)', toggleFullscreen),
+      IN_APP ? null : btn('fullscreen', 'Plein écran (F)', toggleFullscreen),
       this.isAdmin && this.room && this.room.kind === 'poly' && this.room.state === 'playing' ? btn('shield', 'Pouvoirs d\'admin', () => this.togglePop('admin'), { on: this.pop === 'admin', cls: '.admin' }) : null,
       sep(),
       opts.forfeit ? btn('flag', 'Abandonner', opts.forfeit, { cls: '.danger' }) : btn('exit', 'Quitter', () => navigate('/'), { cls: '.danger' })
@@ -1550,7 +1551,7 @@ class RoomView {
           icon: '💥',
           title: `${p.name} fait faillite !`,
           text: ev.info
-            ? `Devait ${fmt(ev.info.owed)} · avait ${fmt(ev.info.cash)} + ${fmt(ev.info.liq)} de revente (biens revendus à moitié prix)`
+            ? `Devait ${fmt(ev.info.owed)} · avait ${fmt(ev.info.cash)} + ${fmt(ev.info.liq)} de revente (biens revendus à ${ev.info.pct ?? 50} % de leur prix)`
             : cells.length ? `${cells.length} propriété${cells.length > 1 ? 's' : ''} saisie${cells.length > 1 ? 's' : ''} et rendue${cells.length > 1 ? 's' : ''} à la banque` : 'Éliminé(e) de la partie',
           color: p.color,
           kind: 'danger',
@@ -2087,7 +2088,9 @@ class RoomView {
           h('div.pc-chips',
             p.bankrupt ? h('span.pc-chip.off', p.rank ? `Classement #${p.rank}` : 'Éliminé') : [
               h('span.pc-chip', { title: 'Propriétés' }, `🏠 ${props}`),
-              h('span.pc-chip', { title: `Fortune (biens au prix d'achat) : ${fmt(p.netWorth)}\nPaiement maximal possible en vendant tout (biens revendus à moitié prix) : ${fmt(p.resale ?? p.netWorth)}` }, `💎 ${fmt(p.netWorth)}`),
+              h('span.pc-chip', { title: `Fortune (biens au prix d'achat) : ${fmt(p.netWorth)}` }, `💎 ${fmt(p.netWorth)}`),
+              // Ce que le joueur peut vraiment payer en revendant tout : toujours visible (téléphone compris)
+              h('span.pc-chip.pc-pay', { title: `Paiement maximal possible en vendant tout (biens revendus à ${(this.room && this.room.settings.resalePercent) ?? 75} % de leur prix) : ${fmt(p.resale ?? p.netWorth)}` }, `🛟 ${fmt(p.resale ?? p.netWorth)}`),
             ],
             ...chips
           )

@@ -885,7 +885,7 @@ function rulesPage() {
         <div><span>💸</span><b>Impôts</b><small>${s.taxPercent} % de ta fortune totale</small></div>
       </div>` },
     { id: 'dettes', icon: '💸', color: '#ff4757', title: 'Dettes & faillite', body: `
-      <p>Pas assez d'argent ? Seules tes propriétés restent allumées sur le plateau, avec leur <b>prix de revente</b> : clique celles à vendre (ou laisse le jeu te proposer la <b>sélection conseillée</b>), puis paie en un clic. Les biens se revendent à <b>moitié prix</b>.</p>
+      <p>Pas assez d'argent ? Seules tes propriétés restent allumées sur le plateau, avec leur <b>prix de revente</b> : clique celles à vendre (ou laisse le jeu te proposer la <b>sélection conseillée</b>), puis paie en un clic. Les biens se revendent à <b>${s.resalePercent ?? 75} % de leur prix</b> (réglable). Sur la fiche de chaque joueur, la pastille 🛟 indique ce qu'il peut vraiment payer en revendant tout.</p>
       <p>Si même en vendant tout tu ne peux pas payer : <b>faillite</b>, et tu es éliminé.</p>` },
     { id: 'chrono', icon: '⏱️', color: '#2ecc71', title: 'Chrono & absences', body: `
       <p>Chaque décision a un temps limite (réglable). S'il s'écoule, une action par défaut est jouée. Un joueur déconnecté est joué automatiquement jusqu'à son retour : la partie ne s'arrête jamais.</p>` },

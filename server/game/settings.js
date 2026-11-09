@@ -22,6 +22,7 @@ const DEFAULTS = {
   travelFee: 50, // coût du vol depuis l'Aéroport
   startBonus: true, // atterrir sur le Départ = salaire doublé
   taxPercent: 10, // % de la fortune pour la case Impôts
+  resalePercent: 75, // une propriété se revend à ce % de ce qu'elle a coûté (dettes, faillite)
   melenchon: false,
   politicalBoard: false, // (administrateurs) plateau satirique politique // (administrateurs) la case Impôts devient « Mélenchon »
   isPublic: false, // salle visible dans la liste publique
@@ -39,6 +40,7 @@ const LIMITS = {
   jailFine: [0, 1000],
   travelFee: [0, 1000],
   taxPercent: [0, 50],
+  resalePercent: [25, 100],
 };
 
 function sanitize(input, base = DEFAULTS) {
