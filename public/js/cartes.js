@@ -428,7 +428,7 @@ export class CardTable {
 
   /** Emplacements des adversaires autour de la table (sens horaire depuis moi). */
   slotsFor(n) {
-    return { 1: ['tm'], 2: ['tl', 'tr'], 3: ['tl', 'tm', 'tr'], 4: ['ml', 'tl', 'tr', 'mr'], 5: ['ml', 'tl', 'tm', 'tr', 'mr'] }[n] || [];
+    return { 1: ['tm'], 2: ['tl', 'tr'], 3: ['ml', 'tm', 'mr'], 4: ['ml', 'tl', 'tr', 'mr'], 5: ['ml', 'tl', 'tm', 'tr', 'mr'] }[n] || [];
   }
   /** Fiches des joueurs dans les coins, exactement comme dans MyPoly. */
   renderCorners() {
@@ -679,16 +679,26 @@ export class CardTable {
     const st = this.state;
     if (!st || st.over) return;
     const bar = this.v.playersEl && this.v.playersEl.querySelector('.ct-badge.turn .ct-timer i');
-    if (!bar) return;
+    // Plateau 3D : barre de la fiche du joueur actif (dans son coin)
+    const cbar = this.cornersEl && this.cornersEl.querySelector('.pcard.corner.turn .pcard-timer');
+    if (!bar && !cbar) return;
+    const total = (this.room.settings.turnTime || 20) * 1000;
+    const left = st.deadline ? st.deadline - (Date.now() + this.v.clockOffset) : 0;
+    const frac = Math.max(0, Math.min(1, left / total));
+    if (cbar) {
+      cbar.hidden = !st.deadline;
+      cbar.style.transform = `scaleX(${frac})`;
+      cbar.classList.toggle('urgent', left < 5000);
+    }
     if (!st.deadline || this.busy) {
-      bar.parentElement.hidden = true;
+      if (bar) bar.parentElement.hidden = true;
       return;
     }
-    const total = (this.room.settings.turnTime || 20) * 1000;
-    const left = st.deadline - (Date.now() + this.v.clockOffset);
-    bar.parentElement.hidden = false;
-    bar.style.transform = `scaleX(${Math.max(0, Math.min(1, left / total))})`;
-    bar.parentElement.classList.toggle('urgent', left < 5000);
+    if (bar) {
+      bar.parentElement.hidden = false;
+      bar.style.transform = `scaleX(${frac})`;
+      bar.parentElement.classList.toggle('urgent', left < 5000);
+    }
     const secs = Math.ceil(left / 1000);
     if (st.current === this.me && left < 5000 && left > 0 && secs !== this.lastTick) {
       this.lastTick = secs;

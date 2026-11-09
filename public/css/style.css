@@ -3288,3 +3288,7 @@ html.touch .mo-tip { display: none; }
 .game .board-wrap.z2d .board { transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
 /* Paysage sur téléphone : la loupe passe sous la barre d'outils au lieu d'être cachée derrière */
 @media (max-height: 560px) and (min-aspect-ratio: 5/4) { .touch .game .zoom-fab { top: calc(var(--safe-top) + 64px); } }
+
+/* Carton ! : fiche du joueur d'en face bien sous la barre d'outils (bandeau « JOUE… » visible) */
+.cards-game .pcard.corner.c-tm { top: 84px; }
+.pcard.corner .pcard-timer.urgent { background: #ff5a5f; box-shadow: 0 0 8px #ff5a5f; }
