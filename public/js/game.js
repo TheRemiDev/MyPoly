@@ -1,5 +1,5 @@
 // Vue d'une salle : salon d'attente + plateau de jeu animé
-import { $, $$, h, fmt, toast, modal, roleTags, roleRibbons, nameClass, sleep, confetti, duration, storage, api, IN_APP } from './util.js';
+import { $, $$, h, fmt, toast, modal, roleTags, roleRibbons, nameClass, sleep, confetti, duration, storage, api, IN_APP, PHONE } from './util.js';
 import { store, on, emit, savedSettings } from './store.js';
 import * as Sound from './sound.js';
 import { navigate, toggleFullscreen, winLabel } from './app.js';
@@ -699,6 +699,7 @@ class RoomView {
     this.gameEl = h('div.game', this.host3d, this.boardWrap, this.fxLayer, ...Object.values(this.notifStacks), this.playersEl, h('div.topbar', this.toolbar, this.popover), this.tip);
     this.root.append(this.gameEl, this.endOverlay);
     if (this.view3d) this.enable3d();
+    this.addZoomFab(() => this.toggleZoom());
     // Replace les pions dès que la taille du plateau change (vue 2D/3D, redimensionnement)
     this.resizeObs = new ResizeObserver(() => this.placePawns(false));
     this.resizeObs.observe(this.board);
@@ -725,7 +726,8 @@ class RoomView {
         onFollow: (on) => this.setZoomFab(on),
       });
       this.gameEl.classList.add('webgl');
-      this.addZoomFab(() => this.b3 && this.b3.toggleZoomOn(this.state ? this.state.current : this.me));
+      this.setZoom2d(false);
+      this.addZoomFab(() => this.toggleZoom());
       if (this.state) this.b3.setFollow(this.state.current);
     } catch (e) {
       console.error('WebGL indisponible', e);
@@ -746,8 +748,43 @@ class RoomView {
       f.title = on ? 'Loupe active : la caméra suit le joueur dont c\'est le tour (toucher pour revenir)' : 'Zoomer et suivre le joueur dont c\'est le tour';
     }
   }
+  /** Loupe : en 3D la caméra suit le pion ; en 2D le plateau est agrandi autour du pion. */
+  toggleZoom() {
+    if (this.b3) return this.b3.toggleZoomOn(this.state ? this.state.current : this.me);
+    this.setZoom2d(!this.zoom2d);
+  }
+  setZoom2d(on) {
+    this.zoom2d = on;
+    this.setZoomFab(on);
+    if (this.boardWrap) this.boardWrap.classList.toggle('z2d', on);
+    this.update2dZoom();
+  }
+  /** Plateau 2D agrandi, centré sur le joueur dont c'est le tour. */
+  update2dZoom() {
+    const b = this.board;
+    if (!b) return;
+    if (!this.zoom2d || this.b3 || !this.state) {
+      b.style.transform = '';
+      return;
+    }
+    const pid = this.state.current;
+    const pl = this.player(pid);
+    const pos = (this.disp && this.disp.pos[pid]) ?? (pl ? pl.pos : 0);
+    const el = this.cellEls && this.cellEls[pos];
+    if (!el) return;
+    const W = b.offsetWidth;
+    const H = b.offsetHeight;
+    const k = 2.2;
+    const cx = el.offsetLeft + el.offsetWidth / 2;
+    const cy = el.offsetTop + el.offsetHeight / 2;
+    const clamp = (v, lo) => Math.min(0, Math.max(lo, v));
+    const tx = clamp(W / 2 - cx * k, W - W * k);
+    const ty = clamp(H / 2 - cy * k, H - H * k);
+    b.style.transformOrigin = '0 0';
+    b.style.transform = `translate(${tx}px, ${ty}px) scale(${k})`;
+  }
   disable3d() {
-    this.gameEl && this.gameEl.querySelector('.zoom-fab')?.remove();
+    this.setZoomFab(false);
     if (this.b3) this.b3.destroy();
     this.b3 = null;
     this.gameEl.classList.remove('webgl');
@@ -1467,6 +1504,7 @@ class RoomView {
         return;
       case 'turn':
         if (this.b3) this.b3.setFollow(ev.pid); // loupe active : la caméra suit le joueur dont c'est le tour
+        else if (this.zoom2d) requestAnimationFrame(() => this.update2dZoom());
         this.renderPlayers(ev.pid);
         if (ev.pid === this.me) {
           Sound.play('turn');
@@ -1845,7 +1883,7 @@ class RoomView {
 
   // Infobulle au survol d'une case
   showTip(i) {
-    if (!this.state || matchMedia('(hover: none)').matches) return;
+    if (!this.state || (matchMedia('(hover: none)').matches || document.documentElement.classList.contains('touch'))) return;
     const c = this.meta.cells[i];
     const pr = this.state.props[i];
     const owner = pr && pr.owner ? this.player(pr.owner) : null;
@@ -1896,6 +1934,7 @@ class RoomView {
         animate
       );
     }
+    if (this.zoom2d) requestAnimationFrame(() => this.update2dZoom());
     const groups = {};
     for (const p of this.state.players) {
       if (p.bankrupt) continue;
@@ -2309,6 +2348,7 @@ class RoomView {
         festival: 'choisit où organiser le Festival…',
         debt: `doit trouver ${fmt(pend.amount || 0)}…`,
       }[st.phase] || 'réfléchit…';
+      this.dockPanel(false);
       panel.append(h('div.waiting-turn', h('span.avatar.sm', { style: { '--c': p.color } }, p.pawn), h('span', h('b', p.name), ' ', what)), this.timerBar);
       return;
     }
@@ -2374,10 +2414,12 @@ class RoomView {
         break;
       case 'debt':
         // Sélection directement sur le plateau : barre de vente en bas de l'écran
+        this.dockPanel(false);
         this.renderDebtBar(st, pend, me);
         return;
     }
     panel.append(this.timerBar);
+    this.dockPanel(this.phoneUi());
     panel.classList.remove('pop');
     void panel.offsetWidth;
     panel.classList.add('pop');
@@ -2606,6 +2648,18 @@ class RoomView {
         } }, '💀 Faillite')
       )
     );
+  }
+
+  /** Téléphone (ou écran étroit) : les décisions s'affichent à plat en bas de l'écran, toujours lisibles. */
+  phoneUi() {
+    return PHONE || matchMedia('(max-aspect-ratio: 5/4), (max-height: 560px)').matches;
+  }
+  dockPanel(sheet) {
+    const panel = this.actionPanel;
+    if (!panel || !this.gameEl) return;
+    panel.classList.toggle('sheet', sheet);
+    if (sheet && panel.parentNode !== this.gameEl) this.gameEl.append(panel);
+    else if (!sheet && panel.parentNode !== this.hud) this.hud.insertBefore(panel, this.cardSlot);
   }
 
   propertyHeader(i) {

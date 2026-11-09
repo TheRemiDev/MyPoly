@@ -2857,7 +2857,7 @@ body:not(.in-game) {
 .mo-tip-txt { color: #c8cbec; font-size: .85rem; line-height: 1.35; }
 .mo-tip-who { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .mo-tip-who span { padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 800; background: color-mix(in srgb, var(--c) 40%, transparent); }
-@media (pointer: coarse) { .mo-tip { display: none; } }
+html.touch .mo-tip { display: none; }
 /* Accueil à 4 affiches : les boutons s'empilent quand l'affiche est étroite */
 .hp-poster { container-type: inline-size; }
 .hp-poster-btns .btn { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3199,19 +3199,15 @@ body:not(.in-game) {
 
 /* Loupe du plateau (écrans tactiles) */
 .zoom-fab { display: none; }
-@media (pointer: coarse) {
-  .game.webgl .zoom-fab { display: grid; place-items: center; position: absolute; z-index: 35; right: calc(var(--safe-x) + 8px); top: calc(var(--safe-top) + 6px);
+.touch .game .zoom-fab { display: grid; place-items: center; position: absolute; z-index: 35; right: calc(var(--safe-x) + 8px); top: calc(var(--safe-top) + 6px);
     width: 46px; height: 46px; border-radius: 50%; border: 0; color: #fff; cursor: pointer; background: rgba(14, 17, 38, .82); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2), 0 8px 20px rgba(0, 0, 0, .4); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; transition: transform .15s; }
-  .game.webgl .zoom-fab svg { width: 24px; height: 24px; }
-  .game.webgl .zoom-fab:active { transform: scale(.9); }
-}
+.touch .game .zoom-fab svg { width: 24px; height: 24px; }
+.touch .game .zoom-fab:active { transform: scale(.9); }
 /* Les phrases rapides défilent dans leur propre bande : elles ne doivent jamais élargir la page */
 .chat-quick { width: 100%; min-width: 0; contain: inline-size; }
 .chat, .lobby-grid > * { min-width: 0; }
-@media (pointer: coarse) {
-  .game.webgl .zoom-fab.on { color: #fff; background: linear-gradient(135deg, #ff5a5f, #ff8a3d); box-shadow: 0 0 0 3px rgba(255, 255, 255, .85), 0 8px 22px rgba(255, 90, 95, .5); animation: fabPulse 2s ease-in-out infinite; }
-  @keyframes fabPulse { 50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, .5), 0 8px 22px rgba(255, 90, 95, .5); } }
-}
+.touch .game .zoom-fab.on { color: #fff; background: linear-gradient(135deg, #ff5a5f, #ff8a3d); box-shadow: 0 0 0 3px rgba(255, 255, 255, .85), 0 8px 22px rgba(255, 90, 95, .5); animation: fabPulse 2s ease-in-out infinite; }
+@keyframes fabPulse { 50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, .5), 0 8px 22px rgba(255, 90, 95, .5); } }
 
 /* =====================================================================
    Salles publiques : choix à la création, interrupteur dans le salon
@@ -3249,3 +3245,50 @@ body:not(.in-game) {
 .gsw.on { color: #fff; background: linear-gradient(90deg, rgba(255, 90, 95, .85), rgba(255, 138, 61, .85)); box-shadow: 0 4px 14px rgba(255, 90, 95, .35); cursor: default; }
 @media (hover: hover) and (pointer: fine) { .gsw:not(.on):hover { background: rgba(255, 255, 255, .14); color: #fff; } }
 .gsw:not(.on):active { transform: scale(.95); }
+
+/* =====================================================================
+   Téléphone : les décisions (achat, rachat, construction…) s'affichent à plat
+   en bas de l'écran, en pixels, quelle que soit la vue (3D, 2D, zoom)
+   ===================================================================== */
+.action-panel.sheet { position: fixed; left: 50%; top: auto; right: auto; bottom: calc(10px + env(safe-area-inset-bottom)); translate: -50% 0; z-index: 45;
+  width: min(440px, calc(100vw - 16px)); max-height: calc(100dvh - 90px); overflow-y: auto; overscroll-behavior: contain; gap: 8px; font-size: 15px; padding: 12px;
+  border-radius: 22px; background: rgba(14, 17, 38, .95); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14), 0 -8px 34px rgba(0, 0, 0, .55); backdrop-filter: blur(10px);
+  animation: sheetUp .35s cubic-bezier(.2, .9, .3, 1.12); }
+.action-panel.sheet.pop { animation: sheetUp .35s cubic-bezier(.2, .9, .3, 1.12); }
+@keyframes sheetUp { from { transform: translateY(30px); opacity: 0; } }
+.action-panel.sheet > .btn-col, .action-panel.sheet > .prop-header, .action-panel.sheet > .sell-list { filter: none; }
+.action-panel.sheet .btn-col { gap: 8px; }
+.action-panel.sheet .btn { font-size: 15px; padding: 11px 16px; border-radius: 14px; min-height: 46px; }
+.action-panel.sheet .btn.sm { font-size: 13px; padding: 7px 12px; min-height: 0; }
+.action-panel.sheet .btn.skip { font-size: 14px; border-width: 2px; box-shadow: 0 3px 0 #9da3c4, 0 6px 14px rgba(0, 0, 0, .35); }
+.action-panel.sheet .roll-btn { width: 100%; justify-content: center; font-size: 19px !important; padding: 14px !important; box-shadow: 0 4px 0 #b33a2a, 0 8px 22px rgba(255, 90, 95, .45); }
+.action-panel.sheet .panel-title { font-size: 17px; text-shadow: none; }
+.action-panel.sheet .hint { font-size: 13.5px; text-shadow: none; }
+.touch .action-panel .roll-btn + .hint { display: none; }
+.action-panel.sheet .cap-hint { font-size: 12.5px; padding: 4px 12px; border-width: 1.5px; }
+.action-panel.sheet .prop-header { border-radius: 14px; box-shadow: 0 3px 0 #b9ab8c; }
+.action-panel.sheet .prop-header-band { font-size: 13px; padding: 5px; }
+.action-panel.sheet .prop-header-name { font-size: 20px; padding-top: 4px; }
+.action-panel.sheet .prop-header-sub { font-size: 12.5px; padding: 2px 8px 7px; }
+.action-panel.sheet .timer-bar { height: 6px; border-radius: 6px; flex: none; }
+@media (max-height: 560px) {
+  .action-panel.sheet { width: min(520px, max(300px, calc(100vw - 2 * var(--safe-x, 8px) - 12px))); bottom: calc(6px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 12px); padding: 8px 10px; gap: 6px; }
+  .action-panel.sheet .prop-header-sub { display: none; }
+  .action-panel.sheet .prop-header-band { font-size: 12px; padding: 3px; }
+  .action-panel.sheet .panel-title { font-size: 15px; }
+  .action-panel.sheet .btn-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px; }
+  .action-panel.sheet .btn { min-height: 40px; padding: 8px 12px; }
+  .action-panel.sheet .prop-header-name { font-size: 17px; }
+}
+/* Petits textes restés sur le plateau (tour des autres) : jamais illisibles */
+.phone .action-panel:not(.sheet) .waiting-turn { font-size: max(2.3cqw, 12px); padding: max(1cqw, 6px) max(1.8cqw, 12px); }
+.phone .action-panel:not(.sheet) .waiting-turn .avatar.sm { width: max(3cqw, 22px); height: max(3cqw, 22px); font-size: max(1.8cqw, 13px); }
+/* Loupe du plateau 2D : le plateau s'agrandit dans sa zone */
+.game .board-wrap.z2d { overflow: hidden; }
+.game .board-wrap.z2d .board { transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
+/* Paysage sur téléphone : la loupe passe sous la barre d'outils au lieu d'être cachée derrière */
+@media (max-height: 560px) and (min-aspect-ratio: 5/4) { .touch .game .zoom-fab { top: calc(var(--safe-top) + 64px); } }
+
+/* Carton ! : fiche du joueur d'en face bien sous la barre d'outils (bandeau « JOUE… » visible) */
+.cards-game .pcard.corner.c-tm { top: 84px; }
+.pcard.corner .pcard-timer.urgent { background: #ff5a5f; box-shadow: 0 0 8px #ff5a5f; }
