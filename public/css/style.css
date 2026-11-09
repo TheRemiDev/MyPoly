@@ -3103,7 +3103,8 @@ body:not(.in-game) {
 /* =====================================================================
    Téléphone et application : navigation façon application
    ===================================================================== */
-html, body { max-width: 100%; overflow-x: clip; }
+/* Anti-débordement horizontal sur les pages (jamais sur html/body : cela bloquerait le défilement au doigt dans l'application) */
+#app, #topbar { max-width: 100vw; overflow-x: clip; }
 #tabbar { display: none; }
 @media (max-width: 760px) {
   #tabbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
@@ -3150,3 +3151,57 @@ html, body { max-width: 100%; overflow-x: clip; }
 .hp-appmode .hp-poster-btns .btn { padding: 9px 6px; font-size: .82rem; }
 .hp-appmode .hp-champs { grid-template-columns: 1fr; }
 @media (max-width: 760px) { body:not(.in-game):not(.no-tabbar) #toasts { bottom: calc(86px + env(safe-area-inset-bottom)); } }
+
+/* =====================================================================
+   Téléphone en portrait : barre d'outils en haut sur toute la largeur,
+   fiches des joueurs juste en dessous, plateau au milieu
+   ===================================================================== */
+@media (max-aspect-ratio: 5/4) {
+  .game:not(.cards-game) { --safe-top: 176px; }
+  .game:not(.cards-game) .topbar { top: max(6px, env(safe-area-inset-top)); left: 6px; right: 6px; translate: none; max-width: none; }
+  .game:not(.cards-game) .topbar .toolbar { width: 100%; max-width: 100%; justify-content: space-between; overflow-x: auto; scrollbar-width: none; padding: 4px; gap: 2px; border-radius: 16px; }
+  .game:not(.cards-game) .topbar .toolbar::-webkit-scrollbar { display: none; }
+  .game:not(.cards-game) .topbar .tb-btn { flex: none; }
+  .game:not(.cards-game) .topbar .tb-room { flex: none; }
+  .game:not(.cards-game) .topbar .tb-code { flex: none; padding: 5px 8px; font-size: .8rem; }
+  .game:not(.cards-game) .topbar .tb-info { flex: none; font-size: .75rem; padding: 0 4px; }
+  .game:not(.cards-game) .pcard.corner.c-tl, .game:not(.cards-game) .pcard.corner.c-tr { top: calc(max(6px, env(safe-area-inset-top)) + 58px); }
+  .game:not(.cards-game) .notif-stack.ns-tl, .game:not(.cards-game) .notif-stack.ns-tr { top: 176px; }
+}
+
+/* =====================================================================
+   Messages en partie : grosse bulle près de la fiche de l'expéditeur
+   ===================================================================== */
+.chat-bubble.say { --bc: #ff5a5f; z-index: 40; max-width: min(300px, 78vw); min-width: 64px; padding: 12px 16px; border-radius: 20px; font-size: 1.08rem; font-weight: 800; line-height: 1.25; color: #1c2040;
+  background: #fff; box-shadow: 0 0 0 4px var(--bc), 0 14px 34px rgba(0, 0, 0, .5); animation: sayIn .45s cubic-bezier(.2, 1.4, .4, 1) both; pointer-events: none; text-align: left; white-space: normal; }
+.chat-bubble.say::after { content: ''; position: absolute; width: 18px; height: 18px; background: #fff; box-shadow: 4px 4px 0 0 var(--bc); rotate: 45deg; }
+.c-tl .chat-bubble.say::after, .c-tr .chat-bubble.say::after, .c-tm .chat-bubble.say::after, .c-ml .chat-bubble.say::after, .c-mr .chat-bubble.say::after { top: -8px; rotate: 225deg; }
+.c-bl .chat-bubble.say::after, .c-br .chat-bubble.say::after { bottom: -8px; }
+.c-tl .chat-bubble.say::after, .c-bl .chat-bubble.say::after, .c-ml .chat-bubble.say::after { left: 26px; }
+.c-tr .chat-bubble.say::after, .c-br .chat-bubble.say::after, .c-mr .chat-bubble.say::after { right: 26px; }
+.c-tm .chat-bubble.say::after { left: 50%; margin-left: -9px; }
+.c-tm .chat-bubble.say { top: calc(100% + 14px); left: 50%; translate: -50% 0; }
+.c-ml .chat-bubble.say, .c-mr .chat-bubble.say { top: calc(100% + 14px); }
+.c-ml .chat-bubble.say { left: 10px; }
+.c-mr .chat-bubble.say { right: 10px; }
+.chat-bubble.say.emoji { font-size: 2.6rem; padding: 6px 14px; line-height: 1.1; }
+.chat-bubble.say.out { animation: sayOut .35s ease forwards; }
+@keyframes sayIn { 0% { opacity: 0; transform: scale(.4) translateY(10px); } 100% { opacity: 1; transform: none; } }
+@keyframes sayOut { to { opacity: 0; transform: scale(.85) translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .chat-bubble.say, .chat-bubble.say.out { animation-duration: .01s; } }
+
+/* Phrases rapides dans la discussion */
+.chat-quick { display: flex; gap: 6px; overflow-x: auto; padding: 6px 2px 8px; scrollbar-width: none; flex: none; }
+.chat-quick::-webkit-scrollbar { display: none; }
+.chat-chip { flex: none; padding: 7px 12px; border-radius: 99px; border: 0; background: rgba(255, 255, 255, .08); color: #fff; font: inherit; font-weight: 800; font-size: .82rem; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); transition: background .15s, transform .12s; white-space: nowrap; }
+.chat-chip:active { transform: scale(.94); background: rgba(255, 90, 95, .35); }
+@media (hover: hover) and (pointer: fine) { .chat-chip:hover { background: rgba(255, 255, 255, .15); } }
+
+/* Loupe du plateau (écrans tactiles) */
+.zoom-fab { display: none; }
+@media (pointer: coarse) {
+  .game.webgl .zoom-fab { display: grid; place-items: center; position: absolute; z-index: 35; right: calc(var(--safe-x) + 8px); top: calc(var(--safe-top) + 6px);
+    width: 46px; height: 46px; border-radius: 50%; border: 0; color: #fff; cursor: pointer; background: rgba(14, 17, 38, .82); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2), 0 8px 20px rgba(0, 0, 0, .4); backdrop-filter: blur(6px); -webkit-tap-highlight-color: transparent; transition: transform .15s; }
+  .game.webgl .zoom-fab svg { width: 24px; height: 24px; }
+  .game.webgl .zoom-fab:active { transform: scale(.9); }
+}

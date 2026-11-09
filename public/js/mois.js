@@ -157,6 +157,7 @@ export class MonthTable {
     if (webglAvailable()) {
       try {
         this.b3 = new Month3D(this.host, { onHover: (day) => this.hoverCell(day) });
+        v.addZoomFab(() => this.b3.toggleZoomOn(this.me));
         this.host.addEventListener('pointermove', (e) => {
           this.tipEl.style.left = e.clientX + 'px';
           this.tipEl.style.top = e.clientY + 'px';

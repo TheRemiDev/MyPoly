@@ -160,6 +160,21 @@ export class HorseTable {
           },
         });
         v.gameEl.classList.add('webgl');
+        // Loupe : zoom sur mon cheval le plus avancé
+        v.addZoomFab(() => {
+          const me = this.player(this.me);
+          let key = null;
+          if (me) {
+            let best = -2;
+            me.horses.forEach((r, i) => {
+              if (r > best && r < CENTER) {
+                best = r;
+                key = me.id + '|' + i;
+              }
+            });
+          }
+          this.b3.toggleZoomOn(key);
+        });
       } catch (e) {
         console.error('WebGL indisponible', e);
         this.b3 = null;
