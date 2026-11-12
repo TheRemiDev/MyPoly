@@ -19,6 +19,8 @@ const P = {
   shield: '<path d="M12 3 4.5 6v6c0 4.4 3.2 7.6 7.5 9 4.3-1.4 7.5-4.6 7.5-9V6Z"/><path d="m9 12 2 2 4-4"/>',
   cube: '<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 12h16M12 4v16"/>',
+  coach: '<path d="M2.5 9 12 4.5 21.5 9 12 13.5Z"/><path d="M6.5 11v4.5c0 1.4 2.5 3 5.5 3s5.5-1.6 5.5-3V11"/><path d="M21.5 9v5"/>',
+  ranks: '<rect x="3" y="5" width="8" height="12" rx="1.6"/><rect x="13" y="7" width="8" height="12" rx="1.6"/><path d="m7 9 1.4 2L7 13l-1.4-2Z"/>',
 };
 /** Icône en ligne (hérite de la couleur du texte). */
 export function icon(name) {

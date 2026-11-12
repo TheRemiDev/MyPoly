@@ -10,6 +10,7 @@ import { icon } from './icons.js';
 import { CardTable, CARD_SETTINGS_UI, CARD_PRESETS } from './cartes.js';
 import { HorseTable, HORSE_SETTINGS_UI, HORSE_PRESETS } from './chevaux.js';
 import { MonthTable, MONTH_SETTINGS_UI, MONTH_PRESETS } from './mois.js';
+import { PokerTable, POKER_SETTINGS_UI, POKER_PRESETS } from './poker.js';
 
 /** Les jeux du site : nom, étiquette, réglages et préréglages. */
 const GAMES = {
@@ -17,6 +18,7 @@ const GAMES = {
   cartes: { name: 'Carton !', tag: '🃏 Carton !', store: 'savedCardSettings', share: 'Rejoins ma partie de Carton ! sur MyPoly' },
   chevaux: { name: 'Petits chevaux', tag: '🐴 Petits chevaux', store: 'savedHorseSettings', share: 'Rejoins ma course de Petits chevaux sur MyPoly' },
   mois: { name: 'Fin de mois', tag: '📅 Fin de mois', store: 'savedMonthSettings', share: 'Rejoins ma partie de Fin de mois sur MyPoly' },
+  poker: { name: 'Poker', tag: '♠ Poker', store: 'savedPokerSettings', share: 'Rejoins ma table de poker sur MyPoly' },
 };
 import { MusicPlayer } from './music.js';
 
@@ -425,8 +427,8 @@ class RoomView {
   /** Fin de partie : choisir le prochain jeu de la table. */
   openGameChooser() {
     let close = null;
-    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅' };
-    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion' };
+    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅', poker: '♠' };
+    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion', poker: 'Texas Hold\'em, avec mode Débutant' };
     modal({
       title: '🎮 Prochaine partie',
       body: h('div.room-choices',
@@ -445,7 +447,7 @@ class RoomView {
 
   /** Règles à comparer : sans les options propres à la salle elle-même. */
   get ruleDefaults() {
-    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults }[this.kind];
+    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults, poker: this.meta.pokerDefaults }[this.kind];
   }
   get kind() {
     const k = this.room && this.room.kind;
@@ -514,9 +516,9 @@ class RoomView {
         ));
       }
     }
-    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
+    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS, poker: POKER_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
-    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI }[this.kind]).slice();
+    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI, poker: POKER_SETTINGS_UI }[this.kind]).slice();
     if (this.kind === 'poly' && (isAdmin || s.melenchon || s.politicalBoard)) {
       groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' },
         { key: 'politicalBoard', label: 'Plateau politique', type: 'toggle', admin: true, hint: 'Plateau satirique : ZAD, Syndicat, Ministère des Taxes, Exil fiscal… et cartes Chance assorties' }] });
@@ -632,7 +634,7 @@ class RoomView {
   buildGame() {
     // Jeux de table (cartes, chevaux) : la vue dédiée remplace le plateau MyPoly
     if (this.kind !== 'poly') {
-      this.cards = new ({ chevaux: HorseTable, mois: MonthTable }[this.kind] || CardTable)(this);
+      this.cards = new ({ chevaux: HorseTable, mois: MonthTable, poker: PokerTable }[this.kind] || CardTable)(this);
       this.cards.build();
       return;
     }
@@ -1427,6 +1429,7 @@ class RoomView {
       }),
       IN_APP ? null : btn('fullscreen', 'Plein écran (F)', toggleFullscreen),
       this.isAdmin && this.room && this.room.kind === 'poly' && this.room.state === 'playing' ? btn('shield', 'Pouvoirs d\'admin', () => this.togglePop('admin'), { on: this.pop === 'admin', cls: '.admin' }) : null,
+      ...(opts.extra || []).map((x) => btn(x.name, x.title, x.onclick, { on: x.on, label: x.label, cls: x.cls || '' })),
       this.isAdmin ? btn('ban', 'Modération : expulser / bannir', () => this.openModeration(), { cls: '.admin' }) : null,
       sep(),
       opts.forfeit ? btn('flag', 'Abandonner', opts.forfeit, { cls: '.danger' }) : btn('exit', 'Quitter', () => navigate('/'), { cls: '.danger' })

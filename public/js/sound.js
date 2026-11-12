@@ -126,6 +126,22 @@ const SFX = {
     tone(220, 0.09, 0.14, { type: 'square', gain: 0.07 });
   },
   chat: () => tone(1200, 0, 0.08, { gain: 0.08 }),
+  // Poker : un jeton posé, une pile de jetons, le mélange des cartes
+  chip: () => {
+    noise(0, 0.035, 0.25, 5200);
+    tone(2600, 0, 0.05, { type: 'triangle', gain: 0.05 });
+  },
+  chips: () => {
+    for (let i = 0; i < 6; i++) noise(i * 0.045 + Math.random() * 0.02, 0.035, 0.22, 4200 + Math.random() * 2400);
+  },
+  shuffle: () => {
+    for (let i = 0; i < 14; i++) noise(i * 0.03, 0.04, 0.12, 3000 + Math.random() * 3000);
+  },
+  check: () => {
+    noise(0, 0.04, 0.3, 800);
+    noise(0.11, 0.04, 0.3, 800);
+  },
+  fold: () => noise(0, 0.22, 0.14, 2600),
   tick: () => tone(1000, 0, 0.04, { type: 'square', gain: 0.05 }),
   quake: () => {
     noise(0, 0.9, 0.5, 120);
