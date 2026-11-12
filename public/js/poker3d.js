@@ -510,7 +510,8 @@ export class Poker3D {
   }
   betPos(pid) {
     const s = this.seatPos[pid];
-    return s.v.clone().multiplyScalar(0.6).addScaledVector(s.perp, 0.35).setY(TOP + 0.001);
+    // Assez loin du centre pour ne jamais recouvrir les cartes communes
+    return s.v.clone().multiplyScalar(0.72).setY(TOP + 0.001);
   }
   buttonPos(pid) {
     const s = this.seatPos[pid];
