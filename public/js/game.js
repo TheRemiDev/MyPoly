@@ -311,6 +311,7 @@ class RoomView {
       seats: h('div.seats'),
       settings: h('div.settings-form'),
       look: h('div.look'),
+      mine: h('div.my-options'),
       actions: h('div.lobby-actions'),
       title: h('div.lobby-title'),
     };
@@ -327,7 +328,7 @@ class RoomView {
           )
         ),
         h('div.lobby-grid',
-          h('div.card.lobby-players', h('h2', '👥 Joueurs'), this.lobbyEls.seats, this.lobbyEls.look),
+          h('div.card.lobby-players', h('h2', '👥 Joueurs'), this.lobbyEls.seats, this.lobbyEls.mine, this.lobbyEls.look),
           h('div.card.lobby-settings', h('h2', '⚙️ Règles de la partie'), this.lobbyEls.settings),
           h('div.card.lobby-chat', h('h2', '💬 Discussion'), this.chatBox, h('h2.music-title', '🎵 Musique'), this.buildMusic())
         ),
@@ -340,6 +341,7 @@ class RoomView {
   renderLobby() {
     const r = this.room;
     const els = this.lobbyEls;
+    this.renderMyOptions();
     const mySeat = r.seats.find((s) => s.key === this.me);
     // Titre
     els.title.innerHTML = '';
@@ -492,6 +494,31 @@ class RoomView {
       else this.rulesDismissed = true;
     }
     this.cmd('room:start');
+  }
+
+  /**
+   * Options personnelles (chacun décide pour soi, rien n'est imposé à la table) :
+   * Mode Débutant du poker, total des cartes au Blackjack.
+   */
+  renderMyOptions() {
+    const box = this.lobbyEls && this.lobbyEls.mine;
+    if (!box) return;
+    const OPTS = {
+      poker: [{ key: 'pokerCoach', title: 'Mode Débutant', text: 'Conseils, chances de gagner, calcul de la cote et explication de chaque étape. Visible par vous seul.' }],
+      blackjack: [{ key: 'bjHelp', title: 'Aide au calcul', text: 'Affiche le total de chaque main (l\'As compte 1 ou 11). Visible par vous seul.' }],
+    }[this.kind];
+    box.innerHTML = '';
+    if (!OPTS) return;
+    box.append(h('div.my-options-title', 'Mes options'));
+    for (const o of OPTS) {
+      const on = storage(o.key) === 'on';
+      const input = h('input', { type: 'checkbox', checked: on, onchange: (e) => {
+        storage(o.key, e.target.checked ? 'on' : 'off');
+        Sound.play('click');
+        this.renderMyOptions();
+      } });
+      box.append(h('label.my-option' + (on ? '.on' : ''), h('div.my-option-text', h('b', o.title), h('small', o.text)), h('span.switch', input, h('span.slider'))));
+    }
   }
 
   renderSettings() {

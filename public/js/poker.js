@@ -10,7 +10,7 @@ import * as Sound from './sound.js';
 import { navigate } from './app.js';
 import { webglAvailable } from './board3d.js';
 import { Poker3D } from './poker3d.js';
-import { cardImg, chipImg, handChart, displayCat, HAND_RANKS, REACTIONS, reactionEl, initials, suitURL } from './poker-art.js';
+import { cardImg, chipImg, chipURL as chipURLFor, handChart, displayCat, HAND_RANKS, REACTIONS, reactionEl, initials, suitURL } from './poker-art.js';
 import { icon } from './icons.js';
 
 const E = globalThis.PokerEval;
@@ -69,7 +69,8 @@ export class PokerTable {
     this.state = null;
     this.queue = [];
     this.busy = false;
-    this.coach = storage('pokerCoach') !== 'off';
+    // Mode Débutant : choisi par chaque joueur dans la salle d'attente (désactivé par défaut)
+    this.coach = storage('pokerCoach') === 'on';
     // Sur téléphone, le panneau Débutant démarre replié (une ligne de résumé)
     this.coachMin = window.innerWidth < 1100;
     this.raiseOpen = false;
@@ -365,7 +366,7 @@ export class PokerTable {
         h('div.pc-avatar.pk-avatar', h('span.pk-initials', p.out ? '×' : initials(p.name))),
         h('div.pc-body',
           h('div.pc-name', h('span.pc-name-text.' + (nameClass(p) || 'plain'), p.name), ...roleTags(p, { level: false, compact: true })),
-          h('div.pc-cash.pk-stack', chipImg(1000, '.sm'), p.out ? (p.rank ? `Éliminé · ${p.rank}e` : 'Éliminé') : fmt(d.stack)),
+          h('div.pc-cash.pk-stack', chipImg(0, '.sm'), p.out ? (p.rank ? `Éliminé · ${p.rank}e` : 'Éliminé') : fmt(d.stack)),
           h('div.pc-chips.pk-tags',
             ...pos,
             last && !p.out ? h('span.pk-act.a-' + last, ACT_LABEL[last] + (d.last.amount && last !== 'fold' && last !== 'check' ? ' ' + fmt(d.last.amount) : '')) : null,
@@ -440,10 +441,11 @@ export class PokerTable {
     const pot = this.disp.pot;
     if (pot > 0) place(h('div.pk-potlabel', h('small', 'Pot'), fmt(pot)), this.b3 ? this.b3.potScreen() : this.pot2d());
     // Nom de ma main, sous mes cartes
-    if (this.b3 && st.hole && !this.player(this.me)?.folded) {
+    if (this.b3 && !this.b3.portrait && st.hole && !this.player(this.me)?.folded) {
       const pt = this.b3.seatScreen(this.me);
       const name = this.myHandName();
-      if (pt && name) place(h('div.pk-handlabel', name), { x: pt.x, y: pt.y + 4 });
+      // Au-dessus de mes cartes (jamais par-dessus)
+      if (pt && name) place(h('div.pk-handlabel', name), { x: pt.x, y: pt.y - (this.b3.portrait ? 64 : 58) });
     }
   }
   bet2d(pid) {
@@ -506,10 +508,16 @@ export class PokerTable {
       const best = this.coach ? this.highlightCards() : [];
       this.myHandEl.append(
         h('div.pk-mycards' + (me.folded ? '.folded' : ''), st.hole.map((c) => cardImg(c, '.hole' + (best.includes(c) ? '.hl' : '')))),
-        h('div.pk-myhand-text', h('small', me.folded ? 'Couché' : 'Ta main'), h('b', this.myHandName()))
+        h('div.pk-myhand-text', h('small', me.folded ? 'Couché' : 'Ta main'), h('b', this.myHandName()), this.myStackEl(me))
       );
-    }
+    } else if (me && !me.out) this.myHandEl.append(h('div.pk-myhand-text', this.myStackEl(me)));
     this.dock.classList.toggle('empty', !this.myHandEl.childElementCount && !st.legal);
+  }
+
+  /** Mes jetons (toujours visibles en bas de l'écran). */
+  myStackEl(me) {
+    const d = this.disp.players[me.id] || me;
+    return h('div.pk-mystack', h('img.pk-chip', { src: chipURLFor(0), alt: '' }), h('span', fmt(d.stack), h('small', ' jetons')), d.bet ? h('span.pk-mybet', `mise ${fmt(d.bet)}`) : null);
   }
 
   renderActions() {

@@ -15,6 +15,7 @@ const CW = 0.92; // carte (monde)
 const CH = CW * 1.4;
 const CT = 0.01;
 const CHIP_R = 0.17;
+const ME_SCALE = 1.25; // mes cartes, plus grandes pour bien les lire
 const CHIP_H = 0.042;
 const ease = {
   out: (t) => 1 - (1 - t) ** 3,
@@ -62,8 +63,10 @@ export class Poker3D {
     this.target = new THREE.Vector3(0, TOP, 0.25);
     this.homeTarget = this.target.clone();
 
-    this.backMat = new THREE.MeshStandardMaterial({ map: this.tex(drawCardBack()), roughness: 0.42 });
+    // Cartes en haute définition, satinées (pas de reflet blanc qui « brûle » le dessin)
+    this.backMat = new THREE.MeshStandardMaterial({ map: this.tex(drawCardBack(512)), roughness: 0.7, metalness: 0, envMapIntensity: 0.55 });
     this.edgeMat = new THREE.MeshStandardMaterial({ color: 0xf4eedf, roughness: 0.6 });
+    this.buildEnvironment();
     this.buildCardGeometry();
     this.buildChipKit();
     // Tout ce qui est sur la table vit dans « world », que l'on pivote d'un quart de tour en portrait
@@ -83,6 +86,29 @@ export class Poker3D {
     this.raf = requestAnimationFrame(this.loop);
   }
 
+  /**
+   * Petit studio photo virtuel (panneaux lumineux) transformé en carte d'environnement :
+   * l'or, le cuir, les jetons et le bois prennent de vrais reflets doux.
+   */
+  buildEnvironment() {
+    const env = new THREE.Scene();
+    const room = new THREE.Mesh(new THREE.BoxGeometry(30, 14, 30), new THREE.MeshBasicMaterial({ color: 0x1a1230, side: THREE.BackSide }));
+    env.add(room);
+    const panel = (w, hgt, color, x, y, z, rx = 0, ry = 0) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hgt), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+      m.position.set(x, y, z);
+      m.rotation.set(rx, ry, 0);
+      env.add(m);
+    };
+    panel(12, 12, 0xfff1d6, 0, 6.9, 0, Math.PI / 2); // la lampe au-dessus de la table
+    panel(10, 4, 0x6a5cff, -14.9, 4, 0, 0, Math.PI / 2);
+    panel(10, 4, 0xff6a9a, 14.9, 4, 0, 0, -Math.PI / 2);
+    panel(16, 3, 0xffd9a0, 0, 3, -14.9);
+    const pm = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pm.fromScene(env, 0.035).texture;
+    this.scene.environmentIntensity = 0.55;
+    pm.dispose();
+  }
   tex(canvas) {
     const t = new THREE.CanvasTexture(canvas);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -90,7 +116,7 @@ export class Poker3D {
     return t;
   }
   faceMat(c) {
-    if (!this.faceCache[c]) this.faceCache[c] = new THREE.MeshStandardMaterial({ map: this.tex(drawCardFace(c)), roughness: 0.4 });
+    if (!this.faceCache[c]) this.faceCache[c] = new THREE.MeshStandardMaterial({ map: this.tex(drawCardFace(c, 512)), roughness: 0.7, metalness: 0, envMapIntensity: 0.55 });
     return this.faceCache[c];
   }
 
@@ -501,7 +527,7 @@ export class Poker3D {
   holePos(pid, k) {
     const s = this.seatPos[pid];
     const me = s.slot === 'me';
-    const off = (k - 0.5) * (CW * (me ? 1.08 : 0.62));
+    const off = (k - 0.5) * (CW * (me ? 1.32 : 0.62));
     return s.v.clone().addScaledVector(s.perp, -off).setY(TOP + CT / 2 + 0.002 + k * 0.004);
   }
   stackPos(pid) {
@@ -563,7 +589,7 @@ export class Poker3D {
     const me = s.slot === 'me';
     // Mes cartes et les cartes montrées sont tournées vers moi (lisibles)
     m.rotation.set(0, faceUp ? this.upRot + (k - 0.5) * -0.12 : s.rot + (k - 0.5) * 0.18, 0);
-    if (me) m.scale.setScalar(1.06);
+    if (me) m.scale.setScalar(ME_SCALE);
     else m.scale.setScalar(faceUp ? 0.82 : 0.7);
   }
   setStack(pid, amount) {
@@ -703,7 +729,7 @@ export class Poker3D {
         const sp = this.seatPos[pid];
         const to = this.holePos(pid, k);
         const me = pid === myId;
-        proms.push(this.fly(m, this.shoePos, to, { ms: 380, arc: 0.35, rotFrom: Math.random() * 2, rotTo: me ? this.upRot + (k - 0.5) * -0.12 : sp.rot + (k - 0.5) * 0.18, scaleFrom: 0.7, scaleTo: me ? 1.06 : 0.7 }));
+        proms.push(this.fly(m, this.shoePos, to, { ms: 380, arc: 0.35, rotFrom: Math.random() * 2, rotTo: me ? this.upRot + (k - 0.5) * -0.12 : sp.rot + (k - 0.5) * 0.18, scaleFrom: 0.7, scaleTo: me ? ME_SCALE : 0.7 }));
         this.cb.onDeal && this.cb.onDeal();
         await this.wait(150);
       }
