@@ -3594,7 +3594,7 @@ html.touch .mo-tip { display: none; }
 }
 /* Salle d'attente : options personnelles */
 .my-options:empty { display: none; }
-.my-options { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 6px; }
+.my-options { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
 .my-options-title { font-size: .72rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .my-option { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; cursor: pointer; background: rgba(255, 255, 255, .04); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1); transition: background .2s, box-shadow .2s; }
 .my-option.on { background: linear-gradient(120deg, rgba(255, 209, 102, .16), rgba(255, 255, 255, .03)); box-shadow: inset 0 0 0 1.5px rgba(255, 209, 102, .55); }
@@ -3652,7 +3652,7 @@ html.touch .mo-tip { display: none; }
 .bj2d-hand { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .bj2d-hand small { font-weight: 800; color: #fff; }
 @media (max-aspect-ratio: 5/4) {
-  .game.poker-game.bj-game { --safe-top: 64px; --safe-y: 270px; }
+  .game.poker-game.bj-game { --safe-top: 60px; --safe-y: 250px; }
   .bj-seat { --cw: 132px; }
   .bj-chipbtn { width: 46px; height: 46px; }
   .bj-bet { padding: 10px; gap: 8px; }
@@ -3665,3 +3665,8 @@ html.touch .mo-tip { display: none; }
   .bj-chipbtn { width: 40px; height: 40px; }
   .bj-dock .pk-status { display: none; }
 }
+
+/* Blackjack : total d'une main = pastille dorée à côté des cartes (≠ montant des mises) */
+.bj-handlabel { translate: 0 -50%; min-width: 34px; text-align: center; padding: 4px 10px; font-size: 1.05rem; color: #3b2a00;
+  background: radial-gradient(circle at 35% 30%, #fff6c9, #ffd166 60%, #e0a52c); box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 6px 14px rgba(0, 0, 0, .45); }
+.bj-handlabel.active { box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255, 209, 102, .9); }

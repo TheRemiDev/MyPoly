@@ -330,7 +330,7 @@ class RoomView {
           )
         ),
         h('div.lobby-grid',
-          h('div.card.lobby-players', h('h2', '👥 Joueurs'), this.lobbyEls.seats, this.lobbyEls.mine, this.lobbyEls.look),
+          h('div.card.lobby-players', this.lobbyEls.mine, h('h2', '👥 Joueurs'), this.lobbyEls.seats, this.lobbyEls.look),
           h('div.card.lobby-settings', h('h2', '⚙️ Règles de la partie'), this.lobbyEls.settings),
           h('div.card.lobby-chat', h('h2', '💬 Discussion'), this.chatBox, h('h2.music-title', '🎵 Musique'), this.buildMusic())
         ),

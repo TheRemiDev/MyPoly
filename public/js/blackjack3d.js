@@ -246,6 +246,7 @@ export class Blackjack3D extends Poker3D {
   }
 
   buildProps() {
+    this.portraitPitch = 1.3;
     this.turnRing = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.74, 64), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
     this.turnRing.rotation.x = -Math.PI / 2;
     this.world.add(this.turnRing);
@@ -262,8 +263,9 @@ export class Blackjack3D extends Poker3D {
   /** La caméra cadre la zone de jeu (en portrait, les bords du rebord peuvent sortir de l'écran). */
   tableCorners() {
     const out = [];
-    const rx = this.portrait ? RX * 0.8 : RX + RAILW;
-    const rz = this.portrait ? RZ * 0.86 : RZ + RAILW;
+    // En portrait : on cadre serré sur les cercles de mise (les bords du rebord sortent de l'écran)
+    const rx = this.portrait ? 4.3 : RX + RAILW;
+    const rz = this.portrait ? RZ * 0.8 : RZ + RAILW;
     for (let i = 0; i <= 8; i++) {
       const t = (i / 8) * Math.PI;
       out.push(new THREE.Vector3(rx * Math.cos(t), TOP + 0.2, DZ + rz * Math.sin(t)));
@@ -505,7 +507,8 @@ export class Blackjack3D extends Poker3D {
   // ------------------------------------------------------------ écran
   handScreen(pid, h = 0, n = 1, k = 0) {
     const s = this.bj.seats[pid];
-    return s ? this.screenOf(this.cardPos(pid, h, k, n).add(new THREE.Vector3(0, 0.05, 0)).addScaledVector(s.toward, CH * 0.62)) : null;
+    // À droite de la dernière carte de la main (jamais par-dessus les mises ni la banque)
+    return s ? this.screenOf(this.cardPos(pid, h, k, n).add(new THREE.Vector3(0, 0.05, 0)).addScaledVector(s.perp, CW * 0.5 + 0.28)) : null;
   }
   dealerScreen() {
     return this.screenOf(new THREE.Vector3(0, TOP + 0.05, this.dealerZ - CH * 0.62));

@@ -904,7 +904,7 @@ export class Poker3D {
     const ratio = (w - this.sa.left - this.sa.right) / Math.max(1, h - this.sa.top - this.sa.bottom);
     // Orientation d'après la forme réelle de l'écran (pas celle de la zone libre)
     this.setLayout(w / h < 0.85);
-    const base = this.portrait ? 1.12 : ratio < 1.1 ? 1.2 : 0.95;
+    const base = this.portrait ? this.portraitPitch || 1.12 : ratio < 1.1 ? 1.2 : 0.95;
     if (this.basePitch !== base) {
       this.basePitch = base;
       this.view.pitch = base;
