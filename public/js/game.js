@@ -11,6 +11,7 @@ import { CardTable, CARD_SETTINGS_UI, CARD_PRESETS } from './cartes.js';
 import { HorseTable, HORSE_SETTINGS_UI, HORSE_PRESETS } from './chevaux.js';
 import { MonthTable, MONTH_SETTINGS_UI, MONTH_PRESETS } from './mois.js';
 import { PokerTable, POKER_SETTINGS_UI, POKER_PRESETS } from './poker.js';
+import { BlackjackTable, BJ_SETTINGS_UI, BJ_PRESETS } from './blackjack.js';
 
 /** Les jeux du site : nom, étiquette, réglages et préréglages. */
 const GAMES = {
@@ -19,6 +20,7 @@ const GAMES = {
   chevaux: { name: 'Petits chevaux', tag: '🐴 Petits chevaux', store: 'savedHorseSettings', share: 'Rejoins ma course de Petits chevaux sur MyPoly' },
   mois: { name: 'Fin de mois', tag: '📅 Fin de mois', store: 'savedMonthSettings', share: 'Rejoins ma partie de Fin de mois sur MyPoly' },
   poker: { name: 'Poker', tag: '♠ Poker', store: 'savedPokerSettings', share: 'Rejoins ma table de poker sur MyPoly' },
+  blackjack: { name: 'Blackjack', tag: '♣ Blackjack', store: 'savedBlackjackSettings', share: 'Rejoins ma table de blackjack sur MyPoly' },
 };
 import { MusicPlayer } from './music.js';
 
@@ -311,6 +313,7 @@ class RoomView {
       seats: h('div.seats'),
       settings: h('div.settings-form'),
       look: h('div.look'),
+      mine: h('div.my-options'),
       actions: h('div.lobby-actions'),
       title: h('div.lobby-title'),
     };
@@ -327,7 +330,7 @@ class RoomView {
           )
         ),
         h('div.lobby-grid',
-          h('div.card.lobby-players', h('h2', '👥 Joueurs'), this.lobbyEls.seats, this.lobbyEls.look),
+          h('div.card.lobby-players', this.lobbyEls.mine, h('h2', '👥 Joueurs'), this.lobbyEls.seats, this.lobbyEls.look),
           h('div.card.lobby-settings', h('h2', '⚙️ Règles de la partie'), this.lobbyEls.settings),
           h('div.card.lobby-chat', h('h2', '💬 Discussion'), this.chatBox, h('h2.music-title', '🎵 Musique'), this.buildMusic())
         ),
@@ -340,6 +343,7 @@ class RoomView {
   renderLobby() {
     const r = this.room;
     const els = this.lobbyEls;
+    this.renderMyOptions();
     const mySeat = r.seats.find((s) => s.key === this.me);
     // Titre
     els.title.innerHTML = '';
@@ -412,7 +416,9 @@ class RoomView {
     els.actions.append(h('button.btn.ghost', { onclick: () => navigate('/') }, '← Quitter'));
     if (this.isHost) {
       const n = r.seats.length;
-      els.actions.append(h('button.btn.primary.lg.start-btn', { disabled: n < 2, onclick: () => this.startGame() }, n < 2 ? 'Ajoutez au moins 1 joueur ou bot' : `🚀 Lancer la partie (${n} joueurs)`));
+      // Au Blackjack, on peut jouer seul contre la banque
+      const minN = this.kind === 'blackjack' ? 1 : 2;
+      els.actions.append(h('button.btn.primary.lg.start-btn', { disabled: n < minN, onclick: () => this.startGame() }, n < minN ? 'Ajoutez au moins 1 joueur ou bot' : n === 1 ? '🚀 Jouer contre la banque' : `🚀 Lancer la partie (${n} joueurs)`));
     } else {
       els.actions.append(h('div.waiting', h('span.dot-pulse'), mySeat ? ' En attente du lancement par l\'hôte…' : ' Salle pleine : vous êtes spectateur.'));
     }
@@ -427,8 +433,8 @@ class RoomView {
   /** Fin de partie : choisir le prochain jeu de la table. */
   openGameChooser() {
     let close = null;
-    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅', poker: '♠' };
-    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion', poker: 'Texas Hold\'em, avec mode Débutant' };
+    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅', poker: '♠', blackjack: '♣' };
+    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion', poker: 'Texas Hold\'em, avec mode Débutant', blackjack: 'Contre la banque, avec aide au calcul' };
     modal({
       title: '🎮 Prochaine partie',
       body: h('div.room-choices',
@@ -447,7 +453,7 @@ class RoomView {
 
   /** Règles à comparer : sans les options propres à la salle elle-même. */
   get ruleDefaults() {
-    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults, poker: this.meta.pokerDefaults }[this.kind];
+    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults, poker: this.meta.pokerDefaults, blackjack: this.meta.blackjackDefaults }[this.kind];
   }
   get kind() {
     const k = this.room && this.room.kind;
@@ -494,6 +500,31 @@ class RoomView {
     this.cmd('room:start');
   }
 
+  /**
+   * Options personnelles (chacun décide pour soi, rien n'est imposé à la table) :
+   * Mode Débutant du poker, total des cartes au Blackjack.
+   */
+  renderMyOptions() {
+    const box = this.lobbyEls && this.lobbyEls.mine;
+    if (!box) return;
+    const OPTS = {
+      poker: [{ key: 'pokerCoach', title: 'Mode Débutant', text: 'Conseils, chances de gagner, calcul de la cote et explication de chaque étape. Visible par vous seul.' }],
+      blackjack: [{ key: 'bjHelp', title: 'Aide au calcul', text: 'Affiche le total de chaque main (l\'As compte 1 ou 11). Visible par vous seul.' }],
+    }[this.kind];
+    box.innerHTML = '';
+    if (!OPTS) return;
+    box.append(h('div.my-options-title', 'Mes options'));
+    for (const o of OPTS) {
+      const on = storage(o.key) === 'on';
+      const input = h('input', { type: 'checkbox', checked: on, onchange: (e) => {
+        storage(o.key, e.target.checked ? 'on' : 'off');
+        Sound.play('click');
+        this.renderMyOptions();
+      } });
+      box.append(h('label.my-option' + (on ? '.on' : ''), h('div.my-option-text', h('b', o.title), h('small', o.text)), h('span.switch', input, h('span.slider'))));
+    }
+  }
+
   renderSettings() {
     const s = this.room.settings;
     const box = this.lobbyEls.settings;
@@ -516,9 +547,9 @@ class RoomView {
         ));
       }
     }
-    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS, poker: POKER_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
+    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS, poker: POKER_PRESETS, blackjack: BJ_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
-    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI, poker: POKER_SETTINGS_UI }[this.kind]).slice();
+    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI, poker: POKER_SETTINGS_UI, blackjack: BJ_SETTINGS_UI }[this.kind]).slice();
     if (this.kind === 'poly' && (isAdmin || s.melenchon || s.politicalBoard)) {
       groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' },
         { key: 'politicalBoard', label: 'Plateau politique', type: 'toggle', admin: true, hint: 'Plateau satirique : ZAD, Syndicat, Ministère des Taxes, Exil fiscal… et cartes Chance assorties' }] });
@@ -634,7 +665,7 @@ class RoomView {
   buildGame() {
     // Jeux de table (cartes, chevaux) : la vue dédiée remplace le plateau MyPoly
     if (this.kind !== 'poly') {
-      this.cards = new ({ chevaux: HorseTable, mois: MonthTable, poker: PokerTable }[this.kind] || CardTable)(this);
+      this.cards = new ({ chevaux: HorseTable, mois: MonthTable, poker: PokerTable, blackjack: BlackjackTable }[this.kind] || CardTable)(this);
       this.cards.build();
       return;
     }

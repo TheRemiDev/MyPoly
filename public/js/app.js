@@ -203,7 +203,7 @@ async function homePage() {
     }
     return true;
   }
-  let kind = ['cartes', 'chevaux', 'mois', 'poker'].includes(storage('game')) ? storage('game') : 'poly';
+  let kind = ['cartes', 'chevaux', 'mois', 'poker', 'blackjack'].includes(storage('game')) ? storage('game') : 'poly';
   async function create(bots, k = kind, isPublic = null) {
     kind = k;
     storage('game', k);
@@ -274,10 +274,16 @@ async function homePage() {
       roomsBox.append(
         h('div.room-card' + (r.state !== 'lobby' ? '.live' : ''),
           h('div.room-card-top',
-            h('div.room-card-name', h('span.room-card-kind', { cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker' }[r.kind] || '🎲 MyPoly'), r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
+            h('div.room-card-name', h('span.room-card-kind', { cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack' }[r.kind] || '🎲 MyPoly'), r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
             h('span.room-card-state', r.state === 'lobby' ? '🟢 En attente' : '🔴 En jeu')
           ),
-          r.kind === 'poker'
+          r.kind === 'blackjack'
+            ? h('div.room-card-meta',
+                h('span', r.settings.rounds + ' manches'),
+                h('span', 'Mise ' + r.settings.minBet + '+'),
+                h('span', r.settings.bjPays === 150 ? 'BJ 3:2' : 'BJ 6:5')
+              )
+            : r.kind === 'poker'
             ? h('div.room-card-meta',
                 h('span', r.settings.startStack.toLocaleString('fr-FR') + ' jetons'),
                 h('span', 'Blindes ' + r.settings.bigBlind / 2 + '/' + r.settings.bigBlind),
@@ -344,6 +350,7 @@ async function homePage() {
     { k: 'cartes', name: 'Carton !', tag: 'Vide ta main… et crie « Carton ! »', color: '#ff5a5f', art: ART.cartes, meta: ['👥 2 à 6', '⏱️ 10 min', '⚡ Rapide'], points: ['+2, +4, Jokers, Demi-tour', 'Prends ceux qui oublient de crier', 'Partie en une manche ou en points'] },
     { k: 'chevaux', name: 'Petits chevaux', tag: 'La course classique en 3D', color: '#2ecc71', art: ART.chevaux, meta: ['👥 2 à 4', '⏱️ 15 min', '🎲 Chance'], points: ['Sors tes chevaux sur un 6', 'Renvoie les autres à l\'écurie', 'Échelle jusqu\'au centre'] },
     { k: 'poker', name: 'Poker', tag: 'Texas Hold\'em : bluffe, relance, fais tapis', color: '#16916c', art: ART.poker, meta: ['2 à 6 joueurs', '20 min', 'Bluff'], points: ['Table 3D, jetons et cartes maison', 'Mode Débutant : conseils et chances de gagner', 'Blindes qui montent, pots secondaires'], fresh: true },
+    { k: 'blackjack', name: 'Blackjack', tag: 'Approche 21 sans le dépasser… et bats la banque', color: '#2d5bd0', art: ART.blackjack, meta: ['1 à 5 joueurs', '15 min', 'Casino'], points: ['Table de casino 3D, sabot et jetons', 'Doubler, séparer, blackjack payé 3:2', 'Aide au calcul : le total de chaque main'], fresh: true },
     { k: 'mois', name: 'Fin de mois', tag: 'Tiendras-tu jusqu\'à la paye ?', color: '#3fa7ff', art: ART.mois, meta: ['👥 2 à 6', '⏱️ 25 min', '💶 Gestion'], points: ['Courrier, factures et imprévus', 'Achète malin, revends plus cher', 'Paye le 31 et cagnotte sur un 6'] },
   ];
   const poster = (g) => h('article.hp-poster' + (g.fresh ? '.fresh' : ''), { style: { '--c': g.color } },
@@ -366,7 +373,7 @@ async function homePage() {
   const kpis = Object.fromEntries(['online', 'playing', 'games', 'players'].map((k) => [k, h('b', '…')]));
   const feed = h('div.hp-feed', h('div.muted', 'Chargement…'));
   const champs = h('div.hp-champs');
-  const KIND = { poly: ['🎲', 'MyPoly'], cartes: ['🃏', 'Carton !'], chevaux: ['🐴', 'Petits chevaux'], mois: ['📅', 'Fin de mois'], poker: ['♠', 'Poker'] };
+  const KIND = { poly: ['🎲', 'MyPoly'], cartes: ['🃏', 'Carton !'], chevaux: ['🐴', 'Petits chevaux'], mois: ['📅', 'Fin de mois'], poker: ['♠', 'Poker'], blackjack: ['♣', 'Blackjack'] };
   const countUp = (el, v) => {
     const from = Number(el.dataset.v || 0);
     el.dataset.v = v;
@@ -401,7 +408,7 @@ async function homePage() {
       h('div', h('b', g.winner), ' a gagné une partie de ', h('b', KIND[g.kind][1]), h('small', `${g.players} joueurs · ${timeAgo(g.at)}`))
     )));
     champs.innerHTML = '';
-    for (const k of ['poly', 'cartes', 'chevaux', 'mois', 'poker']) {
+    for (const k of ['poly', 'cartes', 'chevaux', 'mois', 'poker', 'blackjack']) {
       const list = st.top[k] || [];
       champs.append(h('div.hp-champ',
         h('div.hp-champ-head', h('span', KIND[k][0]), h('b', KIND[k][1])),
@@ -447,7 +454,7 @@ async function homePage() {
         h('div.hp-hero-text',
           h('span.hp-live', h('i.live-dot'), kpis.online, ' joueurs en ligne'),
           h('h1.hp-title', 'Le salon de jeux', h('br'), h('span', 'entre amis.')),
-          h('p.hp-sub', 'MyPoly, Carton !, Petits chevaux, Fin de mois et Poker : cinq jeux multijoueurs gratuits, en 3D, sans téléchargement. Crée une salle, envoie le code à tes potes… et que le meilleur gagne.'),
+          h('p.hp-sub', 'MyPoly, Carton !, Petits chevaux, Fin de mois, Poker et Blackjack : six jeux multijoueurs gratuits, en 3D, sans téléchargement. Crée une salle, envoie le code à tes potes… et que le meilleur gagne.'),
           h('div.hp-cta',
             h('button.btn.primary.xl', { onclick: scrollPlay }, '▶ Jouer maintenant'),
             !u ? h('a.btn.ghost.xl', { href: '/register', 'data-link': true }, 'Créer un compte') : h('a.btn.ghost.xl', { href: '/leaderboard', 'data-link': true }, '🏆 Classement')
@@ -472,7 +479,7 @@ async function homePage() {
             h('span.hp-app-go', 'Télécharger'))
         : null,
       h('section.hp-play#jouer',
-        h('div.hp-section-head', h('span.hp-kicker', 'Choisis ton jeu'), h('h2', 'Cinq jeux, une seule salle d\'amis')),
+        h('div.hp-section-head', h('span.hp-kicker', 'Choisis ton jeu'), h('h2', 'Six jeux, une seule salle d\'amis')),
         h('div.hp-bar', who, joinBox),
         h('div.hp-posters', GAMES_INFO.map(poster))
       ),
@@ -575,6 +582,15 @@ const ART = {
     <g class="a-float" transform="translate(30 6) rotate(-14)"><rect x="0" y="0" width="38" height="54" rx="5" fill="#fff" stroke="#d9d0bb" stroke-width="1.5"/><text x="6" y="14" font-size="12" font-weight="900" fill="#1b1f2e">A</text><path d="M19 22c-5 6-10 7-10 13a4.5 4.5 0 0 0 8 2l-1.5 6h7l-1.5-6a4.5 4.5 0 0 0 8-2c0-6-5-7-10-13Z" fill="#1b1f2e"/></g>
     <g class="a-float2" transform="translate(52 2) rotate(8)"><rect x="0" y="0" width="38" height="54" rx="5" fill="#fff" stroke="#d9d0bb" stroke-width="1.5"/><text x="6" y="14" font-size="12" font-weight="900" fill="#d42a3c">R</text><rect x="9" y="19" width="20" height="28" rx="3" fill="#c22a3d"/><path d="M12 33l1-9 4 4 2-6 2 6 4-4 1 9Z" fill="#f5c451"/></g>
     ${[['#1b1f2e', 150, 0], ['#d93a3a', 166, 1], ['#1f9d55', 158, 2]].map(([c, x, k]) => `<g class="${k === 1 ? 'a-float2' : 'a-float'}">${Array.from({ length: 4 - k }, (_, i) => `<ellipse cx="${x}" cy="${36 - i * 5 + k * 6}" rx="11" ry="4.5" fill="${c}" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 3"/>`).join('')}</g>`).join('')}</svg>`,
+  blackjack: `<svg viewBox="0 0 200 150" aria-hidden="true"><defs><radialGradient id="abj" cx=".5" cy=".2" r=".8"><stop offset="0" stop-color="#2d5bd0"/><stop offset="1" stop-color="#0a1d52"/></radialGradient></defs>
+    <path d="M14 34 H186 A86 100 0 0 1 14 34 Z" fill="#2b1626"/><path d="M22 36 H178 A78 92 0 0 1 22 36 Z" fill="url(#abj)" stroke="#e0b54f" stroke-width="2"/>
+    <path d="M52 48 A50 52 0 0 0 148 48" fill="none" stroke="rgba(255,209,102,.6)" stroke-width="1.5"/>
+    ${[[64, 92], [100, 104], [136, 92]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="9" fill="none" stroke="#ffd166" stroke-width="1.6"/>`).join('')}
+    <rect x="70" y="18" width="28" height="22" rx="2" fill="#15121f"/><rect x="120" y="16" width="56" height="12" rx="3" fill="#6b4420"/>
+    ${['#e04e9a', '#f07f13', '#f2b705', '#7b3fc4', '#23262f', '#1f9d55'].map((c, i) => `<rect x="${123 + i * 8.5}" y="18" width="7" height="8" rx="1.5" fill="${c}"/>`).join('')}
+    <g class="a-float" transform="translate(70 46) rotate(-10)"><rect x="0" y="0" width="34" height="48" rx="4" fill="#fff" stroke="#d9d0bb" stroke-width="1.5"/><text x="5" y="13" font-size="11" font-weight="900" fill="#1b1f2e">A</text><path d="M17 18c-4 5-9 6-9 11a4 4 0 0 0 7 2l-1.4 5h6.8l-1.4-5a4 4 0 0 0 7-2c0-5-5-6-9-11Z" fill="#1b1f2e"/></g>
+    <g class="a-float2" transform="translate(96 44) rotate(8)"><rect x="0" y="0" width="34" height="48" rx="4" fill="#fff" stroke="#d9d0bb" stroke-width="1.5"/><text x="5" y="13" font-size="11" font-weight="900" fill="#d42a3c">V</text><rect x="8" y="17" width="18" height="25" rx="3" fill="#c22a3d"/><ellipse cx="17" cy="27" rx="6" ry="2.4" fill="#f5c451"/></g>
+    <g class="a-float"><circle cx="160" cy="108" r="17" fill="#ffd166" stroke="#fff" stroke-width="2"/><text x="160" y="114" text-anchor="middle" font-size="16" font-weight="900" fill="#6a4500">21</text></g></svg>`,
 };
 function step(n, icon, title, text) {
   return h('div.step', h('div.step-num', n), h('div.step-icon', icon), h('h3', title), h('p', text));
@@ -648,6 +664,7 @@ async function leaderboardPage() {
     chevaux: [['h_wins', 'Victoires'], ['h_winrate', '% victoires'], ['h_games', 'Courses'], ['h_captures', 'Chevaux renvoyés'], ['h_home', 'Chevaux arrivés']],
     mois: [['m_wins', 'Victoires'], ['m_winrate', '% victoires'], ['m_games', 'Parties'], ['m_best', 'Record de fortune'], ['m_sold', 'Affaires revendues']],
     poker: [['p_wins', 'Victoires'], ['p_winrate', '% victoires'], ['p_games', 'Parties'], ['p_pot', 'Plus gros pot'], ['p_hands', 'Mains gagnées']],
+    blackjack: [['b_wins', 'Victoires'], ['b_winrate', '% victoires'], ['b_games', 'Parties'], ['b_best', 'Record de jetons'], ['b_bj', 'Blackjacks']],
   };
   let game = TABS[storage('game')] ? storage('game') : 'poly';
   let sort = TABS[game][0][0];
@@ -656,12 +673,12 @@ async function leaderboardPage() {
   const gameTabs = h('div.game-switch');
   async function load() {
     gameTabs.innerHTML = '';
-    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker']]) {
+    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker'], ['blackjack', '♣', 'Blackjack']]) {
       gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => {
         game = k;
         sort = TABS[k][0][0];
         load();
-      } }, h('span.gs-icon', icon), h('b', label), h('small', { poly: 'Jeu de plateau', cartes: 'Jeu de cartes', chevaux: 'Jeu de course', mois: 'Jeu de gestion', poker: 'Texas Hold\'em' }[k])));
+      } }, h('span.gs-icon', icon), h('b', label), h('small', { poly: 'Jeu de plateau', cartes: 'Jeu de cartes', chevaux: 'Jeu de course', mois: 'Jeu de gestion', poker: 'Texas Hold\'em', blackjack: 'Jeu de casino' }[k])));
     }
     tabBox.innerHTML = '';
     for (const [k, l] of TABS[game]) tabBox.append(h('button.tab' + (k === sort ? '.active' : ''), { onclick: () => ((sort = k), load()) }, l));
@@ -676,7 +693,8 @@ async function leaderboardPage() {
         c_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), c_winrate: p.winrate + ' %', c_games: p.games + ' parties', c_streak: p.best_streak + ' d\'affilée', c_cards: p.cards_played + ' cartes',
         h_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), h_winrate: p.winrate + ' %', h_games: p.games + ' courses', h_captures: p.captures + ' renvois', h_home: p.horses_home + ' chevaux',
         m_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), m_winrate: p.winrate + ' %', m_games: p.games + ' parties', m_best: (p.best_worth || 0).toLocaleString('fr-FR') + ' €', m_sold: p.deals_sold + ' ventes',
-        p_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), p_winrate: p.winrate + ' %', p_games: p.games + ' parties', p_pot: (p.biggest_pot || 0).toLocaleString('fr-FR') + ' jetons', p_hands: p.hands_won + ' mains' }[sort]);
+        p_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), p_winrate: p.winrate + ' %', p_games: p.games + ' parties', p_pot: (p.biggest_pot || 0).toLocaleString('fr-FR') + ' jetons', p_hands: p.hands_won + ' mains',
+        b_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), b_winrate: p.winrate + ' %', b_games: p.games + ' parties', b_best: (p.best_chips || 0).toLocaleString('fr-FR') + ' jetons', b_bj: p.blackjacks + ' blackjacks' }[sort]);
     // Podium des trois premiers
     const top = players.slice(0, 3);
     table.append(h('div.lb-podium', [top[1], top[0], top[2]].map((p, k) => {
@@ -723,21 +741,21 @@ async function profilePage(key) {
     box.append(h('div.empty', '😕 ' + e.message));
     return;
   }
-  const { user: u, stats: s, cards: cs, horses: hs, months: ms, poker: ps, badges, history } = data;
+  const { user: u, stats: s, cards: cs, horses: hs, months: ms, poker: ps, blackjack: bs, badges, history } = data;
   const mine = store.user && store.user.id === u.id;
   const owned = new Map(badges.map((b) => [b.badge, b.earned_at]));
   const xpCur = (u.level - 1) ** 2 * 100;
   const xpNext = u.level ** 2 * 100;
   const pct = Math.min(100, ((u.xp - xpCur) / (xpNext - xpCur)) * 100);
   // Un onglet par jeu : statistiques, badges et historique bien séparés
-  const counts = { poly: s.games || 0, cartes: (cs && cs.games) || 0, chevaux: (hs && hs.games) || 0, mois: (ms && ms.games) || 0, poker: (ps && ps.games) || 0 };
+  const counts = { poly: s.games || 0, cartes: (cs && cs.games) || 0, chevaux: (hs && hs.games) || 0, mois: (ms && ms.games) || 0, poker: (ps && ps.games) || 0, blackjack: (bs && bs.games) || 0 };
   let game = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
   const gameTabs = h('div.game-switch');
   const gameBox = h('div.profile-game');
-  const ctx = { s, cs, hs, ms, owned, history, historyCards: data.historyCards || [], historyHorses: data.historyHorses || [], historyMonths: data.historyMonths || [], ps, historyPoker: data.historyPoker || [] };
+  const ctx = { s, cs, hs, ms, owned, history, historyCards: data.historyCards || [], historyHorses: data.historyHorses || [], historyMonths: data.historyMonths || [], ps, historyPoker: data.historyPoker || [], bs, historyBlackjack: data.historyBlackjack || [] };
   const render = () => {
     gameTabs.innerHTML = '';
-    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker']]) {
+    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker'], ['blackjack', '♣', 'Blackjack']]) {
       const n = counts[k];
       gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => ((game = k), render()) }, h('span.gs-icon', icon), h('b', label), h('small', `${n} partie${n > 1 ? 's' : ''}`)));
     }
@@ -767,6 +785,7 @@ function profileGame(game, ctx) {
   if (game === 'chevaux') return profileHorses(ctx);
   if (game === 'mois') return profileMonths(ctx);
   if (game === 'poker') return profilePoker(ctx);
+  if (game === 'blackjack') return profileBlackjack(ctx);
   const { s, cs, owned, history, historyCards } = ctx;
   const cards = game === 'cartes';
   const c = cs || {};
@@ -947,8 +966,47 @@ function profilePoker({ ps, owned, historyPoker }) {
   ];
 }
 
+/** Profil : section Blackjack. */
+function profileBlackjack({ bs, owned, historyBlackjack }) {
+  const c = bs || {};
+  const pct = (w, g) => (g ? Math.round((100 * w) / g) : 0) + ' %';
+  const chips = (n) => (n || 0).toLocaleString('fr-FR');
+  const list = store.meta.badges.filter((b) => b.game === 'blackjack');
+  const got = list.filter((b) => owned.has(b.id)).length;
+  return [
+    h('div.stat-grid',
+      stat('♣', c.games || 0, 'Parties jouées'),
+      stat('♦', c.wins || 0, 'Victoires'),
+      stat('%', pct(c.wins, c.games), 'Taux de victoire'),
+      stat('♥', c.best_streak || 0, 'Meilleure série'),
+      stat('◎', chips(c.best_chips), 'Record de jetons'),
+      stat('21', c.blackjacks || 0, 'Blackjacks'),
+      stat('=', pct(c.hands_won, c.hands), 'Mains gagnées'),
+      stat('×2', c.doubles_won || 0, 'Doubles gagnés'),
+      stat('+', chips(c.biggest_win), 'Plus gros gain'),
+      stat('⏱️', duration(c.play_seconds || 0), 'Temps de jeu')
+    ),
+    h('div.card', h('h2', `🎖️ Badges Blackjack (${got}/${list.length})`),
+      h('div.badge-grid', list.map((b) => {
+        const at = owned.get(b.id);
+        return h('div.badge.tier-' + b.tier + (at ? '' : '.locked'), { title: b.desc + (at ? ` — obtenu ${timeAgo(at)}` : '') }, h('div.badge-icon', b.icon), h('div.badge-name', b.name), h('div.badge-desc', b.desc));
+      }))
+    ),
+    h('div.card', h('h2', '📜 Dernières parties de Blackjack'),
+      historyBlackjack.length
+        ? h('div.history', historyBlackjack.map((g) =>
+            h('div.history-row.' + (g.rank === 1 ? 'won' : 'lost'),
+              h('div.history-rank', g.rank === 1 ? '🏆' : '#' + g.rank),
+              h('div.history-main', h('div', g.players.map((p) => p.name).join(' · ')), h('small.muted', `${timeAgo(g.ended_at)} · ${duration(g.duration)} · ${g.rounds} manches · ${chips(g.networth)} jetons`)),
+              h('div.history-delta', g.rank === 1 ? '♣' : '')
+            )))
+        : h('div.empty', 'Aucune partie de Blackjack pour l\'instant.')
+    ),
+  ];
+}
+
 export function winLabel(t) {
-  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', forfeit: 'Abandon des adversaires' }[t] || t || '—';
+  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack', forfeit: 'Abandon des adversaires' }[t] || t || '—';
 }
 
 // --------------------------------------------------------------- paramètres
@@ -1051,8 +1109,8 @@ function rulesPage() {
       h('header.rl-hero',
         h('span.hp-kicker', '📖 Règles'),
         h('h1', 'Apprends à jouer en 2 minutes'),
-        h('p', 'Cinq jeux, des règles simples. Tout ce qui est marqué « réglable » se change dans le salon de la partie.'),
-        h('div.rl-games', [['tour', 'poly', 'MyPoly', 'Le jeu de plateau', '#ff8a3d'], ['carton', 'cartes', 'Carton !', 'Le jeu de cartes', '#ff5a5f'], ['chevaux', 'chevaux', 'Petits chevaux', 'Le jeu de course', '#2ecc71'], ['mois', 'mois', 'Fin de mois', 'Le jeu de gestion', '#3fa7ff'], ['poker', 'poker', 'Poker', 'Texas Hold\'em', '#16916c']].map(([id, k, name, sub, c]) =>
+        h('p', 'Six jeux, des règles simples. Tout ce qui est marqué « réglable » se change dans le salon de la partie.'),
+        h('div.rl-games', [['tour', 'poly', 'MyPoly', 'Le jeu de plateau', '#ff8a3d'], ['carton', 'cartes', 'Carton !', 'Le jeu de cartes', '#ff5a5f'], ['chevaux', 'chevaux', 'Petits chevaux', 'Le jeu de course', '#2ecc71'], ['mois', 'mois', 'Fin de mois', 'Le jeu de gestion', '#3fa7ff'], ['poker', 'poker', 'Poker', 'Texas Hold\'em', '#16916c'], ['blackjack', 'blackjack', 'Blackjack', 'Le jeu de casino', '#2d5bd0']].map(([id, k, name, sub, c]) =>
           h('a.rl-game', { href: '#' + id, style: { '--c': c }, onclick: (e) => { e.preventDefault(); document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
             h('span.rl-game-art', { html: ART[k] }), h('b', name), h('small', sub), h('span.rl-go', 'Lire les règles ↓'))))
       ),
@@ -1135,6 +1193,23 @@ function rulesPage() {
         ),
         h('div.rule-tip', 'Astuce : une relance raconte une histoire. Si tu relances, fais-le avec une vraie main… ou un bluff crédible !')
       ),
+      h('h2.rl-part', h('span', '♣'), 'Blackjack — contre la banque'),
+      h('section.rule-card#blackjack', { style: { '--rc': '#2d5bd0' } },
+        h('div.rule-head', h('span.rule-icon', '♣'), h('h2', 'Blackjack — approche 21 sans le dépasser')),
+        h('div.rule-body',
+          h('p', 'De 1 à 5 joueurs, chacun contre la banque. Les cartes valent leur chiffre, les figures valent ', h('b', '10'), ', l\'As vaut ', h('b', '1 ou 11'), '. Le but : faire plus que la banque sans dépasser 21.'),
+          h('ul',
+            h('li', h('b', 'Mise'), ' : au début de chaque manche, choisis ta mise avec les jetons.'),
+            h('li', h('b', 'Tirer'), ' : une carte de plus. ', h('b', 'Rester'), ' : tu gardes ta main. ', h('b', 'Doubler'), ' : tu doubles ta mise et reçois une seule carte. ', h('b', 'Séparer'), ' : une paire devient deux mains.'),
+            h('li', h('b', 'La banque'), ' retourne sa carte cachée puis tire jusqu\'à 16 et reste à 17. Si elle dépasse 21, toutes les mains encore en jeu gagnent.'),
+            h('li', h('b', 'Blackjack'), ' (As + figure ou 10 d\'entrée) : payé 3 pour 2. Gagné : 1 pour 1. Égalité : mise rendue.'),
+            h('li', h('b', 'Fin de partie'), ' : après le nombre de manches choisi, le plus riche gagne. Seul, l\'objectif est de finir avec plus de jetons qu\'au départ.')
+          ),
+          h('p', h('b', 'Aide au calcul'), ' : une option à cocher dans la salle d\'attente (et dans la barre d\'outils). Elle affiche le total de chaque main et de la banque. Chacun l\'active pour lui-même.'),
+          h('p.muted', 'Réglables : nombre de manches, jetons de départ, mises minimum et maximum, jeux dans le sabot, paiement du blackjack, la banque tire sur 17 souple.')
+        ),
+        h('div.rule-tip', 'Astuce : reste à partir de 12 quand la banque montre un 4, 5 ou 6 : c\'est elle qui risque de sauter !')
+      ),
       h('section.cta-band',
         h('div', h('h2', 'C\'est parti ?'), h('p', 'Crée une salle et invite tes amis en un clic.')),
         h('a.btn.primary.xl', { href: '/', 'data-link': true }, '🎲 Jouer maintenant')
@@ -1178,7 +1253,7 @@ async function adminPage() {
       const o = await api('/admin/overview');
       const site = await api('/admin/site');
       const st = await api('/stats').catch(() => null);
-      const KIND = { poly: ['🎲', 'MyPoly', '#ff8a3d'], cartes: ['🃏', 'Carton !', '#ff5a5f'], chevaux: ['🐴', 'Petits chevaux', '#2ecc71'], mois: ['📅', 'Fin de mois', '#3fa7ff'], poker: ['♠', 'Poker', '#16916c'] };
+      const KIND = { poly: ['🎲', 'MyPoly', '#ff8a3d'], cartes: ['🃏', 'Carton !', '#ff5a5f'], chevaux: ['🐴', 'Petits chevaux', '#2ecc71'], mois: ['📅', 'Fin de mois', '#3fa7ff'], poker: ['♠', 'Poker', '#16916c'], blackjack: ['♣', 'Blackjack', '#2d5bd0'] };
       const total = st ? Math.max(1, st.games) : 1;
       return panel('📊 Vue d\'ensemble', 'L\'activité de MyPoly en un coup d\'œil.',
         h('div.kpi-grid',

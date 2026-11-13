@@ -442,8 +442,9 @@ export function cardURL(c) {
 const chipUrl = {};
 export function chipURL(v = 100) {
   if (!chipUrl[v]) {
-    const def = CHIPS.find((x) => x[0] === v) || CHIPS[5];
-    chipUrl[v] = drawChipTop(def[1], def[2], chipLabel(def[0])).toDataURL('image/png');
+    // v = 0 : jeton décoratif doré, sans valeur inscrite (icône de tapis)
+    const def = CHIPS.find((x) => x[0] === v) || CHIPS[3];
+    chipUrl[v] = drawChipTop(def[1], def[2], v ? chipLabel(def[0]) : '').toDataURL('image/png');
   }
   return chipUrl[v];
 }

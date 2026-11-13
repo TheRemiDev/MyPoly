@@ -21,7 +21,7 @@ if (!user) {
 }
 const name = user.display_name || user.username;
 const rows = db.prepare(`SELECT g.*, gp.rank AS myRank FROM game_players gp JOIN games g ON g.id = gp.game_id
-  WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux', 'mois', 'poker') ORDER BY g.id`).all(user.id);
+  WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux', 'mois', 'poker', 'blackjack') ORDER BY g.id`).all(user.id);
 if (!rows.length) {
   console.log(`${name} n'a aucune partie de MyPoly enregistrée.`);
   process.exit(0);
