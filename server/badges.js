@@ -59,6 +59,15 @@ const BADGES = [
   { id: 'p_bluff', icon: '?', name: 'Bluffeur', desc: 'Remporter 3 pots sans rien en main dans une même partie', tier: 'bronze', game: 'poker' },
   { id: 'p_big_pot', icon: '◎', name: 'Gros pot', desc: 'Remporter un pot de 10 fois le tapis de départ… ou plus', tier: 'gold', game: 'poker' },
   { id: 'p_streak', icon: '♥', name: 'Main chaude', desc: '3 victoires de poker d\'affilée', tier: 'silver', game: 'poker' },
+  // Blackjack
+  { id: 'b_first_win', icon: '21', name: 'Battre la banque', desc: 'Remporter une partie de Blackjack', tier: 'bronze', game: 'blackjack' },
+  { id: 'b_wins_10', icon: '♣', name: 'Habitué du casino', desc: 'Remporter 10 parties de Blackjack', tier: 'silver', game: 'blackjack' },
+  { id: 'b_wins_50', icon: '♦', name: 'Croupier honoraire', desc: 'Remporter 50 parties de Blackjack', tier: 'gold', game: 'blackjack' },
+  { id: 'b_natural', icon: 'A♠', name: 'Blackjack !', desc: 'Obtenir 3 blackjacks dans une même partie', tier: 'silver', game: 'blackjack' },
+  { id: 'b_double', icon: '×2', name: 'Doublé gagnant', desc: 'Gagner 5 mises doublées dans une même partie', tier: 'silver', game: 'blackjack' },
+  { id: 'b_five', icon: '5', name: 'Cinq cartes', desc: 'Faire 21 avec 5 cartes', tier: 'gold', game: 'blackjack' },
+  { id: 'b_rich', icon: '◎', name: 'Sauter la banque', desc: 'Terminer une partie avec 3 fois les jetons de départ', tier: 'gold', game: 'blackjack' },
+  { id: 'b_streak', icon: '♥', name: 'Série chanceuse', desc: '3 victoires de Blackjack d\'affilée', tier: 'silver', game: 'blackjack' },
 ];
 
 /**
@@ -166,4 +175,21 @@ function evaluatePoker(s, me, game, owned, settings) {
   return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
 }
 
-module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker };
+/** Badges du Blackjack. */
+function evaluateBlackjack(s, me, game, owned, settings) {
+  const st = me.stats || {};
+  const start = (settings && settings.startChips) || 1000;
+  const checks = {
+    b_first_win: s.wins >= 1,
+    b_wins_10: s.wins >= 10,
+    b_wins_50: s.wins >= 50,
+    b_natural: (st.blackjacks || 0) >= 3,
+    b_double: (st.doublesWon || 0) >= 5,
+    b_five: (st.five || 0) >= 1,
+    b_rich: (me.chips || 0) >= start * 3,
+    b_streak: s.current_streak >= 3,
+  };
+  return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
+}
+
+module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker, evaluateBlackjack };

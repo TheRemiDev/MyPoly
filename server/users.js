@@ -1,6 +1,6 @@
 'use strict';
 const db = require('./db');
-const { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker } = require('./badges');
+const { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker, evaluateBlackjack } = require('./badges');
 
 const PAWNS = ['🎩', '🚗', '🐕', '🚀', '🐱', '⛵', '🎸', '🦖', '🐧', '🍀', '⚽', '🎯'];
 const VIP_PAWNS = ['👑', '💎', '🦄', '🐉', '🦁', '🛸', '🔥', '⭐'];
@@ -52,7 +52,9 @@ const q = {
   stats: db.prepare('SELECT * FROM stats WHERE user_id = ?'),
   badges: db.prepare('SELECT badge, earned_at FROM user_badges WHERE user_id = ? ORDER BY earned_at'),
   history: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
-    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux', 'mois', 'poker') ORDER BY g.id DESC LIMIT 20`),
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux', 'mois', 'poker', 'blackjack') ORDER BY g.id DESC LIMIT 20`),
+  historyBlackjack: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'blackjack' ORDER BY g.id DESC LIMIT 20`),
   historyPoker: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
     FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'poker' ORDER BY g.id DESC LIMIT 20`),
   historyHorses: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
@@ -102,7 +104,9 @@ function profile(key) {
   const historyMonths = q.historyMonths.all(u.id).map(parse);
   const poker = pokerStats.get(u.id) || null;
   const historyPoker = q.historyPoker.all(u.id).map(parse);
-  return { user: publicUser(u), stats, cards, horses, months, poker, badges, history, historyCards, historyHorses, historyMonths, historyPoker };
+  const blackjack = bjStats.get(u.id) || null;
+  const historyBlackjack = q.historyBlackjack.all(u.id).map(parse);
+  return { user: publicUser(u), stats, cards, horses, months, poker, blackjack, badges, history, historyCards, historyHorses, historyMonths, historyPoker, historyBlackjack };
 }
 
 const insertGame = db.prepare(`INSERT INTO games (room_code, started_at, ended_at, duration, rounds, win_type, winner_name, winner_user_id, settings, players)
@@ -361,7 +365,63 @@ const recordPokerGame = db.transaction((room, result, settings) => {
   return { gameId, rewards };
 });
 
+/** Enregistre une partie de Blackjack : historique, statistiques, XP et badges. */
+const ensureBjStats = db.prepare('INSERT OR IGNORE INTO blackjack_stats (user_id) VALUES (?)');
+const bjStats = db.prepare('SELECT * FROM blackjack_stats WHERE user_id = ?');
+const recordBlackjackGame = db.transaction((room, result, settings) => {
+  const now = Date.now();
+  const winner = result.players.find((p) => p.rank === 1);
+  const gameId = insertGame.run({
+    room_code: room,
+    started_at: now - result.duration * 1000,
+    ended_at: now,
+    duration: result.duration,
+    rounds: result.rounds,
+    win_type: 'blackjack',
+    winner_name: winner ? winner.name : null,
+    winner_user_id: winner ? winner.userId : null,
+    settings: JSON.stringify({ ...settings, kind: 'blackjack' }),
+    players: JSON.stringify(result.players.map((p) => ({ name: p.name, rank: p.rank, bot: p.isBot, userId: p.userId, netWorth: p.chips }))),
+  }).lastInsertRowid;
+  const rewards = {};
+  for (const me of result.players) {
+    if (!me.userId) continue;
+    const uid = me.userId;
+    ensureBjStats.run(uid);
+    const old = bjStats.get(uid);
+    // Seul contre la banque : on « gagne » en finissant avec plus de jetons qu'au départ
+    const solo = result.players.length === 1;
+    const won = solo ? (me.chips || 0) > ((settings && settings.startChips) || 1000) : me.rank === 1;
+    const streak = won ? old.current_streak + 1 : 0;
+    const st = me.stats || {};
+    db.prepare(`UPDATE blackjack_stats SET games = games + 1, wins = wins + ?, hands = hands + ?, hands_won = hands_won + ?, blackjacks = blackjacks + ?, doubles_won = doubles_won + ?,
+      splits = splits + ?, biggest_win = MAX(biggest_win, ?), best_chips = MAX(best_chips, ?), current_streak = ?, best_streak = MAX(best_streak, ?), play_seconds = play_seconds + ? WHERE user_id = ?`).run(
+      won ? 1 : 0, st.hands || 0, st.won || 0, st.blackjacks || 0, st.doublesWon || 0, st.splits || 0, st.biggestWin || 0, me.chips || 0, streak, streak, result.duration, uid
+    );
+    insertGP.run(gameId, uid, me.rank, me.chips || 0, 0);
+    const xp = 12 + (won ? 50 : 0) + Math.min(25, (st.won || 0) * 2);
+    addXp.run(xp, uid);
+    const owned = new Set(q.badges.all(uid).map((b) => b.badge));
+    const newBadges = evaluateBlackjack({ ...bjStats.get(uid) }, me, result, owned, settings);
+    for (const b of newBadges) insertBadge.run(uid, b, now);
+    rewards[uid] = { xp, ratingDelta: null, badges: newBadges.map((id) => BADGES.find((b) => b.id === id)) };
+  }
+  return { gameId, rewards };
+});
+
 function leaderboard(sort = 'rating', limit = 50) {
+  // Classements du Blackjack
+  if (sort.startsWith('b_')) {
+    const bcols = { b_wins: 'b.wins', b_winrate: 'winrate', b_games: 'b.games', b_best: 'b.best_chips', b_bj: 'b.blackjacks' };
+    const bcol = bcols[sort] || 'b.wins';
+    return db
+      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, b.games, b.wins, b.best_streak, b.best_chips, b.blackjacks, b.hands_won,
+        CASE WHEN b.games > 0 THEN ROUND(100.0 * b.wins / b.games, 1) ELSE 0 END AS winrate
+        FROM blackjack_stats b JOIN users u ON u.id = b.user_id WHERE u.banned = 0 AND b.games > 0 ${sort === 'b_winrate' ? 'AND b.games >= 5' : ''}
+        ORDER BY ${bcol} DESC, b.wins DESC LIMIT ?`)
+      .all(limit)
+      .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
+  }
   // Classements du poker
   if (sort.startsWith('p_')) {
     const pcols = { p_wins: 'p.wins', p_winrate: 'winrate', p_games: 'p.games', p_pot: 'p.biggest_pot', p_hands: 'p.hands_won' };
@@ -424,4 +484,4 @@ function leaderboard(sort = 'rating', limit = 50) {
     .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
 }
 
-module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, recordHorseGame, recordMonthGame, recordPokerGame, leaderboard, BADGES };
+module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, recordHorseGame, recordMonthGame, recordPokerGame, recordBlackjackGame, leaderboard, BADGES };

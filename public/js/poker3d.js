@@ -33,6 +33,8 @@ function racetrack(w, r, shape = new THREE.Shape()) {
 }
 
 // ============================================================================
+export { TOP, CW, CH, CT, makeCanvas, rr, drawSuit, THREE };
+
 export class Poker3D {
   constructor(container, cb = {}) {
     this.container = container;
@@ -922,15 +924,8 @@ export class Poker3D {
     const yT = 1 - (2 * sa.top) / H - 0.01;
     const yB = -1 + (2 * sa.bottom) / H + 0.01;
     const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-    const OX = SL + RAD + RAIL;
-    const OZ = RAD + RAIL;
-    const corners = [];
     this.world.updateMatrixWorld();
-    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
-      const x = Math.cos(a) * OX;
-      const z = Math.sin(a) * OZ;
-      corners.push(new THREE.Vector3(x, TOP + 0.2, z).applyMatrix4(this.world.matrixWorld));
-    }
+    const corners = this.tableCorners().map((v) => v.applyMatrix4(this.world.matrixWorld));
     let lo = 3;
     let hi = 60;
     for (let it = 0; it < 22; it++) {
@@ -954,6 +949,14 @@ export class Poker3D {
     this.camera.lookAt(this.target);
     this.camera.updateProjectionMatrix();
     this.cb.onCamera && this.cb.onCamera();
+  }
+  /** Points du contour de la table que la caméra doit toujours cadrer (repère local). */
+  tableCorners() {
+    const OX = SL + RAD + RAIL;
+    const OZ = RAD + RAIL;
+    const out = [];
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) out.push(new THREE.Vector3(Math.cos(a) * OX, TOP + 0.2, Math.sin(a) * OZ));
+    return out;
   }
   /** Portrait : la table pivote pour occuper la hauteur de l'écran (et tout est replacé). */
   setLayout(portrait) {
