@@ -10,11 +10,12 @@ const { Game } = require('./game/engine');
 const { CardGame } = require('./cartes/engine');
 const { HorseGame } = require('./chevaux/engine');
 const { MonthGame } = require('./mois/engine');
+const { PokerGame } = require('./poker/engine');
 
-const ENGINES = { poly: Game, cartes: CardGame, chevaux: HorseGame, mois: MonthGame };
+const ENGINES = { poly: Game, cartes: CardGame, chevaux: HorseGame, mois: MonthGame, poker: PokerGame };
 /** Champs propres à l'exécution (minuteurs, rappels) : jamais sauvegardés. */
 const SKIP_GAME = new Set(['onUpdate', 'onEnd', 'timer', 'botTimers', 'afterDebt', 'events', 'anim']);
-const SKIP_ROOM = new Set(['sockets', 'leaveTimers', 'game', 'graceTimer']);
+const SKIP_ROOM = new Set(['sockets', 'leaveTimers', 'game', 'graceTimer', 'kicked']);
 /** Une partie sauvegardée depuis plus longtemps n'est pas restaurée. */
 const MAX_AGE = 6 * 60 * 60 * 1000;
 

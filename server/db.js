@@ -130,6 +130,33 @@ CREATE TABLE IF NOT EXISTS month_stats (
   play_seconds INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS poker_stats (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  games INTEGER NOT NULL DEFAULT 0,
+  wins INTEGER NOT NULL DEFAULT 0,
+  hands INTEGER NOT NULL DEFAULT 0,
+  hands_won INTEGER NOT NULL DEFAULT 0,
+  biggest_pot INTEGER NOT NULL DEFAULT 0,
+  best_cat INTEGER NOT NULL DEFAULT -1,
+  allin_wins INTEGER NOT NULL DEFAULT 0,
+  showdown_wins INTEGER NOT NULL DEFAULT 0,
+  bluffs INTEGER NOT NULL DEFAULT 0,
+  royals INTEGER NOT NULL DEFAULT 0,
+  quads INTEGER NOT NULL DEFAULT 0,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  best_streak INTEGER NOT NULL DEFAULT 0,
+  play_seconds INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS mod_bans (
+  key TEXT PRIMARY KEY,
+  name TEXT,
+  until INTEGER,
+  reason TEXT,
+  by_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor_id INTEGER,
@@ -147,6 +174,7 @@ if (!userCols.includes('saved_settings')) db.exec('ALTER TABLE users ADD COLUMN 
 if (!userCols.includes('saved_card_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_card_settings TEXT');
 if (!userCols.includes('saved_horse_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_horse_settings TEXT');
 if (!userCols.includes('saved_month_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_month_settings TEXT');
+if (!userCols.includes('saved_poker_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_poker_settings TEXT');
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_display_name ON users(display_name COLLATE NOCASE) WHERE display_name IS NOT NULL");
 
 module.exports = db;

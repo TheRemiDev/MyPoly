@@ -66,6 +66,8 @@ router.patch('/users/:id', (req, res) => {
     if (target.id === actor.id) return res.status(400).json({ error: 'Vous ne pouvez pas vous bannir.' });
     db.prepare('UPDATE users SET banned = ?, ban_reason = ? WHERE id = ?').run(body.banned ? 1 : 0, body.banned ? String(body.reason || '').slice(0, 200) : null, target.id);
     audit(actor, body.banned ? 'ban' : 'unban', target.id, { reason: body.reason });
+    // Débannissement : on lève aussi les bannissements prononcés en partie (compte)
+    if (!body.banned) db.prepare('DELETE FROM mod_bans WHERE key = ?').run('u:' + target.id);
   }
   if (body.resetStats) {
     if (!isAdmin) return res.status(403).json({ error: 'Réservé aux administrateurs.' });
@@ -108,6 +110,22 @@ router.post('/announce', (req, res) => {
   if (!text) return res.status(400).json({ error: 'Message vide.' });
   rooms.announce(text);
   audit(req.user, 'announce', null, { text });
+  res.json({ ok: true });
+});
+// Bannissements prononcés en partie (comptes et navigateurs d'invités)
+router.get('/bans', (_req, res) => {
+  const rows = db.prepare('SELECT b.*, u.username by_name FROM mod_bans b LEFT JOIN users u ON u.id = b.by_id WHERE b.until IS NULL OR b.until > ? ORDER BY b.created_at DESC LIMIT 200').all(Date.now());
+  res.json({ bans: rows });
+});
+router.delete('/bans/:key', (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Réservé aux administrateurs.' });
+  const key = String(req.params.key);
+  const row = db.prepare('SELECT * FROM mod_bans WHERE key = ?').get(key);
+  if (!row) return res.status(404).json({ error: 'Bannissement introuvable.' });
+  // Lève tous les bannissements de la même personne (compte + navigateurs), prononcés ensemble
+  db.prepare('DELETE FROM mod_bans WHERE created_at = ? AND name IS ?').run(row.created_at, row.name);
+  if (key.startsWith('u:')) db.prepare('UPDATE users SET banned = 0, ban_reason = NULL WHERE id = ?').run(Number(key.slice(2)));
+  audit(req.user, 'unban', key.startsWith('u:') ? Number(key.slice(2)) : null, { name: row.name, key });
   res.json({ ok: true });
 });
 router.get('/audit', (_req, res) => {

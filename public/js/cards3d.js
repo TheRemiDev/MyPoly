@@ -176,7 +176,7 @@ export function drawCardFace(card, W = 256) {
 }
 
 /** Dos des cartes. */
-export function drawCardBack(W = 256) {
+export function drawCardBack(W = 256, logo = true) {
   const H = Math.round(W * 1.46);
   const c = makeCanvas(W, H);
   const g = c.getContext('2d');
@@ -204,6 +204,10 @@ export function drawCardBack(W = 256) {
     g.moveTo(k, 0);
     g.lineTo(k + H, H);
     g.stroke();
+  }
+  if (!logo) {
+    g.restore();
+    return c;
   }
   g.setLineDash([W * 0.06, W * 0.05]);
   g.strokeStyle = 'rgba(255,209,102,.55)';
@@ -265,6 +269,9 @@ export class Card3D {
     this.buildCardGeometry();
     this.edgeMat = new THREE.MeshStandardMaterial({ color: 0xf3ead5, roughness: 0.6 });
     this.backMat = new THREE.MeshStandardMaterial({ map: this.backTex, roughness: 0.45 });
+    // Dos sans logo pour les cartes recouvertes d'un éventail : seul le dessus porte « Carton! »
+    // (sinon des morceaux du logo dépassent de chaque carte et font des motifs parasites)
+    this.plainBackMat = new THREE.MeshStandardMaterial({ map: this.tex(drawCardBack(256, false)), roughness: 0.45 });
 
     this.buildLights();
     this.buildTable();
@@ -532,6 +539,7 @@ export class Card3D {
         m.scale.setScalar(0.62);
         // Pas d'ombre portée entre cartes collées (rayures d'« acné » d'ombre)
         m.traverse((o) => (o.castShadow = false));
+        if (k < shown - 1) m.children[1].material = this.plainBackMat;
         g.add(m);
       }
       this.scene.add(g);
@@ -632,6 +640,14 @@ export class Card3D {
     const p = v.clone().project(this.camera);
     const r = this.renderer.domElement.getBoundingClientRect();
     return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+  }
+  /** Point de l'écran juste derrière l'éventail d'un joueur, au bord de la table (pour y coller sa fiche). */
+  seatAnchor(pid) {
+    const s = this.seatPos && this.seatPos[pid];
+    if (!s || s.slot === 'me') return null;
+    const len = Math.hypot(s.v.x, s.v.z) || 1;
+    const out = new THREE.Vector3(s.v.x * (1 + 1.3 / len), FELT, s.v.z * (1 + 1.3 / len));
+    return { slot: s.slot, ...this.screenOf(out) };
   }
   pileScreen() {
     return this.screenOf(this.pilePos.clone().setY(FELT + 0.3));

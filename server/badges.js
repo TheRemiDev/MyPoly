@@ -49,6 +49,16 @@ const BADGES = [
   { id: 'm_debt_free', icon: '🕊️', name: 'Zéro crédit', desc: 'Gagner une partie de 3 mois ou plus sans jamais emprunter', tier: 'gold', game: 'mois' },
   { id: 'm_rich', icon: '💎', name: 'Fin de mois dorée', desc: 'Terminer une partie avec 25 000 € de patrimoine', tier: 'gold', game: 'mois' },
   { id: 'm_streak', icon: '🔥', name: 'Série gagnante', desc: '3 victoires de Fin de mois d\'affilée', tier: 'silver', game: 'mois' },
+  // Poker (symboles de cartes, pas d'émojis)
+  { id: 'p_first_win', icon: '♠', name: 'Premier tournoi', desc: 'Remporter une partie de poker', tier: 'bronze', game: 'poker' },
+  { id: 'p_wins_10', icon: '♣', name: 'Requin', desc: 'Remporter 10 parties de poker', tier: 'silver', game: 'poker' },
+  { id: 'p_wins_50', icon: '♦', name: 'Légende du tapis', desc: 'Remporter 50 parties de poker', tier: 'gold', game: 'poker' },
+  { id: 'p_quads', icon: '4×', name: 'Carré !', desc: 'Remporter un pot avec un carré', tier: 'silver', game: 'poker' },
+  { id: 'p_royal', icon: 'A♥', name: 'Quinte flush royale', desc: 'Remporter un pot avec une quinte flush royale', tier: 'gold', game: 'poker' },
+  { id: 'p_allin', icon: '∞', name: 'Tapis gagnant', desc: 'Gagner 5 coups en étant à tapis dans une même partie', tier: 'silver', game: 'poker' },
+  { id: 'p_bluff', icon: '?', name: 'Bluffeur', desc: 'Remporter 3 pots sans rien en main dans une même partie', tier: 'bronze', game: 'poker' },
+  { id: 'p_big_pot', icon: '◎', name: 'Gros pot', desc: 'Remporter un pot de 10 fois le tapis de départ… ou plus', tier: 'gold', game: 'poker' },
+  { id: 'p_streak', icon: '♥', name: 'Main chaude', desc: '3 victoires de poker d\'affilée', tier: 'silver', game: 'poker' },
 ];
 
 /**
@@ -138,4 +148,22 @@ function evaluateMonth(s, me, game, owned) {
   return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
 }
 
-module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth };
+/** Badges du poker. */
+function evaluatePoker(s, me, game, owned, settings) {
+  const st = me.stats || {};
+  const start = (settings && settings.startStack) || 1000;
+  const checks = {
+    p_first_win: s.wins >= 1,
+    p_wins_10: s.wins >= 10,
+    p_wins_50: s.wins >= 50,
+    p_quads: (st.quads || 0) >= 1,
+    p_royal: (st.royal || 0) >= 1,
+    p_allin: (st.allInWins || 0) >= 5,
+    p_bluff: (st.bluffWins || 0) >= 3,
+    p_big_pot: (st.biggestPot || 0) >= start * 10 && game.players.length >= 2,
+    p_streak: s.current_streak >= 3,
+  };
+  return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
+}
+
+module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker };

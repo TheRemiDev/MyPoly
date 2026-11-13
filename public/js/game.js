@@ -10,6 +10,7 @@ import { icon } from './icons.js';
 import { CardTable, CARD_SETTINGS_UI, CARD_PRESETS } from './cartes.js';
 import { HorseTable, HORSE_SETTINGS_UI, HORSE_PRESETS } from './chevaux.js';
 import { MonthTable, MONTH_SETTINGS_UI, MONTH_PRESETS } from './mois.js';
+import { PokerTable, POKER_SETTINGS_UI, POKER_PRESETS } from './poker.js';
 
 /** Les jeux du site : nom, étiquette, réglages et préréglages. */
 const GAMES = {
@@ -17,6 +18,7 @@ const GAMES = {
   cartes: { name: 'Carton !', tag: '🃏 Carton !', store: 'savedCardSettings', share: 'Rejoins ma partie de Carton ! sur MyPoly' },
   chevaux: { name: 'Petits chevaux', tag: '🐴 Petits chevaux', store: 'savedHorseSettings', share: 'Rejoins ma course de Petits chevaux sur MyPoly' },
   mois: { name: 'Fin de mois', tag: '📅 Fin de mois', store: 'savedMonthSettings', share: 'Rejoins ma partie de Fin de mois sur MyPoly' },
+  poker: { name: 'Poker', tag: '♠ Poker', store: 'savedPokerSettings', share: 'Rejoins ma table de poker sur MyPoly' },
 };
 import { MusicPlayer } from './music.js';
 
@@ -218,8 +220,9 @@ class RoomView {
       toast(d.reason, 'warn', 6000);
       navigate('/');
     });
-    sub('room:kicked', () => {
-      toast('Vous avez été exclu(e) de la salle.', 'error', 6000);
+    sub('room:kicked', (d) => {
+      if (d && d.by) modal({ title: '⛔ Expulsé(e) de la partie', body: h('p', `${d.by} (administrateur) vous a expulsé(e) de cette salle.`, d.reason ? h('br') : null, d.reason ? h('b', `Motif : ${d.reason}`) : null) });
+      else toast('Vous avez été exclu(e) de la salle.', 'error', 6000);
       navigate('/');
     });
     sub('connect', () => this.join());
@@ -381,7 +384,8 @@ class RoomView {
             ...roleTags(s),
             !s.connected ? h('span.tag.tag-off', 'hors ligne') : null
           ),
-          this.isHost && s.key !== this.me ? h('button.btn.ghost.sm.kick', { title: 'Exclure', onclick: () => this.cmd('room:kick', { key: s.key }) }, '✕') : null
+          this.isHost && s.key !== this.me ? h('button.btn.ghost.sm.kick', { title: 'Exclure', onclick: () => this.cmd('room:kick', { key: s.key }) }, '✕') : null,
+          this.isAdmin && !s.isBot && s.key !== this.me && s.role !== 'admin' ? h('button.btn.ghost.sm.kick.mod', { title: 'Modération (admin) : expulser / bannir', onclick: () => this.openModeration(s.key) }, '🔨') : null
         )
       );
     }
@@ -423,8 +427,8 @@ class RoomView {
   /** Fin de partie : choisir le prochain jeu de la table. */
   openGameChooser() {
     let close = null;
-    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅' };
-    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion' };
+    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅', poker: '♠' };
+    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion', poker: 'Texas Hold\'em, avec mode Débutant' };
     modal({
       title: '🎮 Prochaine partie',
       body: h('div.room-choices',
@@ -443,7 +447,7 @@ class RoomView {
 
   /** Règles à comparer : sans les options propres à la salle elle-même. */
   get ruleDefaults() {
-    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults }[this.kind];
+    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults, poker: this.meta.pokerDefaults }[this.kind];
   }
   get kind() {
     const k = this.room && this.room.kind;
@@ -512,9 +516,9 @@ class RoomView {
         ));
       }
     }
-    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
+    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS, poker: POKER_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
-    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI }[this.kind]).slice();
+    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI, poker: POKER_SETTINGS_UI }[this.kind]).slice();
     if (this.kind === 'poly' && (isAdmin || s.melenchon || s.politicalBoard)) {
       groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' },
         { key: 'politicalBoard', label: 'Plateau politique', type: 'toggle', admin: true, hint: 'Plateau satirique : ZAD, Syndicat, Ministère des Taxes, Exil fiscal… et cartes Chance assorties' }] });
@@ -630,7 +634,7 @@ class RoomView {
   buildGame() {
     // Jeux de table (cartes, chevaux) : la vue dédiée remplace le plateau MyPoly
     if (this.kind !== 'poly') {
-      this.cards = new ({ chevaux: HorseTable, mois: MonthTable }[this.kind] || CardTable)(this);
+      this.cards = new ({ chevaux: HorseTable, mois: MonthTable, poker: PokerTable }[this.kind] || CardTable)(this);
       this.cards.build();
       return;
     }
@@ -1294,6 +1298,50 @@ class RoomView {
   get isAdmin() {
     return !!(store.user && store.user.role === 'admin');
   }
+  /**
+   * Modération (administrateurs, tous les jeux) : expulser quelqu'un de la salle,
+   * ou le bannir du site (1 h, 24 h, 7 jours ou définitivement). Tout le monde est prévenu.
+   */
+  async openModeration(focusKey = null) {
+    const res = await emit('admin:people');
+    if (!res || res.error) return toast((res && res.error) || 'Impossible de charger la liste.', 'error');
+    const people = res.people.filter((p) => p.role !== 'admin');
+    if (!people.length) return toast('Personne d\'autre dans la salle.', 'info');
+    const reason = h('input.input.sm', { maxlength: 120, placeholder: 'Motif (facultatif, visible de tous)' });
+    const dur = h('select.input.sm', [[60, '1 heure'], [1440, '24 heures'], [10080, '7 jours'], [43200, '30 jours'], [0, 'Définitivement']].map(([v, l]) => h('option', { value: v, selected: v === 1440 }, l)));
+    let close = null;
+    const act = async (p, action) => {
+      const ban = action === 'ban';
+      const durLabel = dur.options[dur.selectedIndex].text.toLowerCase();
+      const ok = await modal({
+        title: ban ? '🔨 Bannir ' + p.name + ' ?' : '⛔ Expulser ' + p.name + ' ?',
+        body: h('p', ban ? `${p.name} sera retiré(e) de la partie et ne pourra plus jouer sur le site (${durLabel}). Tous les joueurs connectés seront prévenus.` : `${p.name} sera retiré(e) de la partie et ne pourra plus revenir dans cette salle. Toute la salle sera prévenue.`),
+        buttons: [{ label: 'Annuler', value: false }, { label: ban ? '🔨 Bannir' : '⛔ Expulser', value: true, class: 'danger' }],
+      });
+      if (!ok) return;
+      const r = await emit('admin:moderate', { action, key: p.key, reason: reason.value, minutes: ban ? Number(dur.value) : 0 });
+      if (r && r.error) {
+        Sound.play('error');
+        return toast(r.error, 'error');
+      }
+      toast(ban ? `🔨 ${p.name} est banni(e)` : `⛔ ${p.name} est expulsé(e)`, 'success');
+      if (close) close();
+    };
+    const rows = people.map((p) => h('div.mod-row' + (p.key === focusKey ? '.focus' : ''),
+      h('div.mod-who', h('b', p.name), h('small', p.seated ? (p.connected ? '🎮 Joueur' : '🎮 Joueur · déconnecté') : '👁️ Spectateur')),
+      h('div.mod-act',
+        h('button.btn.sm.ghost', { onclick: () => act(p, 'kick') }, '⛔ Expulser'),
+        h('button.btn.sm.danger', { onclick: () => act(p, 'ban') }, '🔨 Bannir'))
+    ));
+    const body = h('div.mod-box',
+      h('div.mod-opts', h('label', 'Durée du bannissement', dur), h('label', 'Motif', reason)),
+      h('div.mod-list', rows),
+      h('p.muted.mod-hint', 'Expulser : la personne quitte la salle et ne peut plus y revenir. Bannir : elle est déconnectée du site (compte et navigateur). Les bannis se gèrent dans Administration → Bannis.'));
+    const p = modal({ title: '🛡️ Modération', body, buttons: [{ label: 'Fermer', value: null }], className: 'mod-modal' });
+    close = () => document.querySelector('.modal.mod-modal')?.closest('.modal-overlay')?.querySelector('.modal-actions .btn')?.click();
+    await p;
+  }
+
   /** Panneau admin : faire renaître un joueur en faillite, offrir de l'argent. */
   renderAdmin() {
     const box = this.adminPop;
@@ -1381,6 +1429,8 @@ class RoomView {
       }),
       IN_APP ? null : btn('fullscreen', 'Plein écran (F)', toggleFullscreen),
       this.isAdmin && this.room && this.room.kind === 'poly' && this.room.state === 'playing' ? btn('shield', 'Pouvoirs d\'admin', () => this.togglePop('admin'), { on: this.pop === 'admin', cls: '.admin' }) : null,
+      ...(opts.extra || []).map((x) => btn(x.name, x.title, x.onclick, { on: x.on, label: x.label, cls: x.cls || '' })),
+      this.isAdmin ? btn('ban', 'Modération : expulser / bannir', () => this.openModeration(), { cls: '.admin' }) : null,
       sep(),
       opts.forfeit ? btn('flag', 'Abandonner', opts.forfeit, { cls: '.danger' }) : btn('exit', 'Quitter', () => navigate('/'), { cls: '.danger' })
     );
