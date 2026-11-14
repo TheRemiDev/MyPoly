@@ -1,6 +1,6 @@
 'use strict';
 const db = require('./db');
-const { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker, evaluateBlackjack } = require('./badges');
+const { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker, evaluateBlackjack, evaluateLetters } = require('./badges');
 
 const PAWNS = ['🎩', '🚗', '🐕', '🚀', '🐱', '⛵', '🎸', '🦖', '🐧', '🍀', '⚽', '🎯'];
 const VIP_PAWNS = ['👑', '💎', '🦄', '🐉', '🦁', '🛸', '🔥', '⭐'];
@@ -52,7 +52,9 @@ const q = {
   stats: db.prepare('SELECT * FROM stats WHERE user_id = ?'),
   badges: db.prepare('SELECT badge, earned_at FROM user_badges WHERE user_id = ? ORDER BY earned_at'),
   history: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
-    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux', 'mois', 'poker', 'blackjack') ORDER BY g.id DESC LIMIT 20`),
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND COALESCE(g.win_type, '') NOT IN ('cartes', 'chevaux', 'mois', 'poker', 'blackjack', 'lettres') ORDER BY g.id DESC LIMIT 20`),
+  historyLetters: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
+    FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'lettres' ORDER BY g.id DESC LIMIT 20`),
   historyBlackjack: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
     FROM game_players gp JOIN games g ON g.id = gp.game_id WHERE gp.user_id = ? AND g.win_type = 'blackjack' ORDER BY g.id DESC LIMIT 20`),
   historyPoker: db.prepare(`SELECT g.id, g.ended_at, g.duration, g.rounds, g.win_type, g.winner_name, g.players, gp.rank, gp.networth, gp.rating_delta
@@ -106,7 +108,9 @@ function profile(key) {
   const historyPoker = q.historyPoker.all(u.id).map(parse);
   const blackjack = bjStats.get(u.id) || null;
   const historyBlackjack = q.historyBlackjack.all(u.id).map(parse);
-  return { user: publicUser(u), stats, cards, horses, months, poker, blackjack, badges, history, historyCards, historyHorses, historyMonths, historyPoker, historyBlackjack };
+  const letters = lettersStats.get(u.id) || null;
+  const historyLetters = q.historyLetters.all(u.id).map(parse);
+  return { letters, historyLetters, user: publicUser(u), stats, cards, horses, months, poker, blackjack, badges, history, historyCards, historyHorses, historyMonths, historyPoker, historyBlackjack };
 }
 
 const insertGame = db.prepare(`INSERT INTO games (room_code, started_at, ended_at, duration, rounds, win_type, winner_name, winner_user_id, settings, players)
@@ -409,7 +413,65 @@ const recordBlackjackGame = db.transaction((room, result, settings) => {
   return { gameId, rewards };
 });
 
+/** Enregistre une partie de Lettres d'Or : historique, statistiques, XP et badges. */
+const ensureLettersStats = db.prepare('INSERT OR IGNORE INTO letters_stats (user_id) VALUES (?)');
+const lettersStats = db.prepare('SELECT * FROM letters_stats WHERE user_id = ?');
+const recordLettersGame = db.transaction((room, result, settings) => {
+  const now = Date.now();
+  const winner = result.players.find((p) => p.rank === 1);
+  const gameId = insertGame.run({
+    room_code: room,
+    started_at: now - result.duration * 1000,
+    ended_at: now,
+    duration: result.duration,
+    rounds: result.rounds,
+    win_type: 'lettres',
+    winner_name: winner ? winner.name : null,
+    winner_user_id: winner ? winner.userId : null,
+    settings: JSON.stringify({ ...settings, kind: 'lettres' }),
+    players: JSON.stringify(result.players.map((p) => ({ name: p.name, rank: p.rank, bot: p.isBot, userId: p.userId, netWorth: p.score }))),
+  }).lastInsertRowid;
+  const rewards = {};
+  for (const me of result.players) {
+    if (!me.userId) continue;
+    const uid = me.userId;
+    ensureLettersStats.run(uid);
+    const old = lettersStats.get(uid);
+    const won = me.rank === 1;
+    const streak = won ? old.current_streak + 1 : 0;
+    const st = me.stats || {};
+    const better = (st.bestScore || 0) > old.best_move;
+    const longer = (st.longest || '').length > (old.longest || '').length;
+    db.prepare(`UPDATE letters_stats SET games = games + 1, wins = wins + ?, words = words + ?, bingos = bingos + ?, best_move = MAX(best_move, ?),
+      best_word = CASE WHEN ? THEN ? ELSE best_word END, best_score = MAX(best_score, ?), longest = CASE WHEN ? THEN ? ELSE longest END,
+      current_streak = ?, best_streak = MAX(best_streak, ?), play_seconds = play_seconds + ? WHERE user_id = ?`).run(
+      won ? 1 : 0, st.words || 0, st.bingos || 0, st.bestScore || 0, better ? 1 : 0, st.bestWord || null, me.score || 0, longer ? 1 : 0, st.longest || null,
+      streak, streak, result.duration, uid
+    );
+    insertGP.run(gameId, uid, me.rank, me.score || 0, 0);
+    const xp = 15 + (won ? 60 : 0) + Math.min(30, Math.round((me.score || 0) / 15));
+    addXp.run(xp, uid);
+    const owned = new Set(q.badges.all(uid).map((b) => b.badge));
+    const newBadges = evaluateLetters(lettersStats.get(uid), me, result, owned);
+    for (const b of newBadges) insertBadge.run(uid, b, now);
+    rewards[uid] = { xp, ratingDelta: null, badges: newBadges.map((id) => BADGES.find((b) => b.id === id)) };
+  }
+  return { gameId, rewards };
+});
+
 function leaderboard(sort = 'rating', limit = 50) {
+  // Classements de Lettres d'Or
+  if (sort.startsWith('l_')) {
+    const lcols = { l_wins: 'l.wins', l_winrate: 'winrate', l_games: 'l.games', l_best: 'l.best_score', l_move: 'l.best_move' };
+    const lcol = lcols[sort] || 'l.wins';
+    return db
+      .prepare(`SELECT u.id, COALESCE(u.display_name, u.username) AS name, u.role, u.vip_until, u.pawn, u.color, u.xp, l.games, l.wins, l.best_streak, l.best_score, l.best_move, l.best_word, l.bingos,
+        CASE WHEN l.games > 0 THEN ROUND(100.0 * l.wins / l.games, 1) ELSE 0 END AS winrate
+        FROM letters_stats l JOIN users u ON u.id = l.user_id WHERE u.banned = 0 AND l.games > 0 ${sort === 'l_winrate' ? 'AND l.games >= 5' : ''}
+        ORDER BY ${lcol} DESC, l.wins DESC LIMIT ?`)
+      .all(limit)
+      .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
+  }
   // Classements du Blackjack
   if (sort.startsWith('b_')) {
     const bcols = { b_wins: 'b.wins', b_winrate: 'winrate', b_games: 'b.games', b_best: 'b.best_chips', b_bj: 'b.blackjacks' };
@@ -484,4 +546,4 @@ function leaderboard(sort = 'rating', limit = 50) {
     .map((r) => ({ ...r, vip: isVip(r), level: levelFromXp(r.xp) }));
 }
 
-module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, recordHorseGame, recordMonthGame, recordPokerGame, recordBlackjackGame, leaderboard, BADGES };
+module.exports = { displayOf, validateDisplayName, PAWNS, VIP_PAWNS, COLORS, VIP_COLORS, isVip, isStaff, levelFromXp, getUser, publicUser, profile, recordGame, recordCardGame, recordHorseGame, recordMonthGame, recordPokerGame, recordBlackjackGame, recordLettersGame, leaderboard, BADGES };
