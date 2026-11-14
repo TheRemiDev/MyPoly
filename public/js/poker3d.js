@@ -51,6 +51,13 @@ export class Poker3D {
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }));
     this.mobile = document.documentElement.classList.contains('touch') || Math.min(screen.width, screen.height) < 700;
+    // Graphismes légers (ordinateurs peu puissants) : localStorage mp_gfx = low
+    try {
+      this.lowGfx = localStorage.getItem('mp_gfx') === 'low';
+    } catch {
+      this.lowGfx = false;
+    }
+    if (this.lowGfx) this.mobile = true;
     r.setPixelRatio(this.pixelRatio());
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -91,6 +98,7 @@ export class Poker3D {
   /** Image nette : au moins 1,5× la définition de l'écran sur ordinateur (anti-flou), 2× au plus sur téléphone. */
   pixelRatio() {
     const d = window.devicePixelRatio || 1;
+    if (this.lowGfx) return 1;
     return this.mobile ? Math.min(d, 2) : Math.min(Math.max(d, 1.5), 2.5);
   }
   /**
