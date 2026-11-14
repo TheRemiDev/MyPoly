@@ -3670,3 +3670,29 @@ html.touch .mo-tip { display: none; }
 .bj-handlabel { translate: 0 -50%; min-width: 34px; text-align: center; padding: 4px 10px; font-size: 1.05rem; color: #3b2a00;
   background: radial-gradient(circle at 35% 30%, #fff6c9, #ffd166 60%, #e0a52c); box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 6px 14px rgba(0, 0, 0, .45); }
 .bj-handlabel.active { box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255, 209, 102, .9); }
+
+/* Blackjack : animations de résultat */
+.bj-handlabel.pop { animation: bjPop .55s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes bjPop { 0% { transform: scale(.2) rotate(-12deg); opacity: 0; } 60% { transform: scale(1.25) rotate(3deg); opacity: 1; } 100% { transform: none; } }
+.bj-handlabel.o-lose.pop, .bj-handlabel.o-bust.pop { animation: bjDrop .6s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes bjDrop { 0% { transform: translateY(-26px); opacity: 0; } 55% { transform: translateY(4px); opacity: 1; } 70% { transform: translateX(-6px); } 85% { transform: translateX(5px); } 100% { transform: none; } }
+.bj-handlabel.o-blackjack { box-shadow: 0 0 0 2px #fff, 0 0 26px rgba(255, 209, 102, .95); }
+.bj-handlabel.o-blackjack::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .7) 50%, transparent 70%); background-size: 250% 100%; animation: bjShine 1.6s linear infinite; pointer-events: none; }
+@keyframes bjShine { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+.pk-banner.win { padding: 14px 44px; }
+.pk-banner.win .pk-banner-title { font-size: 2.6rem; letter-spacing: .04em; background: linear-gradient(180deg, #ffffff, #7ef0ac); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; filter: drop-shadow(0 0 14px rgba(46, 204, 113, .8)); }
+.pk-banner.win, .pk-banner.bj { animation: bjBannerIn .6s cubic-bezier(.2, 1.5, .4, 1); }
+@keyframes bjBannerIn { 0% { transform: scale(.3) rotate(-6deg); opacity: 0; } 65% { transform: scale(1.12) rotate(1deg); opacity: 1; } 100% { transform: none; } }
+.pk-banner.bj { padding: 16px 50px; background: radial-gradient(ellipse at 50% 0%, rgba(255, 209, 102, .35), rgba(14, 10, 30, .95) 70%); }
+.pk-banner.bj .pk-banner-title { font-size: 3.2rem; letter-spacing: .06em; background: linear-gradient(90deg, #fff3b0, #ffd166, #ff9f43, #ffd166, #fff3b0); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; animation: bjGold 1.4s linear infinite; filter: drop-shadow(0 0 18px rgba(255, 209, 102, .9)); }
+@keyframes bjGold { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+.pk-banner.lose { animation: bjLose .7s ease; }
+.pk-banner.lose .pk-banner-title { font-size: 2.2rem; color: #ffb3b9; text-shadow: 0 0 16px rgba(255, 59, 78, .8); }
+@keyframes bjLose { 0% { transform: translateY(-30px); opacity: 0; } 40% { transform: translateY(6px); opacity: 1; } 55% { transform: translateX(-10px); } 70% { transform: translateX(8px); } 85% { transform: translateX(-4px); } 100% { transform: none; } }
+.pk-banner.dealerbust .pk-banner-title { font-size: 2.2rem; color: #7ef0ac; text-shadow: 0 0 18px rgba(46, 204, 113, .9); }
+.pk-banner.dealerbust { animation: bjBannerIn .6s cubic-bezier(.2, 1.5, .4, 1); }
+.bj-coin { position: absolute; z-index: 46; width: 26px; height: 26px; margin: -13px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 35% 30%, #fff6c9, #ffd166 55%, #c98a10); box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .5), 0 4px 10px rgba(0, 0, 0, .4);
+  animation: bjCoin 1.5s cubic-bezier(.2, .7, .4, 1) forwards; }
+@keyframes bjCoin { 0% { transform: translate(0, 0) scale(.4); opacity: 0; } 15% { opacity: 1; } 55% { transform: translate(calc(var(--dx) * .7), var(--dy)) rotate(var(--r)) scale(1); } 100% { transform: translate(var(--dx), calc(var(--dy) * -.4)) rotate(calc(var(--r) * 1.5)) scale(.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bj-coin, .bj-handlabel.pop, .pk-banner.win, .pk-banner.bj, .pk-banner.lose { animation-duration: .01s; } }
