@@ -28,6 +28,22 @@ function halfMoon(rx, rz, shape = new THREE.Shape(), n = 96) {
 }
 
 export class Blackjack3D extends Poker3D {
+  constructor(container, cb) {
+    super(container, cb);
+    this.introFly();
+  }
+  /** Arrivée à la table : la caméra plonge vers le tapis. */
+  introFly() {
+    const to = { ...this.view };
+    const from = { yaw: 0.55, pitch: Math.min(1.45, to.pitch + 0.3), zoom: 0.5 };
+    this.view = { ...from };
+    this.fitCamera();
+    this.tween(1900, (t) => {
+      const e = 1 - (1 - t) ** 3;
+      this.view = { yaw: from.yaw + (to.yaw - from.yaw) * e, pitch: from.pitch + ((this.basePitch || to.pitch) - from.pitch) * e, zoom: from.zoom + (to.zoom - from.zoom) * e };
+      this.fitCamera();
+    });
+  }
   /** Emplacements : moi au centre, puis à droite / à gauche en alternance. */
   static slotsFor(n) {
     return ['r1', 'l1', 'r2', 'l2'].slice(0, n);
@@ -265,8 +281,9 @@ export class Blackjack3D extends Poker3D {
   tableCorners() {
     const out = [];
     // En portrait : on cadre serré sur les cercles de mise (les bords du rebord sortent de l'écran)
-    const rx = this.portrait ? 4.3 : RX + RAILW;
-    const rz = this.portrait ? RZ * 0.8 : RZ + RAILW;
+    // On cadre la zone de jeu (cartes, cercles de mise, banque) : la table remplit l'écran
+    const rx = this.portrait ? 4.3 : RX * 0.8;
+    const rz = this.portrait ? RZ * 0.8 : RZ * 0.84;
     for (let i = 0; i <= 8; i++) {
       const t = (i / 8) * Math.PI;
       out.push(new THREE.Vector3(rx * Math.cos(t), TOP + 0.2, DZ + rz * Math.sin(t)));
@@ -524,6 +541,121 @@ export class Blackjack3D extends Poker3D {
     }
     if (!all.length) return;
     await Promise.all(all.map((m, i) => this.wait(i * 30).then(() => this.fly(m, m.position.clone(), this.discardPos.clone(), { ms: 380, arc: 0.3, rotTo: 0.5 })).then(() => this.world.remove(m))));
+  }
+
+  // ------------------------------------------------------------ effets
+  /** Onde lumineuse qui s'étend sur le tapis. */
+  ringWave(pos, color, size = 2.2, ms = 900) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.52, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.copy(pos).setY(TOP + 0.02);
+    this.world.add(m);
+    return this.tween(ms, (t) => {
+      m.scale.setScalar(1 + t * size);
+      m.material.opacity = 0.95 * (1 - t);
+    }).then(() => this.world.remove(m));
+  }
+  /** Étincelles qui jaillissent puis retombent. */
+  sparkles(pos, color, n = 26, power = 1) {
+    const geo = new THREE.OctahedronGeometry(0.045, 0);
+    const proms = [];
+    for (let k = 0; k < n; k++) {
+      const mat = new THREE.MeshBasicMaterial({ color: k % 3 ? color : 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+      const m = new THREE.Mesh(geo, mat);
+      const a = Math.random() * Math.PI * 2;
+      const sp = (0.5 + Math.random() * 1.2) * power;
+      const vy = (1.8 + Math.random() * 1.6) * power;
+      const p0 = pos.clone().setY(TOP + 0.15);
+      m.position.copy(p0);
+      this.world.add(m);
+      proms.push(this.tween(900 + Math.random() * 400, (t) => {
+        m.position.set(p0.x + Math.cos(a) * sp * t, p0.y + vy * t - 3.2 * t * t, p0.z + Math.sin(a) * sp * t);
+        m.rotation.set(t * 8, t * 6, 0);
+        mat.opacity = 1 - t;
+      }).then(() => this.world.remove(m)));
+    }
+    return Promise.all(proms);
+  }
+  /** Pluie de jetons qui tombent du ciel sur une place (blackjack !). */
+  async chipRain(pos, n = 12) {
+    const vals = [1000, 500, 100, 25, 5];
+    const proms = [];
+    for (let k = 0; k < n; k++) {
+      const v = vals[k % vals.length];
+      const m = new THREE.Mesh(this.chipGeo, this.chipMats[v]);
+      const from = pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, 3 + Math.random() * 2, (Math.random() - 0.5) * 1.6));
+      const to = pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.9, 0, (Math.random() - 0.5) * 0.9)).setY(TOP + 0.03);
+      m.position.copy(from);
+      this.world.add(m);
+      const spin = (Math.random() - 0.5) * 12;
+      proms.push(this.wait(k * 60).then(() => this.tween(650, (t) => {
+        const e = t * t;
+        m.position.lerpVectors(from, to, e);
+        m.rotation.set(spin * (1 - t), spin * (1 - t) * 0.7, 0);
+      })).then(() => this.wait(500)).then(() => this.tween(300, (t) => m.scale.setScalar(1 - t))).then(() => this.world.remove(m)));
+    }
+    this.cb.onChips && this.cb.onChips();
+    return Promise.all(proms);
+  }
+  /** Les cartes d'une main tremblent (main perdue ou sautée). */
+  shakeHand(pid, h) {
+    const s = this.bj.seats[pid];
+    const list = s && s.hands[h];
+    if (!list || !list.length) return Promise.resolve();
+    const base = list.map((m) => m.position.clone());
+    return this.tween(520, (t) => {
+      const a = Math.sin(t * Math.PI * 9) * 0.07 * (1 - t);
+      list.forEach((m, i) => m.position.set(base[i].x + a * s.perp.x, base[i].y, base[i].z + a * s.perp.z));
+    }).then(() => list.forEach((m, i) => m.position.copy(base[i])));
+  }
+  /** Les cartes d'une main sautée s'assombrissent (voile sombre posé dessus). */
+  dimHand(pid, h) {
+    const s = this.bj.seats[pid];
+    const list = s && s.hands[h];
+    if (!list) return;
+    for (const m of list) {
+      if (m.userData.veil) continue;
+      const veil = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0b0d20, transparent: true, opacity: 0, depthWrite: false }));
+      veil.position.y = CT / 2 + 0.003;
+      m.add(veil);
+      m.userData.veil = veil;
+      this.tween(400, (t) => (veil.material.opacity = 0.45 * t));
+    }
+  }
+  /** Résultat d'une main : effets selon l'issue. */
+  resultFx(pid, h, n, outcome) {
+    const pos = this.betPos(pid, h, n);
+    if (outcome === 'blackjack') {
+      this.ringWave(pos, 0xffd166, 3.2, 1200);
+      this.ringWave(pos, 0xff9f43, 2.2, 900);
+      this.sparkles(pos, 0xffd166, 40, 1.3);
+      return this.chipRain(pos, 14);
+    }
+    if (outcome === 'win') {
+      this.ringWave(pos, 0x2ecc71, 2.4, 950);
+      return this.sparkles(pos, 0x7ef0ac, 24, 1);
+    }
+    if (outcome === 'push') return this.ringWave(pos, 0x3fa7ff, 1.6, 800);
+    this.ringWave(pos, 0xff3b4e, 1.8, 800);
+    if (outcome === 'bust' || outcome === 'lose') this.dimHand(pid, h);
+    return this.shakeHand(pid, h);
+  }
+  /** La banque saute : ses jetons bondissent dans le rack. */
+  dealerBustFx() {
+    const pos = new THREE.Vector3(0, TOP, this.dealerZ);
+    this.ringWave(pos, 0x2ecc71, 3.5, 1300);
+    this.sparkles(new THREE.Vector3(0, TOP + 0.3, DZ + 0.4), 0x7ef0ac, 36, 1.2);
+    const D = this.bj.dealer;
+    const base = D.map((m) => m.position.clone());
+    return this.tween(700, (t) => {
+      D.forEach((m, i) => {
+        m.position.y = base[i].y + Math.sin(t * Math.PI) * 0.35 * (i % 2 ? 1 : 0.7);
+        m.rotation.z = Math.sin(t * Math.PI * 4) * 0.08 * (1 - t);
+      });
+    }).then(() => D.forEach((m, i) => {
+      m.position.copy(base[i]);
+      m.rotation.z = 0;
+    }));
   }
 
   // ------------------------------------------------------------ écran

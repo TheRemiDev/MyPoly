@@ -394,7 +394,17 @@ export class BlackjackTable {
           txt = 'Blackjack !';
           cls = '.o-blackjack';
         } else if (this.help) txt = this.totalText(v);
-        if (txt) place(h('div.bj-handlabel' + cls + (active ? '.active' : ''), txt), this.b3.handScreen(p.id, k, n, hand.cards.length - 1));
+        // Résultat qui apparaît avec un rebond (une seule fois, pas à chaque rafraîchissement)
+        let pop = '';
+        if (cls) {
+          const key = `${st.round}:${p.id}:${k}:${cls}`;
+          this.popSeen ||= new Set();
+          if (!this.popSeen.has(key)) {
+            this.popSeen.add(key);
+            pop = '.pop';
+          }
+        }
+        if (txt) place(h('div.bj-handlabel' + cls + pop + (active ? '.active' : ''), txt), this.b3.handScreen(p.id, k, n, hand.cards.length - 1));
       });
     }
   }
@@ -616,7 +626,13 @@ export class BlackjackTable {
       case 'blackjack':
         Sound.play('cash');
         this.seatBubble(ev.pid, 'Blackjack !', '.win', 1800);
-        await sleep(400);
+        if (this.b3) {
+          const n = P(ev.pid) ? P(ev.pid).hands.length : 1;
+          const pos = this.b3.betPos(ev.pid, ev.hand || 0, n);
+          this.b3.ringWave(pos, 0xffd166, 2.6, 1000);
+          this.b3.sparkles(pos, 0xffd166, 30, 1.1);
+        }
+        await sleep(450);
         return;
       case 'card': {
         const dp = P(ev.pid);
@@ -668,7 +684,10 @@ export class BlackjackTable {
         this.seatBubble(ev.pid, 'Sauté !', '.fold', 1500);
         const hand = P(ev.pid) && P(ev.pid).hands[ev.hand];
         if (hand) hand.outcome = 'bust';
-        if (this.b3) await this.b3.collectLoss(ev.pid, ev.hand);
+        if (this.b3) {
+          this.b3.resultFx(ev.pid, ev.hand, P(ev.pid) ? P(ev.pid).hands.length : 1, 'bust');
+          await this.b3.collectLoss(ev.pid, ev.hand);
+        }
         this.renderLabels();
         await sleep(250);
         return;
@@ -706,7 +725,11 @@ export class BlackjackTable {
   /** Paiements : la banque paie, ramasse ou rend chaque mise, puis le résultat s'affiche. */
   async showSettle(ev) {
     const d = this.disp;
-    if (ev.dealer > 21) this.showBanner('La banque saute !', `${ev.dealer} : toutes les mains en jeu gagnent`, '#2ecc71', 1500, '.small');
+    if (ev.dealer > 21) {
+      this.showBanner('La banque saute !', `${ev.dealer} : toutes les mains en jeu gagnent`, '#2ecc71', 1700, '.dealerbust');
+      Sound.play('festival');
+      if (this.b3) await this.b3.dealerBustFx();
+    }
     for (const r of ev.results) {
       const hand = d.players[r.pid] && d.players[r.pid].hands[r.hand];
       if (hand) {
@@ -719,6 +742,8 @@ export class BlackjackTable {
       await sleep(i * 160);
       const n = d.players[r.pid] ? d.players[r.pid].hands.length : 1;
       if (this.b3) {
+        // Effet visuel de l'issue (onde, étincelles, pluie de jetons, cartes qui tremblent…)
+        if (r.outcome !== 'bust') this.b3.resultFx(r.pid, r.hand, n, r.outcome);
         if (r.outcome === 'win' || r.outcome === 'blackjack') await this.b3.payWin(r.pid, r.hand, n, r.bet, r.payout);
         else if (r.outcome === 'push') await this.b3.pushBack(r.pid, r.hand);
         else await this.b3.collectLoss(r.pid, r.hand);
@@ -734,14 +759,30 @@ export class BlackjackTable {
     if (mine.length) {
       const net = mine.reduce((s, r) => s + r.net, 0);
       if (net > 0) {
-        Sound.play('cash');
-        this.showBanner(mine.some((r) => r.outcome === 'blackjack') ? 'Blackjack !' : 'Gagné !', `+${fmt(net)} jetons`, '#2ecc71', 1500);
-        if (net >= 100) confetti(900);
-      } else if (net < 0) this.showBanner('Perdu', `${fmt(net)} jetons`, '#ff5a5f', 1300, '.small');
-      else this.showBanner('Égalité', 'Mise rendue', '#3fa7ff', 1200, '.small');
+        const bj = mine.some((r) => r.outcome === 'blackjack');
+        Sound.play(bj ? 'festival' : 'cash');
+        this.showBanner(bj ? 'BLACKJACK !' : 'GAGNÉ !', `+${fmt(net)} jetons`, bj ? '#ffd166' : '#2ecc71', 1900, bj ? '.bj' : '.win');
+        this.coinBurst(bj ? 26 : 14);
+        if (bj || net >= 100) confetti(bj ? 1800 : 900);
+      } else if (net < 0) {
+        Sound.play('pay');
+        this.showBanner('PERDU', `${fmt(net)} jetons`, '#ff5a5f', 1500, '.lose');
+      } else this.showBanner('ÉGALITÉ', 'Mise rendue', '#3fa7ff', 1300, '.small');
     }
     this.renderLabels();
     await sleep(900);
+  }
+
+  /** Pièces dorées qui jaillissent du bas de l'écran vers ma pile (victoire). */
+  coinBurst(n = 14) {
+    const host = this.v.gameEl;
+    const W = host.clientWidth;
+    const H = host.clientHeight;
+    for (let k = 0; k < n; k++) {
+      const c = h('i.bj-coin', { style: { left: W / 2 + (Math.random() - 0.5) * 160 + 'px', top: H * 0.55 + 'px', '--dx': (Math.random() - 0.5) * W * 0.6 + 'px', '--dy': -(H * 0.25 + Math.random() * H * 0.25) + 'px', '--r': (Math.random() - 0.5) * 720 + 'deg', animationDelay: k * 35 + 'ms' } });
+      this.fx.append(c);
+      setTimeout(() => c.remove(), 1700 + k * 35);
+    }
   }
 
   onEmote({ key, emoji }) {

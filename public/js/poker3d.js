@@ -23,6 +23,36 @@ const ease = {
 };
 
 /** Forme « hippodrome » (table ovale) centrée, de demi-longueur droite w et de rayon r. */
+/** Générateur pseudo-aléatoire déterministe (mulberry32). */
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/** Découpage varié d'un montant : une part en grosses valeurs, le reste en petites (≤ 34 jetons). */
+function variedBreakdown(amount, rnd) {
+  const values = CHIPS.map((c) => c[0]).filter((v) => v <= amount).sort((a, b) => b - a);
+  if (!values.length) return [];
+  const out = [];
+  let left = amount;
+  values.forEach((v, i) => {
+    const smallest = i === values.length - 1;
+    let k = Math.floor(left / v);
+    // On garde de quoi mettre des jetons plus petits (sauf pour la plus petite valeur)
+    if (!smallest && k > 0) k = Math.max(v * 2 <= amount ? 1 : 0, Math.floor(k * (0.45 + rnd() * 0.35)));
+    for (let j = 0; j < k && out.length < 34; j++) out.push(v);
+    left -= k * v;
+  });
+  // Trop de jetons ou reste non couvert : découpage glouton classique
+  if (left > 0 || out.length >= 34) return chipBreakdown(amount, 30, Math.max(1, amount / 5));
+  return out;
+}
+
 function racetrack(w, r, shape = new THREE.Shape()) {
   shape.moveTo(-w, -r);
   shape.lineTo(w, -r);
@@ -200,27 +230,46 @@ export class Poker3D {
     }
   }
   /** Pile de jetons pour un montant (en colonnes de 10). */
+  /**
+   * Pile de jetons pour un montant, composée comme sur une vraie table : plusieurs
+   * valeurs mélangées, colonnes de hauteurs différentes, empilement un peu irrégulier,
+   * parfois un jeton posé à plat à côté. La composition dépend du montant (stable).
+   */
   makeChips(amount) {
     const g = new THREE.Group();
-    // Pile bien fournie : pas de jeton qui vaudrait plus d'un cinquième du montant
-    const list = chipBreakdown(amount, 30, Math.max(1, amount / 5));
-    const COL = [[0, 0], [CHIP_R * 2.05, 0], [CHIP_R * 1.02, -CHIP_R * 1.8], [-CHIP_R * 1.02, -CHIP_R * 1.8], [-CHIP_R * 2.05, 0], [CHIP_R * 3.1, -CHIP_R * 1.8]];
-    // Une colonne par valeur, au plus 10 jetons par colonne
+    const rnd = seeded(Math.round(amount) * 7919 + 17);
+    const list = variedBreakdown(Math.round(amount), rnd);
+    // Emplacements des colonnes (en grappe serrée)
+    const COL = [[0, 0], [CHIP_R * 2.04, 0.02], [CHIP_R * 1.02, -CHIP_R * 1.78], [-CHIP_R * 1.0, -CHIP_R * 1.8], [-CHIP_R * 2.04, 0.03], [CHIP_R * 1.03, CHIP_R * 1.78], [-CHIP_R * 1.02, CHIP_R * 1.77], [CHIP_R * 3.06, -CHIP_R * 1.76]];
     const groups = [];
     for (const v of list) {
       const last = groups[groups.length - 1];
-      if (last && last.v === v && last.n < 10) last.n++;
+      if (last && last.v === v && last.n < 9) last.n++;
       else groups.push({ v, n: 1 });
     }
+    // Petites piles de couleurs différentes réparties autour de la plus grosse
+    groups.sort((a, b) => b.n - a.n);
+    const spill = groups.length >= 3 && rnd() < 0.45 ? groups[groups.length - 1] : null;
     groups.slice(0, COL.length).forEach((grp, k) => {
-      for (let i = 0; i < grp.n; i++) {
+      const lean = (rnd() - 0.5) * 0.012; // la colonne penche légèrement
+      const n = grp === spill && grp.n > 1 ? grp.n - 1 : grp.n;
+      for (let i = 0; i < n; i++) {
         const m = new THREE.Mesh(this.chipGeo, this.chipMats[grp.v]);
-        m.position.set(COL[k][0] + (Math.random() - 0.5) * 0.012, CHIP_H / 2 + i * CHIP_H, COL[k][1] + (Math.random() - 0.5) * 0.012);
-        m.rotation.y = Math.random() * Math.PI;
+        m.position.set(COL[k][0] + (rnd() - 0.5) * 0.02 + lean * i, CHIP_H / 2 + i * CHIP_H, COL[k][1] + (rnd() - 0.5) * 0.02 + lean * i * 0.6);
+        m.rotation.set((rnd() - 0.5) * 0.03, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.03);
         m.castShadow = true;
         g.add(m);
       }
     });
+    // Un jeton « échappé » posé à plat à côté de la pile
+    if (spill) {
+      const m = new THREE.Mesh(this.chipGeo, this.chipMats[spill.v]);
+      const a = rnd() * Math.PI * 2;
+      m.position.set(Math.cos(a) * CHIP_R * 3.1, CHIP_H / 2, Math.sin(a) * CHIP_R * 3.1);
+      m.rotation.y = rnd() * Math.PI;
+      m.castShadow = true;
+      g.add(m);
+    }
     g.userData.amount = amount;
     return g;
   }
