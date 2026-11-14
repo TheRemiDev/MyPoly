@@ -101,7 +101,8 @@ export class Blackjack3D extends Poker3D {
 
   /** Feutre bleu royal, inscriptions dorées en arc, cercles de mise. */
   paintFelt() {
-    const W = 2048;
+    const W = this.mobile ? 2048 : 4096;
+    const u = W / 2048; // échelle des traits
     const H = Math.round((W * RZ) / (2 * RX));
     const fc = makeCanvas(W, H);
     const g = fc.getContext('2d');
@@ -114,9 +115,9 @@ export class Blackjack3D extends Poker3D {
     bg.addColorStop(1, '#0a1d52');
     g.fillStyle = bg;
     g.fillRect(0, 0, W, H);
-    for (let i = 0; i < 9000; i++) {
+    for (let i = 0; i < 9000 * u * u; i++) {
       g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.025)' : 'rgba(0,0,0,.06)';
-      g.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+      g.fillRect(Math.random() * W, Math.random() * H, 2 * u, 2 * u);
     }
     const cx = X(0);
     const cy = Z(DZ);
@@ -145,8 +146,8 @@ export class Blackjack3D extends Poker3D {
     const arcLine = (r, width, color, dash) => {
       g.save();
       g.strokeStyle = color;
-      g.lineWidth = width;
-      if (dash) g.setLineDash(dash);
+      g.lineWidth = width * u;
+      if (dash) g.setLineDash(dash.map((x) => x * u));
       g.beginPath();
       g.arc(cx, cy, r * k, 0.08, Math.PI - 0.08);
       g.stroke();
@@ -162,12 +163,12 @@ export class Blackjack3D extends Poker3D {
       g.save();
       g.translate(X(p.x), Z(p.z));
       g.strokeStyle = '#ffd166';
-      g.lineWidth = 6;
+      g.lineWidth = 6 * u;
       g.beginPath();
       g.arc(0, 0, 0.5 * k, 0, Math.PI * 2);
       g.stroke();
       g.strokeStyle = 'rgba(255,209,102,.45)';
-      g.lineWidth = 3;
+      g.lineWidth = 3 * u;
       g.beginPath();
       g.arc(0, 0, 0.42 * k, 0, Math.PI * 2);
       g.stroke();
@@ -176,7 +177,7 @@ export class Blackjack3D extends Poker3D {
     }
     // Emplacements des cartes de la banque
     g.strokeStyle = 'rgba(255,255,255,.15)';
-    g.lineWidth = 4;
+    g.lineWidth = 4 * u;
     for (const x of [-0.53, 0.53]) {
       const z = this.dealerZ;
       rr(g, X(x - CW / 2 - 0.04), Z(z - CH / 2 - 0.04), (CW + 0.08) * k, (CH + 0.08) * k, 0.1 * k);
@@ -369,6 +370,12 @@ export class Blackjack3D extends Poker3D {
       }
       p.hands.forEach((hand, h) => {
         const cur = s.bets[h];
+        // Main réglée (gagnée, perdue, sautée…) : ses jetons ont déjà quitté le cercle
+        if (hand.outcome) {
+          if (cur) this.world.remove(cur);
+          s.bets[h] = null;
+          return;
+        }
         if (cur && cur.userData.amount === hand.bet) {
           cur.position.copy(this.betPos(p.id, h, n));
           return;
@@ -437,10 +444,10 @@ export class Blackjack3D extends Poker3D {
     if (m) await this.flipUp(m, card, 480);
   }
   /** Mise : les jetons partent de la pile vers le cercle de mise. */
-  async placeBet(pid, amount, chips, h = 0, n = 1) {
+  async placeBet(pid, amount, chips, h = 0, n = 1, add = amount) {
     const s = this.bj.seats[pid];
     if (!s) return;
-    const g = this.makeChips(amount);
+    const g = this.makeChips(add);
     if (s.stack) this.world.remove(s.stack);
     s.stack = chips > 0 ? this.makeChips(chips) : null;
     if (s.stack) {
@@ -450,9 +457,24 @@ export class Blackjack3D extends Poker3D {
     s.amount = chips;
     this.cb.onChip && this.cb.onChip();
     await this.fly(g, this.stackPos(pid), this.betPos(pid, h, n), { ms: 420, arc: 0.45 });
+    this.world.remove(g);
     if (s.bets[h]) this.world.remove(s.bets[h]);
-    s.bets[h] = g;
-    g.userData.amount = amount;
+    const pile = this.makeChips(amount);
+    pile.position.copy(this.betPos(pid, h, n));
+    this.world.add(pile);
+    s.bets[h] = pile;
+  }
+  /** Pile du joueur remise à jour tout de suite (après un gain ou une mise rendue). */
+  setChipsBj(pid, chips) {
+    const s = this.bj.seats[pid];
+    if (!s || s.amount === chips) return;
+    if (s.stack) this.world.remove(s.stack);
+    s.stack = chips > 0 ? this.makeChips(chips) : null;
+    if (s.stack) {
+      s.stack.position.copy(this.stackPos(pid));
+      this.world.add(s.stack);
+    }
+    s.amount = chips;
   }
   /** Gain : la banque paie à côté de la mise, puis tout rejoint la pile du joueur. */
   async payWin(pid, h, n, bet, payout) {

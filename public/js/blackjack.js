@@ -129,10 +129,10 @@ export class BlackjackTable {
     v.renderChat();
     this.renderToolbar();
     this.onKey = (e) => {
-      if (e.target.matches('input, textarea, select') || !this.state || this.lock) return;
+      if (e.target.matches('input, textarea, select') || !this.state) return;
       const L = this.state.legal;
       const k = e.key.toLowerCase();
-      if (L) {
+      if (L && !this.lock) {
         if (k === 't' || k === 'h') this.act('hit');
         else if (k === 'r' || k === 's') this.act('stand');
         else if (k === 'd' && L.canDouble) this.act('double');
@@ -245,6 +245,8 @@ export class BlackjackTable {
       this.v.logEl.innerHTML = '';
       for (const l of st.log) this.addLog(l, true);
     }
+    // Nouvelle manche de mises : on peut de nouveau miser
+    if (!st.canBet) this.betSent = false;
     if (st.canBet && !this.betDraft) this.betDraft = Math.min(st.betLimits.max, Math.max(st.betLimits.min, st.betLimits.last || st.betLimits.min));
     this.renderAll();
     this.syncTable();
@@ -375,7 +377,8 @@ export class BlackjackTable {
       const d = this.disp.players[p.id];
       const n = d.hands.length;
       d.hands.forEach((hand, k) => {
-        if (hand.bet) place(h('div.pk-betlabel', { style: { '--c': p.color } }, fmt(hand.bet)), this.b3.betScreen(p.id, k, n));
+        // Le montant misé n'est affiché que tant que la mise est sur la table
+        if (hand.bet && !hand.outcome) place(h('div.pk-betlabel', { style: { '--c': p.color } }, fmt(hand.bet)), this.b3.betScreen(p.id, k, n));
         if (!hand.cards.length) return;
         const v = handValue(hand.cards);
         const active = st.current && st.current.pid === p.id && st.current.hand === k;
@@ -427,7 +430,7 @@ export class BlackjackTable {
     const cur = st.current && this.player(st.current.pid);
     let status = '';
     if (st.over) status = 'Partie terminée';
-    else if (st.phase === 'bet') status = st.canBet ? 'Faites vos jeux : choisissez votre mise' : 'Les autres joueurs misent…';
+    else if (st.phase === 'bet') status = st.canBet && !this.betSent ? 'Faites vos jeux : choisissez votre mise' : 'Mise placée : on attend les autres joueurs…';
     else if (st.phase === 'dealer') status = 'La banque joue…';
     else if (st.phase === 'between') status = 'Manche suivante dans un instant…';
     else if (st.legal) status = 'À vous de jouer';
@@ -442,12 +445,19 @@ export class BlackjackTable {
     }
   }
 
-  renderPanel() {
+  renderPanel(force = false) {
     const st = this.state;
     const el = this.panelEl;
+    // Mise : chacun mise à son rythme, même pendant que les jetons des autres arrivent sur la table
+    if (st && !st.over && st.canBet && !this.betSent) {
+      if (this.panelMode === 'bet' && !force) return;
+      this.panelMode = 'bet';
+      el.innerHTML = '';
+      return this.renderBet();
+    }
+    this.panelMode = null;
     el.innerHTML = '';
     if (!st || this.lock || st.over) return;
-    if (st.canBet) return this.renderBet();
     const L = st.legal;
     if (!L) return;
     const me = this.player(this.me);
@@ -471,7 +481,7 @@ export class BlackjackTable {
     const go = h('button.btn.primary.bj-bet-go', { disabled: this.betDraft < min, onclick: () => this.sendBet(this.betDraft) }, this.betDraft < min ? `Minimum ${fmt(min)}` : `Miser ${fmt(this.betDraft)}`);
     const set = (x) => {
       this.betDraft = clamp(x);
-      this.renderPanel();
+      this.renderPanel(true);
     };
     this.panelEl.append(h('div.bj-bet',
       h('div.bj-bet-top', h('span', 'Votre mise'), amount, h('small', `de ${fmt(min)} à ${fmt(max)}`)),
@@ -491,15 +501,16 @@ export class BlackjackTable {
   }
 
   async sendBet(amount) {
-    if (!this.state || !this.state.canBet || this.lock) return;
-    this.lock = true;
+    if (!this.state || !this.state.canBet || this.betSent) return;
+    Sound.play('chips');
+    this.betSent = true;
     this.renderPanel();
     const res = await emit('game:action', { type: 'bet', amount });
-    this.lock = false;
     if (res && res.error) {
+      this.betSent = false;
       Sound.play('error');
       toast(res.error, 'error');
-      this.renderPanel();
+      this.renderPanel(true);
     }
   }
 
@@ -627,10 +638,9 @@ export class BlackjackTable {
         hand.bet = ev.bet;
         dp.chips = ev.chips;
         this.seatBubble(ev.pid, 'Double !', '.raise');
-        if (this.b3) await this.b3.placeBet(ev.pid, ev.bet, ev.chips, ev.hand, dp.hands.length);
+        if (this.b3) await this.b3.placeBet(ev.pid, ev.bet, ev.chips, ev.hand, dp.hands.length, add);
         hand.cards.push(ev.card);
         if (this.b3) await this.b3.dealCard({ pid: ev.pid, hand: ev.hand }, ev.card, { n: dp.hands.length });
-        void add;
         this.refresh();
         return;
       }
@@ -653,11 +663,16 @@ export class BlackjackTable {
         await sleep(500);
         return;
       }
-      case 'bust':
+      case 'bust': {
         Sound.play('fold');
         this.seatBubble(ev.pid, 'Sauté !', '.fold', 1500);
-        await sleep(350);
+        const hand = P(ev.pid) && P(ev.pid).hands[ev.hand];
+        if (hand) hand.outcome = 'bust';
+        if (this.b3) await this.b3.collectLoss(ev.pid, ev.hand);
+        this.renderLabels();
+        await sleep(250);
         return;
+      }
       case 'reveal':
         d.dealer[1] = ev.card;
         if (this.b3) await this.b3.revealHole(ev.card);
@@ -709,6 +724,7 @@ export class BlackjackTable {
         else await this.b3.collectLoss(r.pid, r.hand);
       }
       d.players[r.pid].chips += r.payout;
+      if (this.b3) this.b3.setChipsBj(r.pid, d.players[r.pid].chips);
       if (r.outcome === 'win' || r.outcome === 'blackjack') this.seatBubble(r.pid, `+${fmt(r.net)}`, '.win', 1600);
       this.renderSeats();
       this.renderDock();
