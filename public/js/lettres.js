@@ -479,15 +479,15 @@ export class LettersTable {
     let status = '';
     if (st.over) status = 'Partie terminée';
     else if (!me) status = `Vous regardez la partie${cur ? ` · ${cur.name} réfléchit…` : ''}`;
-    else if (this.myTurn()) status = this.pending.length ? 'Validez, ou touchez une lettre posée pour la reprendre' : 'À vous : glissez des lettres sur le plateau';
+    else if (st.current === this.me) status = this.pending.length ? 'Validez, ou touchez une lettre posée pour la reprendre' : 'À vous : glissez des lettres sur le plateau';
     else if (cur) status = `${cur.name} réfléchit… préparez votre prochain mot`;
     this.statusEl.replaceChildren(h('span', status), st.deadline ? h('div.pk-timer', h('i')) : null);
-    this.statusEl.classList.toggle('mine', this.myTurn());
+    this.statusEl.classList.toggle('mine', st.current === this.me && !st.over);
     const el = this.actionsEl;
     el.innerHTML = '';
     if (!me || me.out || st.over) return;
     const mine = this.myTurn();
-    const valid = this.preview && this.preview.valid;
+    const valid = this.pending.length && this.preview && this.preview.valid;
     el.append(
       h('button.btn.pk-btn.call.lt-play', { disabled: !mine || !this.pending.length, onclick: () => this.play() }, h('span', valid ? `Jouer +${this.preview.score}` : 'Jouer')),
       h('button.btn.ghost.lt-small', { disabled: !this.pending.length, onclick: () => this.recall(), title: 'Reprendre toutes les lettres (Échap)' }, 'Rappeler'),
@@ -596,7 +596,11 @@ export class LettersTable {
         await sleep(400);
         return;
       case 'play': {
-        if (ev.pid === this.me) this.pending = [];
+        if (ev.pid === this.me) {
+          this.pending = [];
+          this.preview = null;
+          this.renderPreview();
+        }
         if (this.b3) {
           this.b3.setPending(this.pending.map((q) => ({ r: q.r, c: q.c, l: q.letter, v: 0 })));
           await this.b3.dropTiles(ev.tiles, this.seatSide(ev.pid));
