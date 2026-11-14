@@ -51,7 +51,7 @@ export class Poker3D {
 
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }));
     this.mobile = document.documentElement.classList.contains('touch') || Math.min(screen.width, screen.height) < 700;
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    r.setPixelRatio(this.pixelRatio());
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     r.toneMapping = THREE.NeutralToneMapping;
@@ -88,6 +88,11 @@ export class Poker3D {
     this.raf = requestAnimationFrame(this.loop);
   }
 
+  /** Image nette : au moins 1,5× la définition de l'écran sur ordinateur (anti-flou), 2× au plus sur téléphone. */
+  pixelRatio() {
+    const d = window.devicePixelRatio || 1;
+    return this.mobile ? Math.min(d, 2) : Math.min(Math.max(d, 1.5), 2.5);
+  }
   /**
    * Petit studio photo virtuel (panneaux lumineux) transformé en carte d'environnement :
    * l'or, le cuir, les jetons et le bois prennent de vrais reflets doux.
@@ -175,13 +180,14 @@ export class Poker3D {
   }
 
   buildChipKit() {
-    this.chipGeo = new THREE.CylinderGeometry(CHIP_R, CHIP_R, CHIP_H, 40);
+    this.chipGeo = new THREE.CylinderGeometry(CHIP_R, CHIP_R, CHIP_H, 56);
     this.chipMats = {};
     for (const [v, color, ink] of CHIPS) {
-      const top = new THREE.MeshStandardMaterial({ map: this.tex(drawChipTop(color, ink, chipLabel(v))), roughness: 0.35, metalness: 0.05 });
+      // Vernis brillant (clearcoat) : reflets nets comme sur de vrais jetons
+      const top = new THREE.MeshPhysicalMaterial({ map: this.tex(drawChipTop(color, ink, chipLabel(v), this.mobile ? 256 : 512)), roughness: 0.42, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.25, envMapIntensity: 0.8 });
       const sideT = this.tex(drawChipSide(color));
       sideT.wrapS = THREE.RepeatWrapping;
-      const side = new THREE.MeshStandardMaterial({ map: sideT, roughness: 0.4 });
+      const side = new THREE.MeshPhysicalMaterial({ map: sideT, roughness: 0.45, clearcoat: 0.5, clearcoatRoughness: 0.3 });
       this.chipMats[v] = [side, top, top];
     }
   }
@@ -325,7 +331,8 @@ export class Poker3D {
   /** Feutre : vert émeraude, fibres, ligne de mise dorée, logo et emplacements du tableau. */
   paintFelt() {
     const WX = SL + RAD;
-    const W = 2048;
+    const W = this.mobile ? 2048 : 4096;
+    const u = W / 2048; // échelle des traits
     const H = Math.round((W * RAD) / WX);
     const fc = makeCanvas(W, H);
     const g = fc.getContext('2d');
@@ -339,15 +346,15 @@ export class Poker3D {
     g.fillStyle = bg;
     g.fillRect(0, 0, W, H);
     // Fibres
-    for (let i = 0; i < 9000; i++) {
+    for (let i = 0; i < 9000 * u * u; i++) {
       g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.025)' : 'rgba(0,0,0,.05)';
-      g.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+      g.fillRect(Math.random() * W, Math.random() * H, 2 * u, 2 * u);
     }
     // Ligne de mise (hippodrome intérieur), dorée
     const line = (w, r, width, color, dash) => {
       g.save();
       g.strokeStyle = color;
-      g.lineWidth = width;
+      g.lineWidth = width * u;
       if (dash) g.setLineDash(dash);
       g.beginPath();
       g.moveTo(X(-w), Z(-r));
@@ -362,7 +369,7 @@ export class Poker3D {
     line(SL, RAD - 1.15, 4, 'rgba(255,209,102,.38)', [18, 12]);
     // Emplacements des 5 cartes communes
     g.strokeStyle = 'rgba(255,255,255,.16)';
-    g.lineWidth = 4;
+    g.lineWidth = 4 * u;
     for (let i = 0; i < 5; i++) {
       const c = this.boardPos(i);
       const w = (this.portrait ? CH : CW) + 0.08;
@@ -391,7 +398,7 @@ export class Poker3D {
       g.rotate(rot);
       g.globalAlpha = 0.2;
       g.strokeStyle = '#ffd166';
-      g.lineWidth = 5;
+      g.lineWidth = 5 * u;
       g.beginPath();
       g.arc(0, 0, 0.85 * k, 0, Math.PI * 2);
       g.stroke();
@@ -400,7 +407,7 @@ export class Poker3D {
     }
     // Emplacement du pot
     g.strokeStyle = 'rgba(255,209,102,.28)';
-    g.lineWidth = 4;
+    g.lineWidth = 4 * u;
     g.beginPath();
     g.arc(X(this.potPos.x), Z(this.potPos.z), 0.55 * k, 0, Math.PI * 2);
     g.stroke();
@@ -890,7 +897,7 @@ export class Poker3D {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     if (!w || !h) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = this.pixelRatio();
     if (this.renderer.getPixelRatio() !== dpr) this.renderer.setPixelRatio(dpr);
     const cs = getComputedStyle(this.container);
     const v = (n) => {

@@ -12,15 +12,15 @@ const SERIF = "Georgia, 'Times New Roman', 'Palatino Linotype', serif";
 export const SUIT_COLORS = ['#1b1f2e', '#d42a3c', '#d42a3c', '#1b1f2e'];
 /** Couleurs des jetons par valeur. */
 export const CHIPS = [
-  [100000, '#e04e9a', '#ffd6ea'],
-  [25000, '#11a3b8', '#d7fbff'],
-  [5000, '#f07f13', '#fff1dc'],
-  [1000, '#f2b705', '#3b2a00'],
-  [500, '#7b3fc4', '#efe2ff'],
-  [100, '#23262f', '#f3f3f3'],
-  [25, '#1f9d55', '#eafff2'],
-  [5, '#d93a3a', '#fff0f0'],
-  [1, '#f2f2f2', '#2a5bd7'],
+  [100000, '#c93a83', '#a0225f'],
+  [25000, '#0f8aa0', '#0b6878'],
+  [5000, '#e2620e', '#b84a05'],
+  [1000, '#e8a917', '#8a5a00'],
+  [500, '#5b2a9e', '#4a1f86'],
+  [100, '#1b1d26', '#1b1d26'],
+  [25, '#138a4a', '#0e6b39'],
+  [5, '#c8202f', '#a5151f'],
+  [1, '#f4f4f0', '#1f4fd1'],
 ];
 
 export function makeCanvas(w, h) {
@@ -366,54 +366,128 @@ export function drawCardBack(W = 256) {
   return cv;
 }
 
-/** Jeton vu de dessus : couleur, encoches blanches, valeur. */
-export function drawChipTop(color, ink, label) {
-  const S = 256;
+/**
+ * Jeton de casino vu de dessus (haute définition) : bord coloré avec six encoches
+ * bicolores, filet doré, rond central imprimé (comme un vrai jeton à « inlay »)
+ * portant la valeur, petits symboles de cartes.
+ */
+export function drawChipTop(color, ink, label, S = 512) {
   const cv = makeCanvas(S, S);
   const g = cv.getContext('2d');
   const c = S / 2;
-  g.fillStyle = color;
+  const R = c - 1;
+  // Fond : dégradé (lumière en haut à gauche)
+  const base = g.createRadialGradient(c * 0.7, c * 0.62, S * 0.05, c, c, R);
+  base.addColorStop(0, shade(color, 0.22));
+  base.addColorStop(0.7, color);
+  base.addColorStop(1, shade(color, -0.28));
+  g.fillStyle = base;
   g.beginPath();
-  g.arc(c, c, c, 0, Math.PI * 2);
+  g.arc(c, c, R, 0, Math.PI * 2);
   g.fill();
-  g.fillStyle = 'rgba(255,255,255,.92)';
-  for (let k = 0; k < 8; k++) {
+  // Six encoches sur le bord : bloc clair + filet de couleur
+  const light = color.toLowerCase() === '#f4f4f0' ? '#1f4fd1' : '#fbf8ef';
+  for (let k = 0; k < 6; k++) {
     g.save();
     g.translate(c, c);
-    g.rotate((k * Math.PI) / 4);
-    rr(g, -S * 0.06, -c, S * 0.12, S * 0.16, S * 0.02);
+    g.rotate((k * Math.PI) / 3);
+    g.fillStyle = light;
+    rr(g, -S * 0.075, -R, S * 0.15, S * 0.17, S * 0.025);
     g.fill();
+    g.fillStyle = color;
+    g.fillRect(-S * 0.012, -R + S * 0.02, S * 0.024, S * 0.13);
     g.restore();
   }
-  g.strokeStyle = 'rgba(255,255,255,.85)';
-  g.lineWidth = S * 0.02;
-  g.setLineDash([S * 0.035, S * 0.03]);
+  // Fines rayures entre les encoches
+  g.strokeStyle = 'rgba(255,255,255,.35)';
+  g.lineWidth = S * 0.006;
+  for (let k = 0; k < 6; k++) {
+    for (const d of [-0.16, 0.16]) {
+      const a = (k * Math.PI) / 3 + Math.PI / 6 + d;
+      g.beginPath();
+      g.moveTo(c + Math.sin(a) * R * 0.86, c - Math.cos(a) * R * 0.86);
+      g.lineTo(c + Math.sin(a) * R * 0.98, c - Math.cos(a) * R * 0.98);
+      g.stroke();
+    }
+  }
+  // Liseré sombre du bord (relief)
+  g.strokeStyle = 'rgba(0,0,0,.35)';
+  g.lineWidth = S * 0.012;
   g.beginPath();
-  g.arc(c, c, S * 0.33, 0, Math.PI * 2);
+  g.arc(c, c, R - S * 0.006, 0, Math.PI * 2);
+  g.stroke();
+  // Anneau doré + pointillés clairs
+  g.strokeStyle = '#f2c95c';
+  g.lineWidth = S * 0.012;
+  g.beginPath();
+  g.arc(c, c, S * 0.36, 0, Math.PI * 2);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.75)';
+  g.lineWidth = S * 0.01;
+  g.setLineDash([S * 0.018, S * 0.022]);
+  g.beginPath();
+  g.arc(c, c, S * 0.395, 0, Math.PI * 2);
   g.stroke();
   g.setLineDash([]);
-  const inner = g.createRadialGradient(c - S * 0.06, c - S * 0.08, 4, c, c, S * 0.3);
-  inner.addColorStop(0, 'rgba(255,255,255,.35)');
-  inner.addColorStop(1, 'rgba(255,255,255,.05)');
-  g.fillStyle = inner;
+  // Rond central imprimé
+  const inlay = g.createRadialGradient(c * 0.85, c * 0.8, S * 0.02, c, c, S * 0.33);
+  inlay.addColorStop(0, '#ffffff');
+  inlay.addColorStop(1, '#ece6d6');
+  g.fillStyle = inlay;
   g.beginPath();
-  g.arc(c, c, S * 0.28, 0, Math.PI * 2);
+  g.arc(c, c, S * 0.33, 0, Math.PI * 2);
   g.fill();
-  g.fillStyle = ink;
-  g.font = `900 ${S * (label.length > 3 ? 0.17 : 0.22)}px ${FONT}`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(label, c, c + S * 0.01);
+  g.strokeStyle = color;
+  g.lineWidth = S * 0.014;
+  g.beginPath();
+  g.arc(c, c, S * 0.3, 0, Math.PI * 2);
+  g.stroke();
+  // Symboles de cartes autour de la valeur
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2 + Math.PI / 4;
+    drawSuit(g, k, c + Math.cos(a) * S * 0.205, c + Math.sin(a) * S * 0.205, S * 0.06, shade(ink, 0.15));
+  }
+  if (label) {
+    g.fillStyle = ink;
+    g.font = `900 ${S * (label.length > 3 ? 0.16 : label.length > 2 ? 0.19 : 0.23)}px ${FONT}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(label, c, c + S * 0.012);
+  } else {
+    // Jeton décoratif : petit losange doré
+    g.fillStyle = '#e0a52c';
+    g.beginPath();
+    g.moveTo(c, c - S * 0.1);
+    g.lineTo(c + S * 0.07, c);
+    g.lineTo(c, c + S * 0.1);
+    g.lineTo(c - S * 0.07, c);
+    g.closePath();
+    g.fill();
+  }
   return cv;
 }
+/** Tranche d'un jeton : bandes claires alignées sur les encoches, bords ombrés. */
 export function drawChipSide(color) {
-  const cv = makeCanvas(256, 16);
+  const cv = makeCanvas(512, 32);
   const g = cv.getContext('2d');
   g.fillStyle = color;
-  g.fillRect(0, 0, 256, 16);
-  g.fillStyle = 'rgba(255,255,255,.9)';
-  for (let k = 0; k < 8; k++) g.fillRect(k * 32 + 4, 0, 10, 16);
+  g.fillRect(0, 0, 512, 32);
+  g.fillStyle = color.toLowerCase() === '#f4f4f0' ? '#1f4fd1' : '#fbf8ef';
+  for (let k = 0; k < 6; k++) g.fillRect(k * (512 / 6) + 20, 0, 42, 32);
+  const sh = g.createLinearGradient(0, 0, 0, 32);
+  sh.addColorStop(0, 'rgba(0,0,0,.35)');
+  sh.addColorStop(0.2, 'rgba(0,0,0,0)');
+  sh.addColorStop(0.8, 'rgba(0,0,0,0)');
+  sh.addColorStop(1, 'rgba(0,0,0,.35)');
+  g.fillStyle = sh;
+  g.fillRect(0, 0, 512, 32);
   return cv;
+}
+/** Éclaircit (+) ou assombrit (−) une couleur hexadécimale. */
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (x) => Math.max(0, Math.min(255, Math.round(amt >= 0 ? x + (255 - x) * amt : x * (1 + amt))));
+  return '#' + [f(n >> 16), f((n >> 8) & 255), f(n & 255)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 export const chipLabel = (v) => (v >= 1000 ? v / 1000 + 'K' : String(v));
 
@@ -444,7 +518,7 @@ export function chipURL(v = 100) {
   if (!chipUrl[v]) {
     // v = 0 : jeton décoratif doré, sans valeur inscrite (icône de tapis)
     const def = CHIPS.find((x) => x[0] === v) || CHIPS[3];
-    chipUrl[v] = drawChipTop(def[1], def[2], v ? chipLabel(def[0]) : '').toDataURL('image/png');
+    chipUrl[v] = drawChipTop(def[1], def[2], v ? chipLabel(def[0]) : '', 192).toDataURL('image/png');
   }
   return chipUrl[v];
 }
