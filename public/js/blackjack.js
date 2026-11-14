@@ -377,7 +377,8 @@ export class BlackjackTable {
       const d = this.disp.players[p.id];
       const n = d.hands.length;
       d.hands.forEach((hand, k) => {
-        if (hand.bet) place(h('div.pk-betlabel', { style: { '--c': p.color } }, fmt(hand.bet)), this.b3.betScreen(p.id, k, n));
+        // Le montant misé n'est affiché que tant que la mise est sur la table
+        if (hand.bet && !hand.outcome) place(h('div.pk-betlabel', { style: { '--c': p.color } }, fmt(hand.bet)), this.b3.betScreen(p.id, k, n));
         if (!hand.cards.length) return;
         const v = handValue(hand.cards);
         const active = st.current && st.current.pid === p.id && st.current.hand === k;
