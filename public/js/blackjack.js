@@ -301,7 +301,10 @@ export class BlackjackTable {
     const map = this.seatMap();
     if (this.b3) this.b3.setSeats(map);
     this.cornersEl.innerHTML = '';
-    for (const p of st.players) {
+    // De gauche à droite, comme autour de la table
+    const ORDER = { l2: 0, l1: 1, me: 2, r1: 3, r2: 4 };
+    const players = st.players.slice().sort((a, b) => (ORDER[map[a.id]] ?? 9) - (ORDER[map[b.id]] ?? 9));
+    for (const p of players) {
       const slot = map[p.id];
       if (!slot) continue;
       const d = this.disp.players[p.id];
@@ -330,6 +333,11 @@ export class BlackjackTable {
   }
 
   placeSeatCards() {
+    // Téléphone en portrait : les joueurs sont dans un bandeau en haut (CSS), jamais sur le tapis
+    if (matchMedia('(max-aspect-ratio: 5/4)').matches) {
+      for (const card of this.cornersEl.querySelectorAll('.pcard.corner')) Object.assign(card.style, { left: '', top: '', right: '', bottom: '', translate: '' });
+      return;
+    }
     const box = this.cornersEl.getBoundingClientRect();
     for (const card of this.cornersEl.querySelectorAll('.pcard.corner:not(.me)')) {
       const pid = card.dataset.pid;

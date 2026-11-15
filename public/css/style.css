@@ -3652,12 +3652,29 @@ html.touch .mo-tip { display: none; }
 .bj2d-hand { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .bj2d-hand small { font-weight: 800; color: #fff; }
 @media (max-aspect-ratio: 5/4) {
-  .game.poker-game.bj-game { --safe-top: 60px; --safe-y: 250px; }
-  .bj-seat { --cw: 132px; }
-  .bj-chipbtn { width: 46px; height: 46px; }
-  .bj-bet { padding: 10px; gap: 8px; }
+  .game.poker-game.bj-game { --safe-top: 120px; --safe-y: 150px; --safe-x: 0px; }
+  /* Joueurs : bandeau compact sous la barre d'outils, la table reste dégagée */
+  .bj-game .corners { display: flex; justify-content: center; gap: 5px; padding: 62px 6px 0; inset: 0 0 auto 0; }
+  .bj-game .pcard.corner.bj-seat { position: relative; inset: auto !important; flex: 1 1 0; max-width: 170px; min-width: 0; width: auto; flex-direction: row !important; text-align: left !important;
+    padding: 5px 6px !important; gap: 5px !important; border-radius: 13px; }
+  .bj-game .bj-seat .pc-body { align-items: flex-start; }
+  .bj-game .bj-seat .pc-body > * { justify-content: flex-start; align-self: flex-start; }
+  .bj-seat .pk-avatar { width: 28px !important; height: 28px !important; }
+  .bj-seat .pk-initials { font-size: .7rem; }
+  .bj-seat .pc-name-text { font-size: .7rem !important; }
+  .bj-seat .pk-stack { font-size: .85rem; gap: 3px; }
+  .bj-seat .pk-stack img { width: 14px; height: 14px; }
+  .bj-seat .pc-ribbons, .bj-seat .pc-name .tag, .bj-seat .pc-name .tag-ico, .bj-seat .pcard-turn { display: none; }
+  .bj-seat .pk-tags .pk-act { height: 15px; font-size: .56rem; padding: 0 5px; }
+  .bj-seat.turn { box-shadow: 0 0 0 2px var(--c), 0 0 18px color-mix(in srgb, var(--c) 60%, transparent); }
+  .bj-seat { --cw: auto; }
+  .bj-chipbtn { width: 42px; height: 42px; }
+  .bj-chips { gap: 5px; flex-wrap: nowrap; }
+  .bj-bet { padding: 8px 10px; gap: 6px; }
   .bj-bet-amount { font-size: 1.4rem; }
   .bj-handlabel { font-size: .85rem; padding: 2px 9px; }
+  .bj-game .bj-handlabel { font-size: .8rem; min-width: 26px; padding: 2px 7px; }
+  .bj-game .bj-dealerlabel b { font-size: .95rem; }
 }
 @media (max-height: 560px) and (min-aspect-ratio: 5/4) {
   .game.poker-game.bj-game { --safe-y: 80px; --safe-x: 150px; }
