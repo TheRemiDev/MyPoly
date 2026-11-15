@@ -67,6 +67,15 @@ const BADGES = [
   { id: 'b_double', icon: '×2', name: 'Doublé gagnant', desc: 'Gagner 5 mises doublées dans une même partie', tier: 'silver', game: 'blackjack' },
   { id: 'b_five', icon: '5', name: 'Cinq cartes', desc: 'Faire 21 avec 5 cartes', tier: 'gold', game: 'blackjack' },
   { id: 'b_rich', icon: '◎', name: 'Sauter la banque', desc: 'Terminer une partie avec 3 fois les jetons de départ', tier: 'gold', game: 'blackjack' },
+  // Lettres d'Or
+  { id: 'l_first_win', icon: 'A', name: 'Premier mot gagnant', desc: 'Remporter une partie de Lettres d\'Or', tier: 'bronze', game: 'lettres' },
+  { id: 'l_wins_10', icon: 'M', name: 'Verbicruciste', desc: 'Remporter 10 parties de Lettres d\'Or', tier: 'silver', game: 'lettres' },
+  { id: 'l_wins_50', icon: 'Ω', name: 'Maître des mots', desc: 'Remporter 50 parties de Lettres d\'Or', tier: 'gold', game: 'lettres' },
+  { id: 'l_bingo', icon: '7', name: 'Lettres d\'Or', desc: 'Poser ses 7 lettres d\'un coup', tier: 'silver', game: 'lettres' },
+  { id: 'l_big', icon: '×3', name: 'Coup de maître', desc: 'Marquer 80 points ou plus en un seul coup', tier: 'gold', game: 'lettres' },
+  { id: 'l_long', icon: '…', name: 'Mot à rallonge', desc: 'Former un mot de 9 lettres ou plus', tier: 'silver', game: 'lettres' },
+  { id: 'l_score', icon: '◎', name: 'Grand score', desc: 'Terminer une partie avec 400 points ou plus', tier: 'gold', game: 'lettres' },
+  { id: 'l_streak', icon: '♥', name: 'Plume en feu', desc: '3 victoires de Lettres d\'Or d\'affilée', tier: 'silver', game: 'lettres' },
   { id: 'b_streak', icon: '♥', name: 'Série chanceuse', desc: '3 victoires de Blackjack d\'affilée', tier: 'silver', game: 'blackjack' },
 ];
 
@@ -192,4 +201,20 @@ function evaluateBlackjack(s, me, game, owned, settings) {
   return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
 }
 
-module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker, evaluateBlackjack };
+/** Badges de Lettres d'Or. */
+function evaluateLetters(s, me, game, owned) {
+  const st = me.stats || {};
+  const checks = {
+    l_first_win: s.wins >= 1,
+    l_wins_10: s.wins >= 10,
+    l_wins_50: s.wins >= 50,
+    l_bingo: (st.bingos || 0) >= 1,
+    l_big: (st.bestScore || 0) >= 80,
+    l_long: (st.longest || '').length >= 9,
+    l_score: (me.score || 0) >= 400,
+    l_streak: s.current_streak >= 3,
+  };
+  return BADGES.filter((b) => checks[b.id] && !owned.has(b.id)).map((b) => b.id);
+}
+
+module.exports = { BADGES, evaluate, evaluateCards, evaluateHorses, evaluateMonth, evaluatePoker, evaluateBlackjack, evaluateLetters };

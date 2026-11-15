@@ -12,8 +12,9 @@ const { HorseGame } = require('./chevaux/engine');
 const { MonthGame } = require('./mois/engine');
 const { PokerGame } = require('./poker/engine');
 const { BlackjackGame } = require('./blackjack/engine');
+const { LettersGame } = require('./lettres/engine');
 
-const ENGINES = { poly: Game, cartes: CardGame, chevaux: HorseGame, mois: MonthGame, poker: PokerGame, blackjack: BlackjackGame };
+const ENGINES = { poly: Game, cartes: CardGame, chevaux: HorseGame, mois: MonthGame, poker: PokerGame, blackjack: BlackjackGame, lettres: LettersGame };
 /** Champs propres à l'exécution (minuteurs, rappels) : jamais sauvegardés. */
 const SKIP_GAME = new Set(['onUpdate', 'onEnd', 'timer', 'botTimers', 'afterDebt', 'events', 'anim']);
 const SKIP_ROOM = new Set(['sockets', 'leaveTimers', 'game', 'graceTimer', 'kicked']);

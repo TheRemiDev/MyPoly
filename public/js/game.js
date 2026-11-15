@@ -12,6 +12,7 @@ import { HorseTable, HORSE_SETTINGS_UI, HORSE_PRESETS } from './chevaux.js';
 import { MonthTable, MONTH_SETTINGS_UI, MONTH_PRESETS } from './mois.js';
 import { PokerTable, POKER_SETTINGS_UI, POKER_PRESETS } from './poker.js';
 import { BlackjackTable, BJ_SETTINGS_UI, BJ_PRESETS } from './blackjack.js';
+import { LettersTable, LETTERS_SETTINGS_UI, LETTERS_PRESETS } from './lettres.js';
 
 /** Les jeux du site : nom, étiquette, réglages et préréglages. */
 const GAMES = {
@@ -21,6 +22,7 @@ const GAMES = {
   mois: { name: 'Fin de mois', tag: '📅 Fin de mois', store: 'savedMonthSettings', share: 'Rejoins ma partie de Fin de mois sur MyPoly' },
   poker: { name: 'Poker', tag: '♠ Poker', store: 'savedPokerSettings', share: 'Rejoins ma table de poker sur MyPoly' },
   blackjack: { name: 'Blackjack', tag: '♣ Blackjack', store: 'savedBlackjackSettings', share: 'Rejoins ma table de blackjack sur MyPoly' },
+  lettres: { name: 'Lettres d\'Or', tag: '✦ Lettres d\'Or', store: 'savedLettersSettings', share: 'Rejoins ma partie de Lettres d\'Or sur MyPoly' },
 };
 import { MusicPlayer } from './music.js';
 
@@ -433,8 +435,8 @@ class RoomView {
   /** Fin de partie : choisir le prochain jeu de la table. */
   openGameChooser() {
     let close = null;
-    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅', poker: '♠', blackjack: '♣' };
-    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion', poker: 'Texas Hold\'em, avec mode Débutant', blackjack: 'Contre la banque, avec aide au calcul' };
+    const ICONS = { poly: '🎲', cartes: '🃏', chevaux: '🐴', mois: '📅', poker: '♠', blackjack: '♣', lettres: '✦' };
+    const SUB = { poly: 'Le jeu de plateau', cartes: 'Le jeu de cartes', chevaux: 'Le jeu de course', mois: 'Le jeu de gestion', poker: 'Texas Hold\'em, avec mode Débutant', blackjack: 'Contre la banque, avec aide au calcul', lettres: 'Le jeu de mots' };
     modal({
       title: '🎮 Prochaine partie',
       body: h('div.room-choices',
@@ -453,7 +455,7 @@ class RoomView {
 
   /** Règles à comparer : sans les options propres à la salle elle-même. */
   get ruleDefaults() {
-    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults, poker: this.meta.pokerDefaults, blackjack: this.meta.blackjackDefaults }[this.kind];
+    return { poly: this.meta.defaults, cartes: this.meta.cardDefaults, chevaux: this.meta.horseDefaults, mois: this.meta.monthDefaults, poker: this.meta.pokerDefaults, blackjack: this.meta.blackjackDefaults, lettres: this.meta.lettersDefaults }[this.kind];
   }
   get kind() {
     const k = this.room && this.room.kind;
@@ -547,9 +549,9 @@ class RoomView {
         ));
       }
     }
-    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS, poker: POKER_PRESETS, blackjack: BJ_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
+    if (editable) box.append(h('div.presets', Object.entries({ poly: PRESETS, cartes: CARD_PRESETS, chevaux: HORSE_PRESETS, mois: MONTH_PRESETS, poker: POKER_PRESETS, blackjack: BJ_PRESETS, lettres: LETTERS_PRESETS }[this.kind]).map(([name, p]) => h('button.btn.ghost.sm', { onclick: () => this.saveSettings(p) }, name))));
     const isAdmin = store.user && store.user.role === 'admin';
-    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI, poker: POKER_SETTINGS_UI, blackjack: BJ_SETTINGS_UI }[this.kind]).slice();
+    const groups = ({ poly: SETTINGS_UI, cartes: CARD_SETTINGS_UI, chevaux: HORSE_SETTINGS_UI, mois: MONTH_SETTINGS_UI, poker: POKER_SETTINGS_UI, blackjack: BJ_SETTINGS_UI, lettres: LETTERS_SETTINGS_UI }[this.kind]).slice();
     if (this.kind === 'poly' && (isAdmin || s.melenchon || s.politicalBoard)) {
       groups.push({ group: '⚡ Option administrateur', items: [{ key: 'melenchon', label: 'Mélenchon', type: 'toggle', admin: true, hint: 'La case Impôts devient « Mélenchon » : « Hop ! Mélenchon prend ta thune ! »' },
         { key: 'politicalBoard', label: 'Plateau politique', type: 'toggle', admin: true, hint: 'Plateau satirique : ZAD, Syndicat, Ministère des Taxes, Exil fiscal… et cartes Chance assorties' }] });
@@ -665,7 +667,7 @@ class RoomView {
   buildGame() {
     // Jeux de table (cartes, chevaux) : la vue dédiée remplace le plateau MyPoly
     if (this.kind !== 'poly') {
-      this.cards = new ({ chevaux: HorseTable, mois: MonthTable, poker: PokerTable, blackjack: BlackjackTable }[this.kind] || CardTable)(this);
+      this.cards = new ({ chevaux: HorseTable, mois: MonthTable, poker: PokerTable, blackjack: BlackjackTable, lettres: LettersTable }[this.kind] || CardTable)(this);
       this.cards.build();
       return;
     }

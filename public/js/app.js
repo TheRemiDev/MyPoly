@@ -203,7 +203,7 @@ async function homePage() {
     }
     return true;
   }
-  let kind = ['cartes', 'chevaux', 'mois', 'poker', 'blackjack'].includes(storage('game')) ? storage('game') : 'poly';
+  let kind = ['cartes', 'chevaux', 'mois', 'poker', 'blackjack', 'lettres'].includes(storage('game')) ? storage('game') : 'poly';
   async function create(bots, k = kind, isPublic = null) {
     kind = k;
     storage('game', k);
@@ -274,10 +274,16 @@ async function homePage() {
       roomsBox.append(
         h('div.room-card' + (r.state !== 'lobby' ? '.live' : ''),
           h('div.room-card-top',
-            h('div.room-card-name', h('span.room-card-kind', { cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack' }[r.kind] || '🎲 MyPoly'), r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
+            h('div.room-card-name', h('span.room-card-kind', { cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack', lettres: '✦ Lettres d\'Or' }[r.kind] || '🎲 MyPoly'), r.name, r.hostVip ? h('span.tag.tag-vip', '👑 VIP') : null),
             h('span.room-card-state', r.state === 'lobby' ? '🟢 En attente' : '🔴 En jeu')
           ),
-          r.kind === 'blackjack'
+          r.kind === 'lettres'
+            ? h('div.room-card-meta',
+                h('span', r.settings.maxPlayers + ' joueurs max'),
+                h('span', r.settings.targetScore ? 'En ' + r.settings.targetScore + ' pts' : 'Partie complète'),
+                h('span', r.settings.turnTime ? Math.round(r.settings.turnTime / 60 * 10) / 10 + ' min/coup' : 'Sans chrono')
+              )
+            : r.kind === 'blackjack'
             ? h('div.room-card-meta',
                 h('span', r.settings.rounds + ' manches'),
                 h('span', 'Mise ' + r.settings.minBet + '+'),
@@ -350,6 +356,7 @@ async function homePage() {
     { k: 'cartes', name: 'Carton !', tag: 'Vide ta main… et crie « Carton ! »', color: '#ff5a5f', art: ART.cartes, meta: ['👥 2 à 6', '⏱️ 10 min', '⚡ Rapide'], points: ['+2, +4, Jokers, Demi-tour', 'Prends ceux qui oublient de crier', 'Partie en une manche ou en points'] },
     { k: 'chevaux', name: 'Petits chevaux', tag: 'La course classique en 3D', color: '#2ecc71', art: ART.chevaux, meta: ['👥 2 à 4', '⏱️ 15 min', '🎲 Chance'], points: ['Sors tes chevaux sur un 6', 'Renvoie les autres à l\'écurie', 'Échelle jusqu\'au centre'] },
     { k: 'poker', name: 'Poker', tag: 'Texas Hold\'em : bluffe, relance, fais tapis', color: '#16916c', art: ART.poker, meta: ['2 à 6 joueurs', '20 min', 'Bluff'], points: ['Table 3D, jetons et cartes maison', 'Mode Débutant : conseils et chances de gagner', 'Blindes qui montent, pots secondaires'], fresh: true },
+    { k: 'lettres', name: 'Lettres d\'Or', tag: 'Pose tes lettres, croise les mots, vise les cases d\'or', color: '#d9a21b', art: ART.lettres, meta: ['2 à 4 joueurs', '30 min', 'Mots'], points: ['Plateau laqué 3D et lettres en relief', 'Plus de 300 000 mots du dictionnaire', 'Aperçu du score avant de jouer'], fresh: true },
     { k: 'blackjack', name: 'Blackjack', tag: 'Approche 21 sans le dépasser… et bats la banque', color: '#2d5bd0', art: ART.blackjack, meta: ['1 à 5 joueurs', '15 min', 'Casino'], points: ['Table de casino 3D, sabot et jetons', 'Doubler, séparer, blackjack payé 3:2', 'Aide au calcul : le total de chaque main'], fresh: true },
     { k: 'mois', name: 'Fin de mois', tag: 'Tiendras-tu jusqu\'à la paye ?', color: '#3fa7ff', art: ART.mois, meta: ['👥 2 à 6', '⏱️ 25 min', '💶 Gestion'], points: ['Courrier, factures et imprévus', 'Achète malin, revends plus cher', 'Paye le 31 et cagnotte sur un 6'] },
   ];
@@ -373,7 +380,7 @@ async function homePage() {
   const kpis = Object.fromEntries(['online', 'playing', 'games', 'players'].map((k) => [k, h('b', '…')]));
   const feed = h('div.hp-feed', h('div.muted', 'Chargement…'));
   const champs = h('div.hp-champs');
-  const KIND = { poly: ['🎲', 'MyPoly'], cartes: ['🃏', 'Carton !'], chevaux: ['🐴', 'Petits chevaux'], mois: ['📅', 'Fin de mois'], poker: ['♠', 'Poker'], blackjack: ['♣', 'Blackjack'] };
+  const KIND = { poly: ['🎲', 'MyPoly'], cartes: ['🃏', 'Carton !'], chevaux: ['🐴', 'Petits chevaux'], mois: ['📅', 'Fin de mois'], poker: ['♠', 'Poker'], blackjack: ['♣', 'Blackjack'], lettres: ['✦', 'Lettres d\'Or'] };
   const countUp = (el, v) => {
     const from = Number(el.dataset.v || 0);
     el.dataset.v = v;
@@ -408,7 +415,7 @@ async function homePage() {
       h('div', h('b', g.winner), ' a gagné une partie de ', h('b', KIND[g.kind][1]), h('small', `${g.players} joueurs · ${timeAgo(g.at)}`))
     )));
     champs.innerHTML = '';
-    for (const k of ['poly', 'cartes', 'chevaux', 'mois', 'poker', 'blackjack']) {
+    for (const k of ['poly', 'cartes', 'chevaux', 'mois', 'poker', 'blackjack', 'lettres']) {
       const list = st.top[k] || [];
       champs.append(h('div.hp-champ',
         h('div.hp-champ-head', h('span', KIND[k][0]), h('b', KIND[k][1])),
@@ -591,6 +598,13 @@ const ART = {
     <g class="a-float" transform="translate(70 46) rotate(-10)"><rect x="0" y="0" width="34" height="48" rx="4" fill="#fff" stroke="#d9d0bb" stroke-width="1.5"/><text x="5" y="13" font-size="11" font-weight="900" fill="#1b1f2e">A</text><path d="M17 18c-4 5-9 6-9 11a4 4 0 0 0 7 2l-1.4 5h6.8l-1.4-5a4 4 0 0 0 7-2c0-5-5-6-9-11Z" fill="#1b1f2e"/></g>
     <g class="a-float2" transform="translate(96 44) rotate(8)"><rect x="0" y="0" width="34" height="48" rx="4" fill="#fff" stroke="#d9d0bb" stroke-width="1.5"/><text x="5" y="13" font-size="11" font-weight="900" fill="#d42a3c">V</text><rect x="8" y="17" width="18" height="25" rx="3" fill="#c22a3d"/><ellipse cx="17" cy="27" rx="6" ry="2.4" fill="#f5c451"/></g>
     <g class="a-float"><circle cx="160" cy="108" r="17" fill="#ffd166" stroke="#fff" stroke-width="2"/><text x="160" y="114" text-anchor="middle" font-size="16" font-weight="900" fill="#6a4500">21</text></g></svg>`,
+  lettres: `<svg viewBox="0 0 200 150" aria-hidden="true"><defs><linearGradient id="alt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2a5e"/><stop offset="1" stop-color="#0b1233"/></linearGradient><linearGradient id="altt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6df"/><stop offset="1" stop-color="#ecd9ae"/></linearGradient></defs>
+    <g transform="translate(100 82) rotate(-8)"><rect x="-70" y="-50" width="140" height="100" rx="8" fill="url(#alt)" stroke="#e0b54f" stroke-width="2.5"/>
+    ${Array.from({ length: 6 }, (_, r) => Array.from({ length: 8 }, (_, c) => { const col = { '0,0': '#e85d2c', '0,7': '#e85d2c', '5,0': '#e85d2c', '5,7': '#e85d2c', '1,2': '#2457c9', '4,5': '#2457c9', '2,6': '#d4487a', '3,1': '#d4487a', '1,5': '#1d9aa8', '4,2': '#1d9aa8' }[r + ',' + c]; return `<rect x="${-64 + c * 16}" y="${-44 + r * 15}" width="14" height="13" rx="2" fill="${col || 'rgba(255,255,255,.07)'}"/>`; }).join('')).join('')}</g>
+    ${[['L', 1, 46, 70, -8], ['E', 1, 70, 67, -8], ['T', 1, 94, 64, -8], ['T', 1, 118, 61, -8], ['R', 1, 142, 58, -8], ['E', 1, 166, 55, -8]].map(([l, v, x, y, a], i) => `<g class="${i % 2 ? 'a-float2' : 'a-float'}" transform="translate(${x - 11} ${y - 11}) rotate(${a})"><rect width="22" height="22" rx="4" fill="url(#altt)" stroke="#b8924a" stroke-width="1"/><text x="10" y="16" text-anchor="middle" font-size="14" font-weight="900" fill="#1b2140">${l}</text><text x="18.5" y="19.5" text-anchor="middle" font-size="5.5" font-weight="800" fill="#1b2140">${v}</text></g>`).join('')}
+    <g class="a-float2" transform="translate(76 92) rotate(4)"><rect width="26" height="26" rx="5" fill="#ffd166" stroke="#fff" stroke-width="1.6"/><text x="12" y="19" text-anchor="middle" font-size="17" font-weight="900" fill="#6a4500">O</text><text x="22" y="23" text-anchor="middle" font-size="6" font-weight="800" fill="#6a4500">1</text></g>
+    <g class="a-float" transform="translate(106 96) rotate(-6)"><rect width="26" height="26" rx="5" fill="url(#altt)" stroke="#b8924a"/><text x="12" y="19" text-anchor="middle" font-size="17" font-weight="900" fill="#1b2140">R</text><text x="22" y="23" text-anchor="middle" font-size="6" font-weight="800" fill="#1b2140">1</text></g>
+    <path d="M160 18 l3 7 7 1 -5 5 1 7 -6 -3 -6 3 1 -7 -5 -5 7 -1Z" fill="#ffd166" class="a-float"/></svg>`,
 };
 function step(n, icon, title, text) {
   return h('div.step', h('div.step-num', n), h('div.step-icon', icon), h('h3', title), h('p', text));
@@ -665,6 +679,7 @@ async function leaderboardPage() {
     mois: [['m_wins', 'Victoires'], ['m_winrate', '% victoires'], ['m_games', 'Parties'], ['m_best', 'Record de fortune'], ['m_sold', 'Affaires revendues']],
     poker: [['p_wins', 'Victoires'], ['p_winrate', '% victoires'], ['p_games', 'Parties'], ['p_pot', 'Plus gros pot'], ['p_hands', 'Mains gagnées']],
     blackjack: [['b_wins', 'Victoires'], ['b_winrate', '% victoires'], ['b_games', 'Parties'], ['b_best', 'Record de jetons'], ['b_bj', 'Blackjacks']],
+    lettres: [['l_wins', 'Victoires'], ['l_winrate', '% victoires'], ['l_games', 'Parties'], ['l_best', 'Record de points'], ['l_move', 'Meilleur coup']],
   };
   let game = TABS[storage('game')] ? storage('game') : 'poly';
   let sort = TABS[game][0][0];
@@ -673,12 +688,12 @@ async function leaderboardPage() {
   const gameTabs = h('div.game-switch');
   async function load() {
     gameTabs.innerHTML = '';
-    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker'], ['blackjack', '♣', 'Blackjack']]) {
+    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker'], ['blackjack', '♣', 'Blackjack'], ['lettres', '✦', 'Lettres d\'Or']]) {
       gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => {
         game = k;
         sort = TABS[k][0][0];
         load();
-      } }, h('span.gs-icon', icon), h('b', label), h('small', { poly: 'Jeu de plateau', cartes: 'Jeu de cartes', chevaux: 'Jeu de course', mois: 'Jeu de gestion', poker: 'Texas Hold\'em', blackjack: 'Jeu de casino' }[k])));
+      } }, h('span.gs-icon', icon), h('b', label), h('small', { poly: 'Jeu de plateau', cartes: 'Jeu de cartes', chevaux: 'Jeu de course', mois: 'Jeu de gestion', poker: 'Texas Hold\'em', blackjack: 'Jeu de casino', lettres: 'Jeu de mots' }[k])));
     }
     tabBox.innerHTML = '';
     for (const [k, l] of TABS[game]) tabBox.append(h('button.tab' + (k === sort ? '.active' : ''), { onclick: () => ((sort = k), load()) }, l));
@@ -694,7 +709,8 @@ async function leaderboardPage() {
         h_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), h_winrate: p.winrate + ' %', h_games: p.games + ' courses', h_captures: p.captures + ' renvois', h_home: p.horses_home + ' chevaux',
         m_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), m_winrate: p.winrate + ' %', m_games: p.games + ' parties', m_best: (p.best_worth || 0).toLocaleString('fr-FR') + ' €', m_sold: p.deals_sold + ' ventes',
         p_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), p_winrate: p.winrate + ' %', p_games: p.games + ' parties', p_pot: (p.biggest_pot || 0).toLocaleString('fr-FR') + ' jetons', p_hands: p.hands_won + ' mains',
-        b_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), b_winrate: p.winrate + ' %', b_games: p.games + ' parties', b_best: (p.best_chips || 0).toLocaleString('fr-FR') + ' jetons', b_bj: p.blackjacks + ' blackjacks' }[sort]);
+        b_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), b_winrate: p.winrate + ' %', b_games: p.games + ' parties', b_best: (p.best_chips || 0).toLocaleString('fr-FR') + ' jetons', b_bj: p.blackjacks + ' blackjacks',
+        l_wins: p.wins + ' victoire' + (p.wins > 1 ? 's' : ''), l_winrate: p.winrate + ' %', l_games: p.games + ' parties', l_best: (p.best_score || 0).toLocaleString('fr-FR') + ' pts', l_move: p.best_move + ' pts' + (p.best_word ? ' · ' + p.best_word : '') }[sort]);
     // Podium des trois premiers
     const top = players.slice(0, 3);
     table.append(h('div.lb-podium', [top[1], top[0], top[2]].map((p, k) => {
@@ -741,21 +757,21 @@ async function profilePage(key) {
     box.append(h('div.empty', '😕 ' + e.message));
     return;
   }
-  const { user: u, stats: s, cards: cs, horses: hs, months: ms, poker: ps, blackjack: bs, badges, history } = data;
+  const { user: u, stats: s, cards: cs, horses: hs, months: ms, poker: ps, blackjack: bs, letters: ls, badges, history } = data;
   const mine = store.user && store.user.id === u.id;
   const owned = new Map(badges.map((b) => [b.badge, b.earned_at]));
   const xpCur = (u.level - 1) ** 2 * 100;
   const xpNext = u.level ** 2 * 100;
   const pct = Math.min(100, ((u.xp - xpCur) / (xpNext - xpCur)) * 100);
   // Un onglet par jeu : statistiques, badges et historique bien séparés
-  const counts = { poly: s.games || 0, cartes: (cs && cs.games) || 0, chevaux: (hs && hs.games) || 0, mois: (ms && ms.games) || 0, poker: (ps && ps.games) || 0, blackjack: (bs && bs.games) || 0 };
+  const counts = { poly: s.games || 0, cartes: (cs && cs.games) || 0, chevaux: (hs && hs.games) || 0, mois: (ms && ms.games) || 0, poker: (ps && ps.games) || 0, blackjack: (bs && bs.games) || 0, lettres: (ls && ls.games) || 0 };
   let game = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
   const gameTabs = h('div.game-switch');
   const gameBox = h('div.profile-game');
-  const ctx = { s, cs, hs, ms, owned, history, historyCards: data.historyCards || [], historyHorses: data.historyHorses || [], historyMonths: data.historyMonths || [], ps, historyPoker: data.historyPoker || [], bs, historyBlackjack: data.historyBlackjack || [] };
+  const ctx = { s, cs, hs, ms, owned, history, historyCards: data.historyCards || [], historyHorses: data.historyHorses || [], historyMonths: data.historyMonths || [], ps, historyPoker: data.historyPoker || [], bs, historyBlackjack: data.historyBlackjack || [], ls, historyLetters: data.historyLetters || [] };
   const render = () => {
     gameTabs.innerHTML = '';
-    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker'], ['blackjack', '♣', 'Blackjack']]) {
+    for (const [k, icon, label] of [['poly', '🎲', 'MyPoly'], ['cartes', '🃏', 'Carton !'], ['chevaux', '🐴', 'Petits chevaux'], ['mois', '📅', 'Fin de mois'], ['poker', '♠', 'Poker'], ['blackjack', '♣', 'Blackjack'], ['lettres', '✦', 'Lettres d\'Or']]) {
       const n = counts[k];
       gameTabs.append(h('button.game-switch-btn' + (game === k ? '.on' : ''), { onclick: () => ((game = k), render()) }, h('span.gs-icon', icon), h('b', label), h('small', `${n} partie${n > 1 ? 's' : ''}`)));
     }
@@ -786,6 +802,7 @@ function profileGame(game, ctx) {
   if (game === 'mois') return profileMonths(ctx);
   if (game === 'poker') return profilePoker(ctx);
   if (game === 'blackjack') return profileBlackjack(ctx);
+  if (game === 'lettres') return profileLetters(ctx);
   const { s, cs, owned, history, historyCards } = ctx;
   const cards = game === 'cartes';
   const c = cs || {};
@@ -1005,8 +1022,46 @@ function profileBlackjack({ bs, owned, historyBlackjack }) {
   ];
 }
 
+/** Profil : section Lettres d'Or. */
+function profileLetters({ ls, owned, historyLetters }) {
+  const c = ls || {};
+  const pct = (w, g) => (g ? Math.round((100 * w) / g) : 0) + ' %';
+  const list = store.meta.badges.filter((b) => b.game === 'lettres');
+  const got = list.filter((b) => owned.has(b.id)).length;
+  return [
+    h('div.stat-grid',
+      stat('A', c.games || 0, 'Parties jouées'),
+      stat('✦', c.wins || 0, 'Victoires'),
+      stat('%', pct(c.wins, c.games), 'Taux de victoire'),
+      stat('♥', c.best_streak || 0, 'Meilleure série'),
+      stat('Σ', c.best_score || 0, 'Record de points'),
+      stat('×3', c.best_move || 0, 'Meilleur coup'),
+      stat('M', c.best_word || '—', 'Mot du meilleur coup'),
+      stat('…', c.longest || '—', 'Plus long mot'),
+      stat('7', c.bingos || 0, 'Lettres d\'Or (7 lettres)'),
+      stat('⏱️', duration(c.play_seconds || 0), 'Temps de jeu')
+    ),
+    h('div.card', h('h2', `🎖️ Badges Lettres d'Or (${got}/${list.length})`),
+      h('div.badge-grid', list.map((b) => {
+        const at = owned.get(b.id);
+        return h('div.badge.tier-' + b.tier + (at ? '' : '.locked'), { title: b.desc + (at ? ` — obtenu ${timeAgo(at)}` : '') }, h('div.badge-icon', b.icon), h('div.badge-name', b.name), h('div.badge-desc', b.desc));
+      }))
+    ),
+    h('div.card', h('h2', '📜 Dernières parties de Lettres d\'Or'),
+      historyLetters.length
+        ? h('div.history', historyLetters.map((g) =>
+            h('div.history-row.' + (g.rank === 1 ? 'won' : 'lost'),
+              h('div.history-rank', g.rank === 1 ? '🏆' : '#' + g.rank),
+              h('div.history-main', h('div', g.players.map((p) => p.name).join(' · ')), h('small.muted', `${timeAgo(g.ended_at)} · ${duration(g.duration)} · ${g.rounds} coups · ${g.networth} pts`)),
+              h('div.history-delta', g.rank === 1 ? '✦' : '')
+            )))
+        : h('div.empty', 'Aucune partie de Lettres d\'Or pour l\'instant.')
+    ),
+  ];
+}
+
 export function winLabel(t) {
-  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack', forfeit: 'Abandon des adversaires' }[t] || t || '—';
+  return { last: 'Faillite des adversaires', triple: 'Triple monopole', line: 'Monopole de ligne', resort: 'Monopole balnéaire', time: 'Temps écoulé', rounds: 'Tours écoulés', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack', lettres: '✦ Lettres d\'Or', forfeit: 'Abandon des adversaires' }[t] || t || '—';
 }
 
 // --------------------------------------------------------------- paramètres
@@ -1110,7 +1165,7 @@ function rulesPage() {
         h('span.hp-kicker', '📖 Règles'),
         h('h1', 'Apprends à jouer en 2 minutes'),
         h('p', 'Six jeux, des règles simples. Tout ce qui est marqué « réglable » se change dans le salon de la partie.'),
-        h('div.rl-games', [['tour', 'poly', 'MyPoly', 'Le jeu de plateau', '#ff8a3d'], ['carton', 'cartes', 'Carton !', 'Le jeu de cartes', '#ff5a5f'], ['chevaux', 'chevaux', 'Petits chevaux', 'Le jeu de course', '#2ecc71'], ['mois', 'mois', 'Fin de mois', 'Le jeu de gestion', '#3fa7ff'], ['poker', 'poker', 'Poker', 'Texas Hold\'em', '#16916c'], ['blackjack', 'blackjack', 'Blackjack', 'Le jeu de casino', '#2d5bd0']].map(([id, k, name, sub, c]) =>
+        h('div.rl-games', [['tour', 'poly', 'MyPoly', 'Le jeu de plateau', '#ff8a3d'], ['carton', 'cartes', 'Carton !', 'Le jeu de cartes', '#ff5a5f'], ['chevaux', 'chevaux', 'Petits chevaux', 'Le jeu de course', '#2ecc71'], ['mois', 'mois', 'Fin de mois', 'Le jeu de gestion', '#3fa7ff'], ['poker', 'poker', 'Poker', 'Texas Hold\'em', '#16916c'], ['blackjack', 'blackjack', 'Blackjack', 'Le jeu de casino', '#2d5bd0'], ['lettres', 'lettres', 'Lettres d\'Or', 'Le jeu de mots', '#d9a21b']].map(([id, k, name, sub, c]) =>
           h('a.rl-game', { href: '#' + id, style: { '--c': c }, onclick: (e) => { e.preventDefault(); document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
             h('span.rl-game-art', { html: ART[k] }), h('b', name), h('small', sub), h('span.rl-go', 'Lire les règles ↓'))))
       ),
@@ -1210,6 +1265,23 @@ function rulesPage() {
         ),
         h('div.rule-tip', 'Astuce : reste à partir de 12 quand la banque montre un 4, 5 ou 6 : c\'est elle qui risque de sauter !')
       ),
+      h('h2.rl-part', h('span', '✦'), 'Lettres d\'Or — le jeu de mots'),
+      h('section.rule-card#lettres', { style: { '--rc': '#d9a21b' } },
+        h('div.rule-head', h('span.rule-icon', '✦'), h('h2', 'Lettres d\'Or — croise les mots, vise les cases d\'or')),
+        h('div.rule-body',
+          h('p', 'De 2 à 4 joueurs. Chacun a ', h('b', '7 lettres'), ' sur son chevalet. À ton tour, pose des lettres sur une même ligne ou colonne pour former un mot qui s\'appuie sur ceux déjà posés. Le premier mot passe par l\'étoile centrale.'),
+          h('ul',
+            h('li', h('b', 'Points'), ' : chaque lettre a une valeur (E = 1… K, W, X, Y, Z = 10). Tous les mots formés par ton coup comptent.'),
+            h('li', h('b', 'Cases bonus'), ' : Lettre ×2 / ×3 et Mot ×2 / ×3, seulement pour les lettres que tu viens de poser.'),
+            h('li', h('b', 'Lettres d\'Or'), ' : poser tes 7 lettres d\'un coup rapporte +50.'),
+            h('li', h('b', 'Joker'), ' : remplace n\'importe quelle lettre, mais vaut 0.'),
+            h('li', h('b', 'Échanger / passer'), ' : tu peux échanger des lettres (s\'il en reste 7 dans le sac) ou passer ton tour.'),
+            h('li', h('b', 'Fin'), ' : quand le sac est vide et qu\'un joueur a tout posé, ou quand tout le monde passe deux fois. Les lettres restantes sont déduites.')
+          ),
+          h('p.muted', 'Les mots sont vérifiés automatiquement dans un dictionnaire français de plus de 300 000 mots (accents ignorés). Le score s\'affiche avant de valider.')
+        ),
+        h('div.rule-tip', 'Astuce : une petite lettre chère (Z, X, K) posée sur une case Lettre ×3 qui forme deux mots à la fois, ça peut rapporter gros !')
+      ),
       h('section.cta-band',
         h('div', h('h2', 'C\'est parti ?'), h('p', 'Crée une salle et invite tes amis en un clic.')),
         h('a.btn.primary.xl', { href: '/', 'data-link': true }, '🎲 Jouer maintenant')
@@ -1253,7 +1325,7 @@ async function adminPage() {
       const o = await api('/admin/overview');
       const site = await api('/admin/site');
       const st = await api('/stats').catch(() => null);
-      const KIND = { poly: ['🎲', 'MyPoly', '#ff8a3d'], cartes: ['🃏', 'Carton !', '#ff5a5f'], chevaux: ['🐴', 'Petits chevaux', '#2ecc71'], mois: ['📅', 'Fin de mois', '#3fa7ff'], poker: ['♠', 'Poker', '#16916c'], blackjack: ['♣', 'Blackjack', '#2d5bd0'] };
+      const KIND = { poly: ['🎲', 'MyPoly', '#ff8a3d'], cartes: ['🃏', 'Carton !', '#ff5a5f'], chevaux: ['🐴', 'Petits chevaux', '#2ecc71'], mois: ['📅', 'Fin de mois', '#3fa7ff'], poker: ['♠', 'Poker', '#16916c'], blackjack: ['♣', 'Blackjack', '#2d5bd0'], lettres: ['✦', 'Lettres d\'Or', '#d9a21b'] };
       const total = st ? Math.max(1, st.games) : 1;
       return panel('📊 Vue d\'ensemble', 'L\'activité de MyPoly en un coup d\'œil.',
         h('div.kpi-grid',

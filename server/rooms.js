@@ -11,8 +11,10 @@ const { PokerGame } = require('./poker/engine');
 const PS = require('./poker/settings');
 const { BlackjackGame } = require('./blackjack/engine');
 const BS = require('./blackjack/settings');
+const { LettersGame } = require('./lettres/engine');
+const LS = require('./lettres/settings');
 /** Jeux disponibles sur le site. */
-const KINDS = ['poly', 'cartes', 'chevaux', 'mois', 'poker', 'blackjack'];
+const KINDS = ['poly', 'cartes', 'chevaux', 'mois', 'poker', 'blackjack', 'lettres'];
 const kindOf = (k) => (KINDS.includes(k) ? k : 'poly');
 const { sanitize, DEFAULTS } = require('./game/settings');
 const R = require('./game/random');
@@ -241,6 +243,7 @@ function sanitizeFor(kind, input, base) {
   if (kind === 'mois') return MS.sanitize(input, base);
   if (kind === 'poker') return PS.sanitize(input, base);
   if (kind === 'blackjack') return BS.sanitize(input, base);
+  if (kind === 'lettres') return LS.sanitize(input, base);
   return sanitize(input, base);
 }
 
@@ -336,7 +339,7 @@ function sendCardUpdate(room, events) {
 function gameCallbacks(room) {
   return {
     // Jeux à information cachée : chaque joueur reçoit un état personnel (sa main seulement)
-    onUpdate: room.kind === 'cartes' || room.kind === 'poker' || room.kind === 'blackjack'
+    onUpdate: room.kind === 'cartes' || room.kind === 'poker' || room.kind === 'blackjack' || room.kind === 'lettres'
       ? ({ events }) => {
           touch(room);
           sendCardUpdate(room, events);
@@ -353,7 +356,7 @@ function startGame(room) {
   room.state = 'playing';
   room.result = null;
   const players = room.seats.map((s) => ({ id: s.key, userId: s.userId, name: s.name, color: s.color, pawn: s.pawn, isBot: s.isBot, role: s.role, vip: s.vip, level: s.level }));
-  const Engine = { cartes: CardGame, chevaux: HorseGame, mois: MonthGame, poker: PokerGame, blackjack: BlackjackGame }[room.kind] || Game;
+  const Engine = { cartes: CardGame, chevaux: HorseGame, mois: MonthGame, poker: PokerGame, blackjack: BlackjackGame, lettres: LettersGame }[room.kind] || Game;
   room.game = new Engine({ players, settings: room.settings, ...gameCallbacks(room) });
   for (const s of room.seats) if (!s.isBot && !isConnected(room, s.key)) room.game.player(s.key).connected = false;
   broadcastRoom(room);
@@ -433,10 +436,10 @@ function endGame(room, result) {
   let rewards = {};
   // On n'enregistre que des parties "réelles" (au moins 2 tours) pour éviter les abus
   const registered = result.players.some((p) => p.userId);
-  const real = room.kind === 'poker' ? result.hands >= 3 : room.kind === 'blackjack' ? result.rounds >= 3 : room.kind === 'cartes' || room.kind === 'chevaux' || room.kind === 'mois' ? result.turns >= 6 : result.rounds >= 2;
+  const real = room.kind === 'poker' ? result.hands >= 3 : room.kind === 'blackjack' ? result.rounds >= 3 : room.kind === 'lettres' ? result.turns >= 6 : room.kind === 'cartes' || room.kind === 'chevaux' || room.kind === 'mois' ? result.turns >= 6 : result.rounds >= 2;
   if (registered && real) {
     try {
-      const rec = { cartes: U.recordCardGame, chevaux: U.recordHorseGame, mois: U.recordMonthGame, poker: U.recordPokerGame, blackjack: U.recordBlackjackGame }[room.kind] || U.recordGame;
+      const rec = { cartes: U.recordCardGame, chevaux: U.recordHorseGame, mois: U.recordMonthGame, poker: U.recordPokerGame, blackjack: U.recordBlackjackGame, lettres: U.recordLettersGame }[room.kind] || U.recordGame;
       ({ rewards } = rec(room.code, result, room.settings));
     } catch (e) {
       console.error('[stats] erreur enregistrement partie', e);
@@ -730,7 +733,7 @@ function attach(server) {
         removeSeat(room, bot.key);
       }
       room.settings.maxPlayers = Math.min(limit, Math.max(room.settings.maxPlayers, room.seats.length));
-      const NAMES = { poly: '🎲 MyPoly', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack' };
+      const NAMES = { poly: '🎲 MyPoly', cartes: '🃏 Carton !', chevaux: '🐴 Petits chevaux', mois: '📅 Fin de mois', poker: '♠ Poker', blackjack: '♣ Blackjack', lettres: '✦ Lettres d\'Or' };
       systemChat(room, `🎮 ${ident.name} change de jeu : ${NAMES[kind]}. Tout le monde garde sa place !`);
       broadcastRoom(room);
       reply(cb, { ok: true });

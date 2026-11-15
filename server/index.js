@@ -68,6 +68,7 @@ app.get('/api/meta', (_req, res) => {
     monthDefaults: require('./mois/settings').DEFAULTS,
     pokerDefaults: require('./poker/settings').DEFAULTS,
     blackjackDefaults: require('./blackjack/settings').DEFAULTS,
+    lettersDefaults: require('./lettres/settings').DEFAULTS,
   });
 });
 
@@ -87,11 +88,11 @@ app.get('/api/stats', (_req, res) => {
   const now = Date.now();
   if (!statsCache || now - statsCache.at > 20000) {
     const db = require('./db');
-    const kindOf = (wt) => (['cartes', 'chevaux', 'mois', 'poker', 'blackjack'].includes(wt) ? wt : 'poly');
+    const kindOf = (wt) => (['cartes', 'chevaux', 'mois', 'poker', 'blackjack', 'lettres'].includes(wt) ? wt : 'poly');
     const recent = db.prepare('SELECT win_type, winner_name, players, ended_at, duration FROM games WHERE winner_name IS NOT NULL ORDER BY id DESC LIMIT 12').all()
       .map((g) => ({ kind: kindOf(g.win_type), winner: g.winner_name, players: JSON.parse(g.players).length, at: g.ended_at, duration: g.duration }));
-    const byKind = { poly: 0, cartes: 0, chevaux: 0, mois: 0, poker: 0, blackjack: 0 };
-    for (const r of db.prepare("SELECT CASE WHEN win_type IN ('cartes','chevaux','mois','poker','blackjack') THEN win_type ELSE 'poly' END AS k, COUNT(*) AS n FROM games GROUP BY k").all()) byKind[r.k] = r.n;
+    const byKind = { poly: 0, cartes: 0, chevaux: 0, mois: 0, poker: 0, blackjack: 0, lettres: 0 };
+    for (const r of db.prepare("SELECT CASE WHEN win_type IN ('cartes','chevaux','mois','poker','blackjack','lettres') THEN win_type ELSE 'poly' END AS k, COUNT(*) AS n FROM games GROUP BY k").all()) byKind[r.k] = r.n;
     const top = {
       poly: U.leaderboard('wins', 3),
       cartes: U.leaderboard('c_wins', 3),
@@ -99,6 +100,7 @@ app.get('/api/stats', (_req, res) => {
       mois: U.leaderboard('m_wins', 3),
       poker: U.leaderboard('p_wins', 3),
       blackjack: U.leaderboard('b_wins', 3),
+      lettres: U.leaderboard('l_wins', 3),
     };
     statsCache = {
       at: now,
@@ -148,6 +150,8 @@ rooms.attach(io);
 
 server.listen(config.port, config.host, () => {
   console.log(`🎲 MyPoly en ligne sur http://${config.host}:${config.port} ${config.publicUrl ? '(' + config.publicUrl + ')' : ''}`);
+  // Le dictionnaire de Lettres d'Or est préparé en arrière-plan (évite une attente à la première partie)
+  setTimeout(() => require('./lettres/dictionary').load(), 1500).unref();
 });
 
 let stopping = false;

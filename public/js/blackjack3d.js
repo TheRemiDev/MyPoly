@@ -263,7 +263,7 @@ export class Blackjack3D extends Poker3D {
   }
 
   buildProps() {
-    this.portraitPitch = 1.3;
+    this.portraitPitch = 1.4;
     this.turnRing = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.74, 64), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
     this.turnRing.rotation.x = -Math.PI / 2;
     this.world.add(this.turnRing);

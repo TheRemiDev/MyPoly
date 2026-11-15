@@ -164,6 +164,21 @@ CREATE TABLE IF NOT EXISTS blackjack_stats (
   play_seconds INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS letters_stats (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  games INTEGER NOT NULL DEFAULT 0,
+  wins INTEGER NOT NULL DEFAULT 0,
+  words INTEGER NOT NULL DEFAULT 0,
+  bingos INTEGER NOT NULL DEFAULT 0,
+  best_move INTEGER NOT NULL DEFAULT 0,
+  best_word TEXT,
+  best_score INTEGER NOT NULL DEFAULT 0,
+  longest TEXT,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  best_streak INTEGER NOT NULL DEFAULT 0,
+  play_seconds INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS mod_bans (
   key TEXT PRIMARY KEY,
   name TEXT,
@@ -190,6 +205,7 @@ if (!userCols.includes('saved_settings')) db.exec('ALTER TABLE users ADD COLUMN 
 if (!userCols.includes('saved_card_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_card_settings TEXT');
 if (!userCols.includes('saved_horse_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_horse_settings TEXT');
 if (!userCols.includes('saved_month_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_month_settings TEXT');
+if (!userCols.includes('saved_letters_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_letters_settings TEXT');
 if (!userCols.includes('saved_blackjack_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_blackjack_settings TEXT');
 if (!userCols.includes('saved_poker_settings')) db.exec('ALTER TABLE users ADD COLUMN saved_poker_settings TEXT');
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_display_name ON users(display_name COLLATE NOCASE) WHERE display_name IS NOT NULL");
